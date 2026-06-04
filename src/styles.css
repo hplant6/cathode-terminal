@@ -1,0 +1,192 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-base:      #1a1a1a;
+  --bg-panel:     #1e1e1e;
+  --bg-toolbar:   #252525;
+  --bg-input:     #2d2d2d;
+  --border:       #333333;
+  --accent:       #4a9eff;
+  --accent-dim:   rgba(74,158,255,0.15);
+  --text:         #cccccc;
+  --text-dim:     #666666;
+  --btn-hover:    #3a3a3a;
+  --divider-bg:   #2a2a2a;
+  --pick-active:  #4a9eff;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ── LEFT PANEL ── */
+#left-panel {
+  display: flex;
+  flex-direction: column;
+  width: 40%;
+  min-width: 280px;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  position: relative; /* anchor for context overlay */
+}
+
+#terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+#terminal-header button { -webkit-app-region: no-drag; }
+
+.panel-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+#terminal-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px;
+  min-height: 0;
+}
+
+.xterm          { height: 100%; }
+.xterm-viewport { overflow-y: auto !important; }
+
+
+/* ── DIVIDER ── */
+#divider {
+  width: 4px;
+  background: var(--divider-bg);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  -webkit-app-region: no-drag;
+}
+#divider:hover, #divider.dragging { background: var(--accent); }
+
+/* ── RIGHT PANEL ── */
+#right-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 300px;
+  background: var(--bg-panel);
+}
+
+#browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 42px;
+  padding: 0 8px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+#browser-toolbar > * { -webkit-app-region: no-drag; }
+
+#address-bar {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+#address-bar:focus { border-color: var(--accent); background: #333; }
+
+#browser-placeholder {
+  flex: 1;
+  background: #111;
+}
+
+/* ── PICK GROUP ── */
+#pick-group {
+  display: flex;
+  gap: 2px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-input);
+}
+
+.pick-btn {
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.pick-btn:hover { background: var(--btn-hover); color: var(--text); }
+.pick-btn.active {
+  background: var(--accent-dim);
+  color: var(--pick-active);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  animation: pulse-pick 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-pick {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--accent); }
+  50%       { box-shadow: inset 0 0 0 1px var(--accent), 0 0 6px var(--accent); }
+}
+
+/* ── BUTTONS (shared) ── */
+button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.1s, color 0.1s;
+}
+button:hover  { background: var(--btn-hover); color: var(--text); }
+button:active { background: #444; }
+
+#btn-devtools {
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+  width: 34px;
+  color: var(--accent);
+}
+#btn-devtools:hover  { background: var(--accent-dim); color: var(--accent); }
+#btn-devtools.active { background: var(--accent-dim); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+

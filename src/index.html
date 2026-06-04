@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cathode Terminal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- LEFT: Claude Code terminal -->
+    <div id="left-panel">
+      <div id="terminal-header">
+        <span class="panel-label">Claude Code</span>
+        <button id="btn-restart" title="Restart session">&#x21BA;</button>
+      </div>
+      <div id="terminal-container"></div>
+
+    </div>
+
+    <!-- DIVIDER -->
+    <div id="divider"></div>
+
+    <!-- RIGHT: Browser panel -->
+    <div id="right-panel">
+      <div id="browser-toolbar">
+        <button id="btn-back"    title="Back">&#x2190;</button>
+        <button id="btn-forward" title="Forward">&#x2192;</button>
+        <button id="btn-reload"  title="Reload">&#x21BB;</button>
+        <input id="address-bar" type="text" placeholder="Enter URL or localhost:3000" spellcheck="false" />
+        <button id="btn-home"    title="Blank page">&#x25A1;</button>
+
+        <!-- Pick tools -->
+        <div id="pick-group" title="">
+          <button id="btn-pick-box"   class="pick-btn" title="Box select element"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="4.75" y1="2.25" x2="4.75" y2=".75" data-color="color-2"></line><line x1="13.25" y1="2.25" x2="13.25" y2=".75" data-color="color-2"></line><line x1="4.75" y1="17.25" x2="4.75" y2="15.75" data-color="color-2"></line><line x1="13.25" y1="17.25" x2="13.25" y2="15.75" data-color="color-2"></line><line x1="15.75" y1="4.75" x2="17.25" y2="4.75" data-color="color-2"></line><line x1="15.75" y1="13.25" x2="17.25" y2="13.25" data-color="color-2"></line><line x1=".75" y1="4.75" x2="2.25" y2="4.75" data-color="color-2"></line><line x1=".75" y1="13.25" x2="2.25" y2="13.25" data-color="color-2"></line><rect x="4.75" y="4.75" width="8.5" height="8.5" rx="2" ry="2"></rect></g></svg></button>
+          <button id="btn-pick-lasso" class="pick-btn" title="Lasso select element"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
+          <button id="btn-screenshot" class="pick-btn" title="Screenshot region"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
+        </div>
+
+        <button id="btn-devtools" title="Toggle DevTools">&lt;/&gt;</button>
+      </div>
+      <!-- WebContentsView is positioned over this area by the main process -->
+      <div id="browser-placeholder"></div>
+    </div>
+
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>

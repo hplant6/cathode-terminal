@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    height: 36px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 11px;
+    color: #555;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-app-region: drag;
+    overflow: hidden;
+  }
+  .label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #444;
+    flex-shrink: 0;
+  }
+  .url {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #555;
+    font-family: 'Consolas', 'Cascadia Code', monospace;
+    font-size: 11px;
+  }
+  .close {
+    -webkit-app-region: no-drag;
+    background: none;
+    border: none;
+    color: #444;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+  }
+  .close:hover { background: #3a3a3a; color: #ccc; }
+</style>
+</head>
+<body>
+  <span class="label">Popup</span>
+  <span class="url" id="url">Loading…</span>
+  <button class="close" id="close" title="Close">✕</button>
+  <script>
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.on('popup-url', (_, url) => {
+      const el = document.getElementById('url');
+      el.textContent = url;
+      el.title = url;
+    });
+    document.getElementById('close').addEventListener('click', () => {
+      ipcRenderer.send('close-inline-popup');
+    });
+  </script>
+</body>
+</html>
