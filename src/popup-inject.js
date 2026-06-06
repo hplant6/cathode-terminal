@@ -1,5 +1,4 @@
 function getPopupScript(elements, mouseUpX, mouseUpY) {
-  const POPUP_W = 360;
   const elementsJSON = JSON.stringify(elements);
 
   return `(function() {
@@ -26,7 +25,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
     const shadow = host.attachShadow({ mode: 'open' });
 
     // Smart positioning: appear at mouseup, clamp to viewport
-    const POPUP_W = ${POPUP_W};
+    const POPUP_W = 360;
     let px = ${mouseUpX};
     let py = ${mouseUpY};
     if (px + POPUP_W + 10 > window.innerWidth)  px = window.innerWidth - POPUP_W - 10;
@@ -160,7 +159,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
           <div class="inst-title">Instructions</div>
           <div class="textarea-wrap">
             <textarea placeholder="give instructions here"></textarea>
-            <button class="send-btn" title="Send (Ctrl+Enter)">
+            <button class="send-btn" title="Send (Enter)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="1.5"
                    stroke-linecap="round" stroke-linejoin="round">
@@ -194,9 +193,9 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
         done({ items, instruction: shadow.querySelector('textarea').value.trim() });
       });
 
-      // Ctrl+Enter in textarea
+      // Enter to send, Shift+Enter for newline
       ta.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           done({ items, instruction: ta.value.trim() });
         }

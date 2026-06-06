@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeTheme, dialog } = require('electron');
 Menu.setApplicationMenu(null);
 nativeTheme.themeSource = 'dark';
 const path = require('path');
@@ -8,6 +8,8 @@ const { getPickerScript }        = require('./src/picker-inject');
 const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
 const { getScreenshotPopupScript } = require('./src/screenshot-popup-inject');
+const { getResizeScript }         = require('./src/resize-inject');
+const http = require('http');
 
 // ── HiDPI: read saved scale factor and apply BEFORE app.whenReady() ──
 // Chromium's --force-device-scale-factor must be set before the process
@@ -28,6 +30,12 @@ function saveScale(sf) {
 const savedScale = readSavedScale();
 if (savedScale > 1) app.commandLine.appendSwitch('force-device-scale-factor', String(savedScale));
 
+// Expose Chromium remote-debugging on localhost so we can load the DevTools
+// frontend in our own WebContentsView (the only reliable embedded-panel path).
+const DEVTOOLS_PORT = 19222;
+app.commandLine.appendSwitch('remote-debugging-port', String(DEVTOOLS_PORT));
+app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+
 // ── Persistent browser URL ────────────────────────────────────────
 function getStateFile() {
   return path.join(app.getPath('userData'), 'browser-state.json');
@@ -45,10 +53,22 @@ function saveLastURL(url) {
 
 let mainWindow;
 let browserView;
-let ptyProcess;
+let figmaView      = null;
+let devToolsView   = null;  // WebContentsView hosting the embedded DevTools frontend
+let devToolsOpening = false; // guard against double-open
+let devToolsOpen   = false;
+let devToolsWidth  = 0;
+let devToolsTimer  = null;
+const DT_WIDTH     = 420;
+const ptyProcesses = {};
+let activePtyId    = null;
+let rightPanelMode = 'project';
 
-const TOOLBAR_HEIGHT = 42;
-const TITLEBAR_HEIGHT = 36; // Windows hidden titlebar overlay sits inside content area
+const TOOLBAR_HEIGHT    = 46;
+const TABBAR_HEIGHT     = 38;
+const POPUP_BAR_HEIGHT  = 36;
+
+let splitFraction = 0.4;
 
 // ── CDP state ─────────────────────────────────────────────────────
 let cdpReady = false;
@@ -80,7 +100,8 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1a1a1a',
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#1a1a1a', symbolColor: '#888888', height: 36 },
+    titleBarOverlay: { color: '#252525', symbolColor: '#888888', height: 46 },
+    // nodeIntegration required: renderer uses ipcRenderer and node-pty directly
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
 
@@ -96,10 +117,17 @@ function createWindow() {
     resetCDP();
     saveLastURL(url);
     mainWindow.webContents.send('browser-url-changed', url);
+    // Reconnect embedded DevTools after full navigation (WebSocket target URL may change)
+    if (devToolsView) {
+      browserView.webContents.once('did-finish-load', () => reconnectDevTools());
+    }
   });
   browserView.webContents.on('did-navigate-in-page', (_, url) => {
     saveLastURL(url);
     mainWindow.webContents.send('browser-url-changed', url);
+  });
+  browserView.webContents.on('page-title-updated', (_, title) => {
+    mainWindow.webContents.send('tab-title-updated', title);
   });
 
   // Intercept window.open() — deny OS window, open inside app as WebContentsViews
@@ -108,9 +136,47 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // ── Context menu: browser view ────────────────────────────────────
+  browserView.webContents.on('context-menu', (_, p) => {
+    const tpl = [];
+
+    if (p.selectionText || p.isEditable) {
+      if (p.editFlags.canCut)  tpl.push({ label: 'Cut',  click: () => browserView.webContents.cut()  });
+      if (p.selectionText)     tpl.push({ label: 'Copy', click: () => browserView.webContents.copy() });
+      if (p.editFlags.canPaste) tpl.push({ label: 'Paste', click: () => browserView.webContents.paste() });
+      tpl.push({ label: 'Select All', click: () => browserView.webContents.selectAll() });
+      tpl.push({ type: 'separator' });
+    }
+
+    tpl.push(
+      { label: 'Back',        enabled: browserView.webContents.canGoBack(),    click: () => browserView.webContents.goBack()    },
+      { label: 'Forward',     enabled: browserView.webContents.canGoForward(), click: () => browserView.webContents.goForward() },
+      { label: 'Reload',      click: () => browserView.webContents.reload() },
+      { label: 'Hard Reload', click: () => browserView.webContents.reloadIgnoringCache() },
+      { type: 'separator' },
+      { label: 'Inspect Element', click: () => openDevToolsPanel(p.x, p.y) }
+    );
+
+    Menu.buildFromTemplate(tpl).popup({ window: mainWindow });
+  });
+
+  // ── Context menu: main renderer (address bar, inputs, terminal) ───
+  mainWindow.webContents.on('context-menu', (_, p) => {
+    const tpl = [];
+    if (p.editFlags.canCut)    tpl.push({ label: 'Cut',        role: 'cut'       });
+    if (p.selectionText || p.editFlags.canCopy) tpl.push({ label: 'Copy', role: 'copy' });
+    if (p.editFlags.canPaste)  tpl.push({ label: 'Paste',      role: 'paste'     });
+    if (tpl.length)            tpl.push({ type: 'separator' });
+    tpl.push(                  { label: 'Select All',          role: 'selectAll' });
+    if (tpl.length > 1) Menu.buildFromTemplate(tpl).popup({ window: mainWindow });
+  });
+
   mainWindow.on('resize', () => {
     repositionBrowserView();
     repositionInlinePopup();
+    repositionRightPanelView();
+    repositionDevToolsView();
+    broadcastLayout();
   });
 }
 
@@ -120,10 +186,10 @@ let popupContentView = null;
 
 function getPopupBounds() {
   const [winW, winH] = mainWindow.getContentSize();
-  const fraction  = global.splitFraction ?? 0.4;
-  const rightX    = Math.round(winW * fraction) + 4;
+  const fraction  = splitFraction;
+  const rightX    = Math.round(winW * fraction) + 6;
   const rightW    = winW - rightX;
-  const topOffset = TITLEBAR_HEIGHT + TOOLBAR_HEIGHT;
+  const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
   const availH    = winH - topOffset;
 
   const popW = Math.min(580, Math.round(rightW * 0.88));
@@ -143,7 +209,6 @@ function openInlinePopup(url) {
   closeInlinePopup(false); // close any existing without removing backdrop
 
   const b = getPopupBounds();
-  const BAR = 36;
 
   // Snapshot the main browser's root domain so we can detect when auth returns home
   let mainRoot = '';
@@ -162,9 +227,10 @@ function openInlinePopup(url) {
 
   // Header bar view
   popupBarView = new WebContentsView({
+    // nodeIntegration required: popup bar uses ipcRenderer to close/communicate
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
-  popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: BAR });
+  popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: POPUP_BAR_HEIGHT });
   popupBarView.webContents.loadFile(path.join(__dirname, 'src', 'popup-bar.html'));
   popupBarView.webContents.once('did-finish-load', () => {
     popupBarView.webContents.send('popup-url', url);
@@ -175,7 +241,7 @@ function openInlinePopup(url) {
   popupContentView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
-  popupContentView.setBounds({ x: b.x, y: b.y + BAR, width: b.width, height: b.height - BAR });
+  popupContentView.setBounds({ x: b.x, y: b.y + POPUP_BAR_HEIGHT, width: b.width, height: b.height - POPUP_BAR_HEIGHT });
   popupContentView.webContents.loadURL(url);
   popupContentView.webContents.on('did-navigate', (_, u) => {
     // Update header URL
@@ -209,56 +275,226 @@ function closeInlinePopup(removeBackdrop = true) {
 function repositionInlinePopup() {
   if (!popupBarView && !popupContentView) return;
   const b = getPopupBounds();
-  const BAR = 36;
-  if (popupBarView)     popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: BAR });
-  if (popupContentView) popupContentView.setBounds({ x: b.x, y: b.y + BAR, width: b.width, height: b.height - BAR });
+  if (popupBarView)     popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: POPUP_BAR_HEIGHT });
+  if (popupContentView) popupContentView.setBounds({ x: b.x, y: b.y + POPUP_BAR_HEIGHT, width: b.width, height: b.height - POPUP_BAR_HEIGHT });
 }
 
 ipcMain.on('close-inline-popup', () => closeInlinePopup());
 
-function repositionBrowserView(splitFraction) {
-  if (!mainWindow || !browserView) return;
+// ── Right panel views (Figma, Storybook) ─────────────────────────
+function repositionRightPanelView() {
+  if (!mainWindow) return;
   const [winW, winH] = mainWindow.getContentSize();
-  const fraction = splitFraction ?? global.splitFraction ?? 0.4;
-  const leftW = Math.round(winW * fraction);
-  const rightX = leftW + 4;
-  const topOffset = TITLEBAR_HEIGHT + TOOLBAR_HEIGHT;
-  browserView.setBounds({ x: rightX, y: topOffset, width: winW - rightX, height: winH - topOffset });
+  const fraction = splitFraction;
+  const availW   = winW - devToolsWidth;
+  const rightX   = Math.round(availW * fraction) + 6;
+  const rightW   = availW - rightX;
+  if (figmaView) {
+    figmaView.setBounds(
+      rightPanelMode === 'figma'
+        ? { x: rightX, y: TOOLBAR_HEIGHT, width: rightW, height: winH - TOOLBAR_HEIGHT }
+        : { x: -10000, y: 0, width: 1, height: 1 }
+    );
+  }
 }
 
-// ── PTY ───────────────────────────────────────────────────────────
-function spawnPty() {
+function repositionDevToolsView() {
+  if (!devToolsView || !mainWindow || mainWindow.isDestroyed()) return;
+  const [winW, winH] = mainWindow.getContentSize();
+  devToolsView.setBounds(devToolsWidth > 0
+    ? { x: winW - devToolsWidth, y: 0, width: devToolsWidth, height: winH }
+    : { x: -10000, y: 0, width: 1, height: 1 });
+}
+
+// ── Remote DevTools helpers ───────────────────────────────────────
+async function fetchTargets() {
+  return new Promise((resolve, reject) => {
+    const req = http.get(`http://127.0.0.1:${DEVTOOLS_PORT}/json/list`, res => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } });
+    });
+    req.on('error', reject);
+    req.setTimeout(3000, () => { req.destroy(); reject(new Error('DevTools list timeout')); });
+  });
+}
+
+async function getDevToolsURL() {
+  const targets = await fetchTargets();
+  const pageUrl = browserView.webContents.getURL();
+  const isBlank = !pageUrl || pageUrl === 'about:blank';
+
+  // Exclude: the DevTools view itself, main renderer HTML, internal Electron targets
+  const exclude = u => !u
+    || u.startsWith('devtools://')
+    || u.startsWith('file://')
+    || u.startsWith('http://127.0.0.1')
+    || u.startsWith('chrome-extension://')
+    || u.includes('figma.com');
+
+  // Prefer exact URL match; fall back to first non-excluded page target
+  const target = isBlank
+    ? targets.find(t => t.type === 'page' && !exclude(t.url))
+    : (targets.find(t => t.type === 'page' && t.url === pageUrl)
+      ?? targets.find(t => t.type === 'page' && !exclude(t.url)));
+
+  if (!target) throw new Error(`No DevTools target found (pageUrl=${pageUrl})`);
+  const wsPath = target.webSocketDebuggerUrl.replace(/^ws:\/\//, '');
+  return `http://127.0.0.1:${DEVTOOLS_PORT}/devtools/inspector.html?ws=${wsPath}`;
+}
+
+async function reconnectDevTools() {
+  if (!devToolsView || devToolsView.webContents.isDestroyed()) return;
   try {
-    const pty = require('@homebridge/node-pty-prebuilt-multiarch');
-    // Run claude inside WSL via wsl.exe — bash -lic loads the full login shell
-    // so nvm, PATH, and other shell config are available.
-    ptyProcess = pty.spawn('wsl.exe', ['bash', '-lic', 'claude'], {
-      name: 'xterm-256color',
-      cols: 80, rows: 24,
+    const url = await getDevToolsURL();
+    devToolsView.webContents.loadURL(url);
+  } catch (_) {}
+}
+
+async function inspectElementCDP(x, y) {
+  try {
+    await ensureCDP();
+    const { nodeId } = await browserView.webContents.debugger.sendCommand('DOM.getNodeForLocation', {
+      x: Math.round(x), y: Math.round(y), includeUserAgentShadowDOM: false,
+    });
+    if (nodeId) await browserView.webContents.debugger.sendCommand('DOM.setInspectedNode', { nodeId });
+  } catch (_) {}
+}
+
+function broadcastLayout() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const [winW] = mainWindow.getContentSize();
+  const frac   = splitFraction;
+  const leftW  = Math.max(280, Math.round((winW - devToolsWidth - 4) * frac));
+  mainWindow.webContents.send('devtools-layout', { leftPanelWidth: leftW, devToolsWidth });
+}
+
+function animateDevTools(open) {
+  if (devToolsTimer) { clearInterval(devToolsTimer); devToolsTimer = null; }
+  const startW    = devToolsWidth;
+  const targetW   = open ? DT_WIDTH : 0;
+  const startTime = Date.now();
+  const DURATION  = 220;
+  devToolsTimer = setInterval(() => {
+    const t    = Math.min((Date.now() - startTime) / DURATION, 1);
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    devToolsWidth = Math.round(startW + (targetW - startW) * ease);
+    repositionBrowserView();
+    repositionRightPanelView();
+    repositionInlinePopup();
+    repositionDevToolsView();
+    broadcastLayout();
+    if (t >= 1) {
+      clearInterval(devToolsTimer);
+      devToolsTimer = null;
+      devToolsWidth = targetW;
+      devToolsOpen  = open;
+      if (!open && devToolsView) {
+        mainWindow.contentView.removeChildView(devToolsView);
+        devToolsView = null;
+      }
+      mainWindow.webContents.send(open ? 'devtools-opened' : 'devtools-closed');
+    }
+  }, 16);
+}
+
+async function openDevToolsPanel(inspectX, inspectY) {
+  if (devToolsView || devToolsOpening) {
+    if (inspectX != null) inspectElementCDP(inspectX, inspectY);
+    return;
+  }
+  devToolsOpening = true;
+  try {
+    // 300ms: remote-debugging server needs time to register the new target after navigation
+    await new Promise(r => setTimeout(r, 300));
+    const url = await getDevToolsURL();
+    // contextIsolation: false required for the embedded devtools:// frontend to function
+    devToolsView = new WebContentsView({ webPreferences: { contextIsolation: false } });
+    mainWindow.contentView.addChildView(devToolsView);
+    repositionDevToolsView(); // park off-screen; animation will bring it in
+    devToolsView.webContents.loadURL(url);
+    devToolsView.webContents.once('did-fail-load', () => {
+      if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); devToolsView = null; }
+      devToolsOpen = false;
+    });
+    if (inspectX != null) {
+      devToolsView.webContents.once('did-finish-load', () => inspectElementCDP(inspectX, inspectY));
+    }
+    animateDevTools(true);
+  } catch (err) {
+    console.error('[DevTools]', err.message);
+    if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); devToolsView = null; }
+  } finally {
+    devToolsOpening = false;
+  }
+}
+
+function createFigmaView() {
+  figmaView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false } });
+  mainWindow.contentView.addChildView(figmaView);
+  figmaView.webContents.loadURL('https://www.figma.com');
+  repositionRightPanelView();
+}
+
+ipcMain.on('right-panel-mode', (_, mode) => {
+  rightPanelMode = mode;
+  if (mode === 'figma' && !figmaView) createFigmaView();
+  repositionBrowserView();
+  repositionRightPanelView();
+});
+
+function repositionBrowserView(overrideFraction) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!browserView || browserView.webContents.isDestroyed()) return;
+  const [winW, winH] = mainWindow.getContentSize();
+  const fraction = overrideFraction ?? splitFraction;
+  const availW  = winW - devToolsWidth;
+  const leftW   = Math.round(availW * fraction);
+  const rightX  = leftW + 6;
+  if (rightPanelMode !== 'project') {
+    browserView.setBounds({ x: -10000, y: 0, width: 1, height: 1 });
+    return;
+  }
+  const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
+  browserView.setBounds({ x: rightX, y: topOffset, width: availW - rightX, height: winH - topOffset });
+}
+
+// ── PTY sessions ──────────────────────────────────────────────────
+function spawnPty(id) {
+  try {
+    const pty  = require('node-pty');
+    const proc = pty.spawn('wsl.exe', ['bash', '-lic', 'claude'], {
+      name: 'xterm-256color', cols: 80, rows: 24,
       cwd: process.env.USERPROFILE || process.cwd(),
       env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
     });
-    ptyProcess.onData((data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pty-output', data);
+    proc.onData(data => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pty-output', { id, data });
     });
-    ptyProcess.onExit(() => {
+    proc.onExit(() => {
       if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send('pty-output', '\r\n\x1b[33m[Claude session ended]\x1b[0m\r\n');
-      ptyProcess = null;
+        mainWindow.webContents.send('pty-output', { id, data: '\r\n\x1b[33m[Claude session ended]\x1b[0m\r\n' });
+      delete ptyProcesses[id];
     });
+    ptyProcesses[id] = proc;
   } catch (err) {
     if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('pty-output', `\r\n\x1b[31m[Error starting claude: ${err.message}]\x1b[0m\r\n`);
+      mainWindow.webContents.send('pty-output', { id, data: `\r\n\x1b[31m[Error starting claude: ${err.message}]\x1b[0m\r\n` });
   }
 }
 
 // ── IPC: terminal ─────────────────────────────────────────────────
-ipcMain.on('pty-input',   (_, data)          => { if (ptyProcess) ptyProcess.write(data); });
-ipcMain.on('pty-resize',  (_, { cols, rows }) => { if (ptyProcess) ptyProcess.resize(cols, rows); });
-ipcMain.on('pty-restart', () => {
-  if (ptyProcess) { try { ptyProcess.kill(); } catch (_) {} }
-  spawnPty();
+ipcMain.on('pty-input',   (_, { id, data })       => { if (ptyProcesses[id]) ptyProcesses[id].write(data); });
+ipcMain.on('pty-resize',  (_, { id, cols, rows })  => { if (ptyProcesses[id]) ptyProcesses[id].resize(cols, rows); });
+ipcMain.on('pty-spawn',   (_, { id })              => spawnPty(id));
+ipcMain.on('pty-kill',    (_, { id })              => {
+  if (ptyProcesses[id]) { try { ptyProcesses[id].kill(); } catch (_) {} delete ptyProcesses[id]; }
 });
+ipcMain.on('pty-restart', (_, { id })              => {
+  if (ptyProcesses[id]) { try { ptyProcesses[id].kill(); } catch (_) {} delete ptyProcesses[id]; }
+  spawnPty(id);
+});
+ipcMain.on('set-active-pty', (_, { id }) => { activePtyId = id; });
 
 // ── IPC: browser ──────────────────────────────────────────────────
 ipcMain.on('browser-navigate', (_, url) => {
@@ -269,42 +505,91 @@ ipcMain.on('browser-navigate', (_, url) => {
   }
   browserView.webContents.loadURL(target);
 });
-ipcMain.on('browser-go-back',    () => { if (browserView.webContents.canGoBack()) browserView.webContents.goBack(); });
-ipcMain.on('browser-go-forward', () => { if (browserView.webContents.canGoForward()) browserView.webContents.goForward(); });
-ipcMain.on('browser-reload',     () => browserView.webContents.reload());
-ipcMain.on('browser-navigate-home', () => {
-  // Don't persist blank — next launch should still remember the real last URL
-  browserView.webContents.loadURL('about:blank');
-  mainWindow.webContents.send('browser-url-changed', 'about:blank');
-});
+ipcMain.on('browser-reload', () => browserView.webContents.reloadIgnoringCache());
 ipcMain.on('browser-toggle-devtools', () => {
-  if (browserView.webContents.isDevToolsOpened()) {
-    browserView.webContents.closeDevTools();
-    mainWindow.webContents.send('devtools-closed');
-  } else {
-    browserView.webContents.openDevTools({ mode: 'right' });
-    mainWindow.webContents.send('devtools-opened');
-  }
+  if (devToolsOpen || devToolsView) animateDevTools(false);
+  else openDevToolsPanel();
 });
 
 // ── IPC: layout ───────────────────────────────────────────────────
 ipcMain.on('split-changed', (_, fraction) => {
-  global.splitFraction = fraction;
+  splitFraction = fraction;
   repositionBrowserView(fraction);
+  repositionRightPanelView();
+  broadcastLayout();
 });
-ipcMain.on('renderer-ready', () => { repositionBrowserView(); spawnPty(); });
+ipcMain.on('renderer-ready', () => { repositionBrowserView(); broadcastLayout(); });
+
+ipcMain.handle('show-file-dialog', async () => {
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+  });
+  return filePaths || [];
+});
+
+ipcMain.handle('show-folder-dialog', async () => {
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+  });
+  return filePaths[0] || null;
+});
+
+function getApiKeyFile() {
+  return path.join(app.getPath('userData'), '.api-key');
+}
+function loadSavedApiKey() {
+  try {
+    const key = fs.readFileSync(getApiKeyFile(), 'utf8').trim();
+    if (key) process.env.ANTHROPIC_API_KEY = key;
+  } catch (_) {}
+}
+
+ipcMain.on('set-api-key', (_, key) => {
+  process.env.ANTHROPIC_API_KEY = key;
+  try { fs.writeFileSync(getApiKeyFile(), key, 'utf8'); } catch (_) {}
+});
+
+ipcMain.on('browser-view-hide', () => {
+  if (browserView && !browserView.webContents.isDestroyed()) {
+    browserView.setBounds({ x: -10000, y: 0, width: 1, height: 1 });
+  }
+});
+
+ipcMain.on('browser-view-show', () => {
+  repositionBrowserView();
+});
+
+ipcMain.on('new-window', () => {
+  const win = new BrowserWindow({
+    width: 1600, height: 900, minWidth: 800, minHeight: 600,
+    backgroundColor: '#1a1a1a',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#252525', symbolColor: '#888888', height: 46 },
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+  win.loadFile(path.join(__dirname, 'src', 'index.html'));
+});
+
+// ── Active right-panel WebContentsView ───────────────────────────
+function getActivePickView() {
+  if (rightPanelMode === 'figma'   && figmaView)   return figmaView;
+  if (rightPanelMode === 'project' && browserView) return browserView;
+  return null; // storybook has no WebContentsView yet
+}
 
 // ── IPC: element picker ───────────────────────────────────────────
 ipcMain.on('pick-start', async (_, mode) => {
+  const view = getActivePickView();
+  if (!view) { mainWindow.webContents.send('pick-cancelled'); return; }
   try {
     // Phase 1: user draws selection
-    const picked = await browserView.webContents.executeJavaScript(getPickerScript(mode));
+    const picked = await view.webContents.executeJavaScript(getPickerScript(mode));
     if (!picked) { mainWindow.webContents.send('pick-cancelled'); return; }
 
     const { cx, cy, mouseUpX, mouseUpY, bounds, mode: pickedMode } = picked;
 
     // Phase 2: element detection + popup in one script (shares live DOM refs for hover highlight)
-    const result = await browserView.webContents.executeJavaScript(
+    const result = await view.webContents.executeJavaScript(
       getCombinedScript({
         isClick: pickedMode === 'click',
         bounds, cx, cy,
@@ -319,16 +604,16 @@ ipcMain.on('pick-start', async (_, mode) => {
     const { items, instruction } = result;
     if (!instruction && items.length === 0) return;
 
-    // Phase 3: CSS source refs via CDP
-    await ensureCDP();
-    const cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
+    // Phase 3: CSS source refs via CDP (project view only — source maps only meaningful for local dev)
+    let cssRefs = [];
+    if (view === browserView) {
+      await ensureCDP();
+      cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
+    }
 
     // Phase 4: format source-first and write to PTY
     const message = formatSourceMessage({ items, cssRefs, instruction });
-    if (ptyProcess) {
-      ptyProcess.write(message);
-      setTimeout(() => { if (ptyProcess) ptyProcess.write('\r'); }, 80);
-    }
+    mainWindow.webContents.send('pick-send-to-pty', message);
 
   } catch (err) {
     console.error('Pick error:', err);
@@ -338,15 +623,17 @@ ipcMain.on('pick-start', async (_, mode) => {
 
 // ── IPC: screenshot ───────────────────────────────────────────────
 ipcMain.on('pick-screenshot', async () => {
+  const view = getActivePickView();
+  if (!view) { mainWindow.webContents.send('pick-cancelled'); return; }
   try {
     // Phase 1: user draws the capture region
-    const sel = await browserView.webContents.executeJavaScript(getScreenshotScript());
+    const sel = await view.webContents.executeJavaScript(getScreenshotScript());
     if (!sel) { mainWindow.webContents.send('pick-cancelled'); return; }
 
     const { x, y, width, height, mouseUpX, mouseUpY } = sel;
 
     // Phase 2: capture that rectangle from the WebContentsView
-    const image = await browserView.webContents.capturePage({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+    const image = await view.webContents.capturePage({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
 
     // Phase 3: save PNG
     const screenshotsDir = path.join(app.getPath('userData'), 'screenshots');
@@ -358,7 +645,7 @@ ipcMain.on('pick-screenshot', async () => {
 
     // Phase 4: show popup in browser with thumbnail preview
     const thumbB64 = pngBuffer.toString('base64');
-    const popupResult = await browserView.webContents.executeJavaScript(
+    const popupResult = await view.webContents.executeJavaScript(
       getScreenshotPopupScript(thumbB64, mouseUpX, mouseUpY)
     );
 
@@ -369,12 +656,37 @@ ipcMain.on('pick-screenshot', async () => {
 
     // Phase 5: write to PTY — Claude Code can read the file
     const msg = `[Screenshot: ${filepath}]${instruction ? '\n\n' + instruction : ''}`;
-    if (ptyProcess) {
-      ptyProcess.write(msg);
-      setTimeout(() => { if (ptyProcess) ptyProcess.write('\r'); }, 80);
-    }
+    mainWindow.webContents.send('pick-send-to-pty', msg);
   } catch (err) {
     console.error('Screenshot error:', err);
+    mainWindow.webContents.send('pick-cancelled');
+  }
+});
+
+// ── IPC: element resize ───────────────────────────────────────────
+ipcMain.on('pick-resize', async () => {
+  const view = getActivePickView();
+  if (!view) { mainWindow.webContents.send('pick-cancelled'); return; }
+  try {
+    const result = await view.webContents.executeJavaScript(getResizeScript());
+    mainWindow.webContents.send('pick-cancelled');
+    if (!result) return;
+
+    const { selector, tag, snippet, oW, oH, nW, nH, instructions } = result;
+    const lines = [
+      '───── Resize Request ─────',
+      snippet,
+      '',
+      'Selector: ' + selector,
+    ];
+    if (nW !== oW) lines.push('  width:  ' + oW + 'px  →  ' + nW + 'px');
+    if (nH !== oH) lines.push('  height: ' + oH + 'px  →  ' + nH + 'px');
+    if (instructions) { lines.push('', 'Additional instructions: ' + instructions); }
+    lines.push('', 'Update the CSS so this element matches these dimensions.');
+
+    mainWindow.webContents.send('pick-send-to-pty', lines.join('\n'));
+  } catch (err) {
+    console.error('Resize error:', err);
     mainWindow.webContents.send('pick-cancelled');
   }
 });
@@ -390,6 +702,9 @@ function formatSourceMessage({ items, cssRefs, instruction }) {
       lines.push(`${file}:${item.debugSource.line}  →  ${item.reactComponent || item.label}`);
     } else {
       lines.push(`• ${item.label}`);
+    }
+    if (item.selectedCSS && item.selectedCSS.length > 0) {
+      for (const css of item.selectedCSS) lines.push(`    ${css}`);
     }
   }
 
@@ -447,143 +762,16 @@ async function getCSSSourceRefs({ cx, cy }) {
     .filter(r => r.props);
 }
 
-// ── Element context extraction ────────────────────────────────────
-async function extractElementContext({ cx, cy }) {
-  const dbg = browserView.webContents.debugger;
-
-  let nodeId;
-  try {
-    const loc = await dbg.sendCommand('DOM.getNodeForLocation', {
-      x: Math.round(cx), y: Math.round(cy),
-      includeUserAgentShadowDOM: false,
-    });
-    nodeId = loc.nodeId;
-    if (!nodeId) return null;
-  } catch (e) { return null; }
-
-  const [attrRes, htmlRes, cssRes, computedRes] = await Promise.all([
-    dbg.sendCommand('DOM.getAttributes',          { nodeId }),
-    dbg.sendCommand('DOM.getOuterHTML',           { nodeId }),
-    dbg.sendCommand('CSS.getMatchedStylesForNode',{ nodeId }).catch(() => ({})),
-    dbg.sendCommand('CSS.getComputedStyleForNode',{ nodeId }).catch(() => ({})),
-  ]);
-
-  // Fetch any new stylesheets we haven't seen yet
-  const unknownIds = new Set();
-  for (const m of (cssRes.matchedCSSRules || [])) {
-    const sid = m.rule?.style?.styleSheetId;
-    if (sid && !stylesheetMap[sid]) unknownIds.add(sid);
-  }
-  await Promise.all([...unknownIds].map(async (sid) => {
-    try {
-      const { styleSheet } = await dbg.sendCommand('CSS.getStyleSheet', { styleSheetId: sid });
-      if (styleSheet.sourceURL) stylesheetMap[sid] = styleSheet.sourceURL;
-    } catch (_) {}
-  }));
-
-  // React fiber walk runs in the page context
-  const reactInfo = await browserView.webContents.executeJavaScript(`
-    (function() {
-      const el = document.elementFromPoint(${Math.round(cx)}, ${Math.round(cy)});
-      if (!el) return null;
-      const key = Object.keys(el).find(k =>
-        k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-      if (!key) return { hasReact: false };
-      let fiber = el[key];
-      const comps = [];
-      while (fiber && comps.length < 5) {
-        if (fiber.type && typeof fiber.type === 'function') {
-          const name = fiber.type.displayName || fiber.type.name || '';
-          if (name && !/^[a-z]/.test(name) && name !== 'Component' && name !== 'Fragment') {
-            const src = fiber._debugSource;
-            comps.push({
-              name,
-              file: src ? src.fileName : null,
-              line: src ? src.lineNumber : null,
-            });
-          }
-        }
-        fiber = fiber.return;
-      }
-      return { hasReact: comps.length > 0, components: comps };
-    })()
-  `).catch(() => null);
-
-  return formatContext({
-    attributes: attrRes.attributes || [],
-    outerHTML: htmlRes.outerHTML || '',
-    cssRes,
-    computedRes,
-    reactInfo,
-  });
-}
-
-// ── Context formatter ─────────────────────────────────────────────
+// ── Path helpers ──────────────────────────────────────────────────
 function shortPath(url) {
   if (!url) return '';
-  // Strip everything before /src/ for readability
   return url.replace(/^.*?\/src\//, 'src/').replace(/\?.*$/, '');
 }
 
-function formatContext({ attributes, outerHTML, cssRes, computedRes, reactInfo }) {
-  const lines = [];
-  lines.push('───── Element Context ─────');
-
-  // React component tree
-  if (reactInfo?.hasReact && reactInfo.components.length > 0) {
-    reactInfo.components.forEach((c, i) => {
-      const indent = '  '.repeat(i);
-      const arrow  = i === 0 ? '' : '└─ ';
-      const src    = c.file ? ` (${shortPath(c.file)}:${c.line})` : '';
-      lines.push(`${indent}${arrow}${c.name}${src}`);
-    });
-  }
-
-  // Opening tag (truncated)
-  const tag = outerHTML.match(/^<[^>]*>/)?.[0] || '';
-  lines.push(`<${tag.replace(/^</, '').substring(0, 180)}${tag.length > 180 ? '…' : ''}`);
-
-  // Matched CSS rules (non-UA, with properties)
-  const rules = (cssRes.matchedCSSRules || [])
-    .filter(m => m.rule.origin !== 'user-agent' && (m.rule.style?.cssProperties?.length ?? 0) > 0)
-    .slice(0, 8);
-
-  if (rules.length > 0) {
-    lines.push('CSS:');
-    for (const { rule } of rules) {
-      const selector = rule.selectorList.text;
-      const props = (rule.style.cssProperties || [])
-        .filter(p => p.value && !p.disabled && !p.implicit)
-        .map(p => `${p.name}: ${p.value}`)
-        .slice(0, 6)
-        .join('; ');
-      if (!props) continue;
-      const sid  = rule.style.styleSheetId;
-      const src  = sid && stylesheetMap[sid] ? `  ← ${shortPath(stylesheetMap[sid])}` : '';
-      lines.push(`  ${selector} { ${props} }${src}`);
-    }
-  }
-
-  // Key computed styles
-  const WANT = new Set([
-    'padding','padding-top','padding-right','padding-bottom','padding-left',
-    'margin','font-size','font-weight','font-family',
-    'color','background-color','display','flex-direction',
-    'gap','border-radius','width','height','line-height','letter-spacing',
-  ]);
-  const SKIP_VALUES = new Set(['auto','none','normal','rgba(0, 0, 0, 0)','0px','transparent','']);
-  const computed = (computedRes.computedStyle || [])
-    .filter(p => WANT.has(p.name) && !SKIP_VALUES.has(p.value))
-    .map(p => `${p.name}: ${p.value}`)
-    .join('; ');
-  if (computed) lines.push(`Computed: ${computed}`);
-
-  lines.push('──────────────────────────');
-  return lines.join('\n');
-}
 
 // ── App lifecycle ─────────────────────────────────────────────────
 app.whenReady().then(() => {
+  loadSavedApiKey();
   const { screen } = require('electron');
   const currentScale = screen.getPrimaryDisplay().scaleFactor;
 
@@ -602,6 +790,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (ptyProcess) { try { ptyProcess.kill(); } catch (_) {} }
+  Object.values(ptyProcesses).forEach(p => { try { p.kill(); } catch (_) {} });
   if (process.platform !== 'darwin') app.quit();
 });
