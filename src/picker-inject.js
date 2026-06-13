@@ -1,9 +1,29 @@
+const fs   = require('fs');
+const path = require('path');
+const { Z } = require('./ui-constants');
+
+const LASSO_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'lasso-cursor.svg'), 'utf8')).toString('base64');
+const LASSO_CURSOR = `url("data:image/svg+xml;base64,${LASSO_B64}") 9 2, crosshair`;
+
+const BOX_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'box-select-cursor.svg'), 'utf8')).toString('base64');
+const BOX_CURSOR = `url("data:image/svg+xml;base64,${BOX_B64}") 14 4, crosshair`;
+
+const STORYBOOK_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
+const STORYBOOK_CURSOR = `url("data:image/svg+xml;base64,${STORYBOOK_B64}") 9 9, crosshair`;
+
 function getPickerScript(mode) {
+  const cursorCss = mode === 'lasso' ? LASSO_CURSOR
+    : mode === 'box'       ? BOX_CURSOR
+    : mode === 'aidev'     ? BOX_CURSOR
+    : mode === 'component' ? STORYBOOK_CURSOR
+    : 'crosshair';
   return `(function() {
   const existing = document.getElementById('__cathode_picker__');
   if (existing) existing.remove();
   const existingHl = document.getElementById('__cathode_hl__');
   if (existingHl) existingHl.remove();
+  const existingSel = document.getElementById('__cathode_selection__');
+  if (existingSel) existingSel.remove();
 
   return new Promise((resolve) => {
     let resolved = false;
@@ -11,6 +31,15 @@ function getPickerScript(mode) {
     function done(result) {
       if (resolved) return;
       resolved = true;
+      // Keep the drawn selection outline on the page (under the popup) so the
+      // user can see what they selected. The popup removes it when it closes.
+      if (shape && result && result.mode !== 'click') {
+        const sel = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        sel.id = '__cathode_selection__';
+        sel.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z.SELECTION};overflow:visible;';
+        sel.appendChild(shape.cloneNode(true));
+        document.body.appendChild(sel);
+      }
       overlay.remove();
       hl.remove();
       document.removeEventListener('keydown', onKeyDown);
@@ -21,7 +50,7 @@ function getPickerScript(mode) {
     const hl = document.createElement('div');
     hl.id = '__cathode_hl__';
     hl.style.cssText = [
-      'position:fixed', 'pointer-events:none', 'z-index:2147483646',
+      'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
       'border:2px solid #4a9eff', 'background:rgba(74,158,255,0.08)',
       'box-sizing:border-box', 'transition:all 40ms', 'border-radius:2px',
     ].join(';');
@@ -30,7 +59,7 @@ function getPickerScript(mode) {
     // Label that follows the highlight
     const label = document.createElement('div');
     label.style.cssText = [
-      'position:fixed', 'pointer-events:none', 'z-index:2147483646',
+      'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
       'background:#4a9eff', 'color:#fff', 'font:bold 11px/18px monospace',
       'padding:1px 6px', 'border-radius:2px', 'white-space:nowrap',
     ].join(';');
@@ -39,7 +68,7 @@ function getPickerScript(mode) {
     // Full-page capture overlay
     const overlay = document.createElement('div');
     overlay.id = '__cathode_picker__';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;cursor:crosshair;';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:${Z.OVERLAY};cursor:${cursorCss}';
     document.body.appendChild(overlay);
 
     // SVG canvas for drawing shapes
@@ -51,6 +80,7 @@ function getPickerScript(mode) {
     let pathPoints = [];
     let shape = null;
     const MODE = ${JSON.stringify(mode)};
+    const isBox = MODE === 'box' || MODE === 'aidev';
 
     function getLabelText(el) {
       if (!el) return '';
@@ -80,13 +110,26 @@ function getPickerScript(mode) {
 
     overlay.addEventListener('mousedown', (e) => {
       e.preventDefault();
+
+      // AI Developer: Ctrl/Cmd-click selects the whole page
+      if (MODE === 'aidev' && (e.ctrlKey || e.metaKey)) {
+        done({
+          mode: 'click', wholePage: true,
+          cx: e.clientX, cy: e.clientY,
+          mouseUpX: e.clientX, mouseUpY: e.clientY,
+          bounds: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight },
+          scrollX: window.scrollX, scrollY: window.scrollY,
+        });
+        return;
+      }
+
       drawing = true;
       hl.style.display = 'none';
       label.style.display = 'none';
       startX = e.clientX; startY = e.clientY;
       pathPoints = [{ x: e.clientX, y: e.clientY }];
 
-      if (MODE === 'box') {
+      if (isBox) {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       } else {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -102,7 +145,7 @@ function getPickerScript(mode) {
 
     overlay.addEventListener('mousemove', (e) => {
       if (!drawing || !shape) return;
-      if (MODE === 'box') {
+      if (isBox) {
         shape.setAttribute('x', Math.min(startX, e.clientX));
         shape.setAttribute('y', Math.min(startY, e.clientY));
         shape.setAttribute('width', Math.abs(e.clientX - startX));
@@ -136,7 +179,7 @@ function getPickerScript(mode) {
       }
 
       let bounds;
-      if (MODE === 'box') {
+      if (isBox) {
         bounds = {
           x: Math.min(startX, e.clientX), y: Math.min(startY, e.clientY),
           width: Math.abs(dx), height: Math.abs(dy),

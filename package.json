@@ -2,6 +2,7 @@
   "name": "cathode-terminal",
   "version": "1.0.0",
   "description": "Split chat + browser dev tool for Claude Code",
+  "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
   "author": "hplan",
   "main": "main.js",
   "scripts": {
@@ -11,13 +12,18 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.25.0",
+    "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
-    "node-pty": "^1.1.0"
+    "gsap": "^3.15.0",
+    "monaco-editor": "^0.52.2",
+    "node-pty": "^1.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.cathode.terminal",
@@ -37,15 +43,31 @@
       "!**/*.md",
       "!**/*.map",
       "!**/*.ts",
-      "!**/.git/**/*"
+      "!**/.git/**/*",
+      "!node_modules/monaco-editor/dev/**",
+      "!node_modules/monaco-editor/esm/**",
+      "!node_modules/monaco-editor/min-maps/**",
+      "!node_modules/node-pty/prebuilds/darwin-arm64/**",
+      "!node_modules/node-pty/prebuilds/darwin-x64/**",
+      "!node_modules/node-pty/prebuilds/win32-arm64/**"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
     ],
     "win": {
       "target": [
-        { "target": "nsis",     "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "requestedExecutionLevel": "asInvoker"
     },

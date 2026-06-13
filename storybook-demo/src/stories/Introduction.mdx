@@ -1,0 +1,33 @@
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Cathode Design System / Introduction" />
+
+# Cathode Design System
+
+This Storybook documents the visual language used in **CathodeTerminal** — an Electron-based AI development environment.
+
+## Core Principles
+
+- **Dark-first**: all surfaces use the dark theme palette by default
+- **Monochrome with accent**: neutral grays accented by a single blue (`#4a9eff`)
+- **Compact & dense**: toolbar elements at 26–30px height; 11–12px font sizes throughout
+- **Consistent radius**: `3px` (sm), `5px` (md), `10px` (lg), `20px` (pill)
+
+## Using This Reference
+
+When building UI for CathodeTerminal, always:
+
+1. Pull colors from the CSS variable tokens (e.g. `var(--accent)`, `var(--bg-panel)`)
+2. Use `var(--font-ui)` for labels and UI chrome; `var(--font-mono)` for code and terminal output
+3. Match button heights to context: `26px` in toolbars, `30px` in panels, `36px` in modals
+4. Keep interactive hover states at `var(--btn-hover)` (`#3a3a3a`) with 100ms transition
+
+## Token Categories
+
+| Category | Variable prefix | Example |
+|---|---|---|
+| Backgrounds | `--bg-*` | `--bg-panel: #1e1e1e` |
+| Text | `--text*` | `--text-dim: #666666` |
+| Accent | `--accent*` | `--accent: #4a9eff` |
+| Semantic | `--danger`, `--success`, `--warning` | `--danger: #f44747` |
+| Radius | `--radius-*` | `--radius-md: 5px` |

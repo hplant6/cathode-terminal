@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
+  <!-- dark outline layer -->
+  <g stroke-linecap="round" stroke-width="3" fill="none" stroke="#000000" stroke-linejoin="round" opacity="0.65">
+    <circle cx="9" cy="9" r="2" fill="#1a1a1a" stroke="none" opacity="0.65"/>
+    <path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"/>
+    <path d="M6.75 4L9 1.75L11.25 4"/>
+    <path d="M6.75 14L9 16.25L11.25 14"/>
+    <path d="M4 11.25L1.75 9L4 6.75"/>
+    <path d="M14 11.25L16.25 9L14 6.75"/>
+  </g>
+  <!-- white icon layer -->
+  <g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="#ffffff" stroke-linejoin="round">
+    <path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="rgba(255,255,255,0.3)" stroke="#ffffff"/>
+    <path d="M6.75 4L9 1.75L11.25 4"/>
+    <path d="M6.75 14L9 16.25L11.25 14"/>
+    <path d="M4 11.25L1.75 9L4 6.75"/>
+    <path d="M14 11.25L16.25 9L14 6.75"/>
+  </g>
+</svg>

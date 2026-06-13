@@ -1,3 +1,9 @@
+const fs   = require('fs');
+const path = require('path');
+
+const RESIZE_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'resize-cursor.svg'), 'utf8')).toString('base64');
+const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 9 9, move`;
+
 function getResizeScript() {
   return `(function() {
   ['__cr_ov','__cr_hv','__cr_hr'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
@@ -31,7 +37,7 @@ function getResizeScript() {
     // ── Hover overlay ─────────────────────────────────────────────────
     var ov = document.createElement('div');
     ov.id = '__cr_ov';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:crosshair;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:${RESIZE_CURSOR}';
     document.body.appendChild(ov);
 
     var hv = document.createElement('div');

@@ -1,0 +1,66 @@
+/* ── Cathode Design Tokens ──────────────────────────────────────── */
+/* Mirrors the CSS variables used in CathodeTerminal's renderer.    */
+
+:root {
+  /* Backgrounds */
+  --bg-base:        #1a1a1a;
+  --bg-panel:       #1e1e1e;
+  --bg-toolbar:     #252525;
+  --bg-input:       #2d2d2d;
+
+  /* Borders */
+  --border:         #333333;
+
+  /* Text */
+  --text:           #cccccc;
+  --text-dim:       #666666;
+  --text-on-accent: #ffffff;
+
+  /* Accent / brand */
+  --accent:         #4a9eff;
+  --accent-dim:     rgba(74,158,255,0.15);
+  --accent-border:  rgba(74,158,255,0.35);
+  --accent-hover:   #7ab8ff;
+  --accent-dark:    #3a8eef;
+
+  /* Semantic */
+  --danger:         #f44747;
+  --danger-dim:     rgba(244,71,71,0.18);
+  --success:        #4ec9b0;
+  --warning:        #e8a838;
+
+  /* Interactive */
+  --btn-hover:      #3a3a3a;
+  --btn-active:     #444444;
+
+  /* Shadows */
+  --shadow-overlay: rgba(0,0,0,0.5);
+
+  /* Typography */
+  --font-ui:   'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+
+  /* Spacing scale */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+
+  /* Border radius */
+  --radius-sm:   3px;
+  --radius-md:   5px;
+  --radius-lg:   10px;
+  --radius-pill: 20px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+}

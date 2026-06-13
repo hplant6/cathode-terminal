@@ -4,15 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cathode Terminal</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@200;400&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" />
+  <link rel="stylesheet" href="styles.css?v=5" />
   <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
 </head>
 <body>
   <div id="app-bar">
-    <!-- Left: logo -->
+    <!-- Left: logo + settings -->
     <div id="app-bar-logo">
       <img src="cathode-terminal-logo.svg" alt="Cathode Terminal" draggable="false" />
     </div>
+    <button id="btn-settings" title="Settings">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4.5,7 9,11.5 13.5,7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
 
     <!-- Settings dropdown -->
     <div id="settings-menu">
@@ -42,44 +48,44 @@
     <!-- Right: view tabs, separator, pick tools, devtools, window-controls clearance -->
     <div id="right-panel-tabs">
       <div id="view-tab-thumb"></div>
-      <button class="view-tab active" data-view="project">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path opacity="0.4" d="M9.5 5.5C9.5 3.96 8.573 2.65005 7.25 2.06995V5.75H4.25V2.06995C2.927 2.65005 2 3.9599 2 5.5C2 7.0401 2.927 8.34995 4.25 8.93005V15.25C4.25 15.8 4.698 16.25 5.25 16.25H6.25C6.802 16.25 7.25 15.8 7.25 15.25V8.93005C8.573 8.34995 9.5 7.0401 9.5 5.5Z" fill="currentColor" stroke="none"/><path opacity="0.4" d="M15.25 9.25V15.25C15.25 15.8 14.802 16.25 14.25 16.25H13.25C12.698 16.25 12.25 15.8 12.25 15.25V9.25" fill="currentColor" stroke="none"/><path d="M9.5 5.5C9.5 3.96 8.573 2.65005 7.25 2.06995V5.75H4.25V2.06995C2.927 2.65005 2 3.9599 2 5.5C2 7.0401 2.927 8.34995 4.25 8.93005V15.25C4.25 15.8 4.698 16.25 5.25 16.25H6.25C6.802 16.25 7.25 15.8 7.25 15.25V8.93005C8.573 8.34995 9.5 7.0401 9.5 5.5Z"/><path d="M15.25 9.25V15.25C15.25 15.8 14.802 16.25 14.25 16.25H13.25C12.698 16.25 12.25 15.8 12.25 15.25V9.25"/><path d="M11.25 9.25H16.25"/><path d="M13.75 9.25V2.25"/><path d="M13.75 5.25L14.75 3.5L14.25 1.75H13.25L12.75 3.5L13.75 5.25Z" fill="currentColor"/></g></svg>
-        Working File
-      </button>
-      <button class="view-tab" data-view="figma">
-        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="13" viewBox="0 0 200 300"><path d="M50 300c27.6 0 50-22.4 50-50v-50H50c-27.6 0-50 22.4-50 50s22.4 50 50 50z" fill="#0acf83"/><path d="M0 150c0-27.6 22.4-50 50-50h50v100H50c-27.6 0-50-22.4-50-50z" fill="#a259ff"/><path d="M0 50C0 22.4 22.4 0 50 0h50v100H50C22.4 100 0 77.6 0 50z" fill="#f24e1e"/><path d="M100 0h50c27.6 0 50 22.4 50 50s-22.4 50-50 50h-50V0z" fill="#ff7262"/><path d="M200 150c0 27.6-22.4 50-50 50s-50-22.4-50-50 22.4-50 50-50 50 22.4 50 50z" fill="#1abcfe"/></svg>
-        Figma
-      </button>
-      <button class="view-tab" data-view="storybook">
-        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m9,15.051c.17,0,.339-.045.494-.134.643-.371,1.732-.847,3.141-.845.899.001,1.667.197,2.27.435.648.255,1.344-.24,1.344-.937V4.487c0-.354-.181-.68-.486-.86-.5393-.3183-1.4027-.7163-2.513-.8308"/><path d="m9,15.051c-.17,0-.339-.045-.494-.134-.643-.371-1.732-.847-3.141-.845-.899.001-1.667.197-2.27.435-.648.255-1.344-.237-1.344-.933V4.484c0-.354.181-.676.486-.856.637-.376,1.726-.863,3.14-.863,1.89,0,3.198.872,3.624,1.182"/><path d="m8.999,15.051c.6301-1.3222,1.9537-2.2143,3.6105-2.3971.3692-.0407.6405-.3676.6405-.739V2.3259c0-.4569-.4081-.8165-.8599-.7486-1.5127.2275-2.7746,1.0598-3.3911,2.3686v11.105Z"/></g></svg>
-        Storybook
-      </button>
+      <!-- tabs rendered dynamically by renderer.js -->
     </div>
-    <button id="btn-settings" title="Settings">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="16" height="16"><path fill="currentColor" d="M15.94 7.44101L14.878 7.27802C14.754 6.85402 14.586 6.447 14.373 6.06L15.009 5.19299C15.377 4.69199 15.325 4.00801 14.885 3.57001L14.429 3.11401C13.991 2.67501 13.308 2.62299 12.805 2.98999L11.938 3.62701C11.551 3.41401 11.144 3.24601 10.721 3.12201L10.557 2.05899C10.462 1.44499 9.943 0.998993 9.322 0.998993H8.677C8.056 0.998993 7.536 1.445 7.442 2.06L7.279 3.12201C6.855 3.24601 6.448 3.41401 6.061 3.62701L5.194 2.991C4.692 2.624 4.009 2.676 3.571 3.116L3.115 3.57199C2.676 4.01099 2.624 4.69401 2.991 5.19601L3.628 6.06299C3.416 6.44999 3.247 6.857 3.123 7.28L2.06 7.444C1.446 7.539 1 8.05799 1 8.67899V9.32401C1 9.94501 1.446 10.465 2.061 10.559L3.123 10.722C3.247 11.146 3.415 11.553 3.628 11.94L2.992 12.807C2.625 13.308 2.677 13.991 3.117 14.43L3.573 14.886C4.012 15.326 4.696 15.378 5.197 15.01L6.064 14.373C6.451 14.585 6.858 14.754 7.281 14.878L7.445 15.941C7.54 16.555 8.059 17.001 8.68 17.001H9.325C9.946 17.001 10.466 16.555 10.56 15.94L10.723 14.878C11.147 14.754 11.554 14.586 11.941 14.373L12.808 15.009C13.309 15.377 13.992 15.324 14.431 14.885L14.887 14.429C15.326 13.99 15.378 13.307 15.011 12.805L14.374 11.938C14.587 11.551 14.755 11.144 14.879 10.721L15.942 10.557C16.556 10.462 17.002 9.94299 17.002 9.32199V8.677C17.002 8.056 16.556 7.53599 15.942 7.44199L15.94 7.44101ZM9 11.5C7.6189 11.5 6.5 10.3811 6.5 9C6.5 7.6189 7.6189 6.5 9 6.5C10.3811 6.5 11.5 7.6189 11.5 9C11.5 10.3811 10.3811 11.5 9 11.5Z"/></svg>
-    </button>
+    <button id="btn-devtools" title="Toggle DevTools"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.25 13.25L1.75 9L5.25 4.75"></path><path d="M12.75 13.25L16.25 9L12.75 4.75"></path><path d="M7.75 13.25L10.25 4.75"></path></g></svg></button>
     <span class="app-bar-sep"></span>
-    <div id="pick-group">
-      <button id="btn-pick-box"   class="pick-btn" title="Box select element"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="4.75" y1="2.25" x2="4.75" y2=".75" data-color="color-2"></line><line x1="13.25" y1="2.25" x2="13.25" y2=".75" data-color="color-2"></line><line x1="4.75" y1="17.25" x2="4.75" y2="15.75" data-color="color-2"></line><line x1="13.25" y1="17.25" x2="13.25" y2="15.75" data-color="color-2"></line><line x1="15.75" y1="4.75" x2="17.25" y2="4.75" data-color="color-2"></line><line x1="15.75" y1="13.25" x2="17.25" y2="13.25" data-color="color-2"></line><line x1=".75" y1="4.75" x2="2.25" y2="4.75" data-color="color-2"></line><line x1=".75" y1="13.25" x2="2.25" y2="13.25" data-color="color-2"></line><rect x="4.75" y="4.75" width="8.5" height="8.5" rx="2" ry="2"></rect></g></svg></button>
-      <button id="btn-pick-lasso" class="pick-btn" title="Lasso select element"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
-      <button id="btn-screenshot" class="pick-btn" title="Screenshot region"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
-      <button id="btn-pick-resize" class="pick-btn" title="Resize element"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></button>
+    <!-- ── Toolbar ──────────────────────────────────────────────── -->
+    <div id="toolbar">
+      <div id="project-tools">
+        <button id="btn-pick-box"       class="pick-btn" title="Box select element (Alt+B)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></button>
+        <button id="btn-pick-lasso"     class="pick-btn" title="Lasso select element (Alt+L)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
+        <button id="btn-pick-resize"    class="pick-btn" title="Resize element (Alt+R)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></button>
+        <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" style="display:none" title="AI Developer — inspect, interact, inject &amp; extract via browser tools (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5,14c1.3-2,3.5-3.2,6-3.2"/><path d="M14.5,16.2h-6.2l1.9-4.2c0-.2.3-.3.5-.3h5.4c.4,0,.6.4.5.7l-1.6,3.5c0,.2-.3.3-.5.3Z"/><line x1="8.3" y1="16.2" x2="5.3" y2="16.2"/><rect x="3.3" y="1.8" width="8.5" height="6.5" rx="2" ry="2"/><circle cx="6.3" cy="5.8" r=".8" stroke="none" fill="currentColor"/><circle cx="9.3" cy="5.8" r=".8" stroke="none" fill="currentColor"/><line x1="11.8" y1="5.2" x2="13" y2="5.2"/><line x1="2" y1="5.2" x2="3.3" y2="5.2"/></svg></button>
+        <button id="btn-pick-component" class="pick-btn" title="Pick Storybook component (Alt+S)" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></button>
+      </div>
+      <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
+      <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
     </div>
-    <button id="btn-devtools" title="Toggle DevTools">&lt;/&gt;</button>
     <div id="app-bar-wc-pad"></div>
   </div>
 
   <div id="app">
 
     <!-- LEFT: Claude Code sessions -->
-    <div id="left-panel" class="ui-mode">
+    <div id="left-panel">
       <div id="terminal-header">
         <div id="pty-tabs-container"></div>
-        <button id="btn-new-pty" title="New session">&#xff0b;</button>
+        <div id="new-pty-wrap">
+          <button id="btn-new-pty" title="New session">&#xff0b;</button>
+          <div id="profile-menu"></div>
+        </div>
         <button id="btn-restart" title="Restart session">&#x21BA;</button>
         <div id="terminal-header-right">
           <div id="audit-wrap">
             <button id="btn-audit" title="Run code audit">
+              <svg class="audit-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.25 11.75V14.25C14.25 15.355 13.355 16.25 12.25 16.25H5.75C4.645 16.25 3.75 15.355 3.75 14.25V12.25"/>
+                <path d="M3.75 6.25V3.75C3.75 2.645 4.645 1.75 5.75 1.75H12.25C13.355 1.75 14.25 2.645 14.25 3.75V5.75"/>
+                <path d="M1.75 9.25H5.51C5.95 9.25 6.338 8.963 6.466 8.542L7.465 5.272C7.514 5.111 7.741 5.109 7.793 5.269L10.207 12.729C10.259 12.889 10.486 12.887 10.535 12.726L11.534 9.456C11.662 9.035 12.051 8.748 12.49 8.748H16.25"/>
+              </svg>
               Audit
               <svg class="audit-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" fill="none">
                 <polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
@@ -87,10 +93,15 @@
             </button>
             <div id="audit-menu"></div>
           </div>
-          <div id="mode-switch">
-            <div id="mode-switch-thumb"></div>
-            <button class="mode-opt active" data-mode="ui">UI</button>
-            <button class="mode-opt"        data-mode="terminal">Terminal</button>
+          <!-- Session view toggle: Chat ↔ Terminal -->
+          <div id="session-view-toggle" style="display:none">
+            <div id="svt-thumb"></div>
+            <button class="svt-tab active" data-view="chat" title="Chat view">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9.25 6.25H14.75C15.578 6.25 16.25 6.922 16.25 7.75V12.25C16.25 13.078 15.578 13.75 14.75 13.75H14.25V16.25L11.5 13.75H9.25C8.422 13.75 7.75 13.078 7.75 12.25V7.75C7.75 6.922 8.422 6.25 9.25 6.25Z" data-color="color-2"></path><path d="M11.7254 3.25C11.3791 2.6543 10.7389 2.25 10 2.25H3.75C2.645 2.25 1.75 3.145 1.75 4.25V9.25101C1.75 10.355 2.646 11.251 3.75 11.25V14.25L4.8328 13.0691"></path></g></svg>
+            </button>
+            <button class="svt-tab" data-view="term" title="Terminal view">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><polyline points="2.75 14.25 8 9 2.75 3.75"></polyline><line x1="9.5" y1="14.25" x2="15.25" y2="14.25" data-color="color-2"></line></g></svg>
+            </button>
           </div>
         </div>
       </div>
@@ -98,12 +109,56 @@
 
       <!-- UI input area — shown when left panel is in UI mode -->
       <div id="ui-input-area">
+        <div id="usage-panel" style="display:none">
+          <div id="usage-head">
+            <span id="usage-title">Usage</span>
+            <span id="usage-model"></span>
+            <div id="usage-view-toggle">
+              <button id="usage-view-full" class="usage-view-btn" title="Detailed view">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="3.25" width="12.5" height="4.5" rx="1.5" ry="1.5"></rect><rect x="2.75" y="10.25" width="6.5" height="4.5" rx="1.5" ry="1.5"></rect></svg>
+              </button>
+              <button id="usage-view-mini" class="usage-view-btn" title="Compact view">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 4.5V2.25C10.377 2.25 15.75 7.623 15.75 14.25H13.5"></path><path d="M4.70703 13.293L8.25003 9.75"></path><path d="M10.3669 7.633L12.2339 5.76599"></path><path d="M4 15.25C4.69 15.25 5.25 14.69 5.25 14C5.25 13.31 4.69 12.75 4 12.75C3.31 12.75 2.75 13.31 2.75 14C2.75 14.69 3.31 15.25 4 15.25Z" fill="currentColor" stroke="none"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div id="usage-body"></div>
+        </div>
         <div id="slash-menu"></div>
         <div id="ui-toolbar">
           <button id="btn-ui-code"   title="Wrap selection in code block">&lt;/&gt;</button>
-          <button id="btn-ui-attach" title="Attach file"><svg xmlns="http://www.w3.org/2000/svg" height="14" width="14" viewBox="0 0 18 18"><path d="M13.75,4.25c-.414,0-.75,.336-.75,.75v6.75c0,2.068-1.682,3.75-3.75,3.75s-3.75-1.682-3.75-3.75V4.75c0-1.241,1.009-2.25,2.25-2.25s2.25,1.009,2.25,2.25v7c0,.414-.336,.75-.75,.75s-.75-.336-.75-.75V5c0-.414-.336-.75-.75-.75s-.75,.336-.75,.75v6.75c0,1.241,1.009,2.25,2.25,2.25s2.25-1.009,2.25-2.25V4.75c0-2.068-1.682-3.75-3.75-3.75s-3.75,1.682-3.75,3.75v7c0,2.895,2.355,5.25,5.25,5.25s5.25-2.355,5.25-5.25V5c0-.414-.336-.75-.75-.75Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25"/></svg></button>
+          <button id="btn-usage" title="Usage">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.75V4.75"></path><path d="M14.127 4.87299L12.712 6.28799"></path><path d="M16.25 10H14.25"></path><path d="M3.87305 4.87299L8.29305 9.293"></path><path d="M1.75 10H3.75"></path><path d="M6.45264 3.2103C7.24504 2.9128 8.10363 2.75 9.00003 2.75C13.004 2.75 16.25 5.996 16.25 10C16.25 12.002 15.439 13.815 14.127 15.127L12.713 13.713"></path><path d="M5.28799 13.712L3.87399 15.126C2.56199 13.814 1.75 12.002 1.75 9.99899C1.75 9.10279 1.91271 8.2445 2.21001 7.4523"></path><path d="M9 11.25C9.69 11.25 10.25 10.69 10.25 10C10.25 9.31 9.69 8.75 9 8.75C8.31 8.75 7.75 9.31 7.75 10C7.75 10.69 8.31 11.25 9 11.25Z" fill="currentColor" stroke="none"></path></svg>
+          </button>
+          <button id="btn-ui-attach" title="Attach file"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg></button>
+          <div id="model-wrap" style="display:none">
+            <button id="btn-model" title="Switch model (restarts session)">
+              <span id="btn-model-label">Model</span>
+              <svg class="model-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div id="model-menu"></div>
+          </div>
+          <div id="figma-wrap" style="display:none">
+            <button id="btn-figma" title="Figma MCP actions">
+              <svg class="figma-glyph" viewBox="0 0 38 57" width="11" height="16" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#1abcfe" d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 1 1-19 0z"/>
+                <path fill="#0acf83" d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"/>
+                <path fill="#ff7262" d="M19 0v19h9.5a9.5 9.5 0 1 0 0-19H19z"/>
+                <path fill="#f24e1e" d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"/>
+                <path fill="#a259ff" d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"/>
+              </svg>
+              <span class="figma-label">Figma MCP</span>
+              <svg class="figma-caret" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div id="figma-menu"></div>
+          </div>
           <span id="ui-char-count"></span>
         </div>
+        <div id="composer-chips"></div>
         <div id="ui-editor-wrap">
           <textarea id="ui-textarea" placeholder="Message Claude Code..." spellcheck="true"></textarea>
           <span id="save-prompt-tag">saved</span>
@@ -116,6 +171,7 @@
           <button id="btn-ui-send">Send</button>
         </div>
       </div>
+      <div id="toast-stack"></div>
     </div>
 
     <!-- DIVIDER (contains toggle — travels with drag handle) -->
@@ -156,19 +212,18 @@
                 <input id="sb-url" type="text" class="sb-input" placeholder="http://localhost:6006" spellcheck="false"/>
               </div>
 
-              <div class="sb-or"><span>or</span></div>
-
               <div class="sb-field">
-                <label class="sb-label">Folder Path</label>
+                <label class="sb-label">Project folder <span class="sb-label-opt">(optional)</span></label>
                 <div class="sb-folder-row">
-                  <input id="sb-folder" type="text" class="sb-input" placeholder="/path/to/your/storybook" spellcheck="false"/>
-                  <button id="sb-browse">Browse</button>
+                  <input id="sb-folder" type="text" class="sb-input" placeholder="Home folder (applies globally)" spellcheck="false" readonly/>
+                  <button id="sb-folder-pick" class="sb-folder-btn" title="Choose project folder">Browse…</button>
                 </div>
+                <div class="sb-folder-hint">Writes <code>CLAUDE.md</code> / <code>AGENTS.md</code> / <code>GEMINI.md</code> here so every model references the Storybook. Leave empty to apply across all projects.</div>
               </div>
 
               <label class="sb-check-row">
                 <input type="checkbox" id="sb-auto" checked/>
-                <span>Auto-reference design tokens before each message</span>
+                <span>Also prepend a reminder before each message (helps tools without memory files, e.g. Aider)</span>
               </label>
 
               <button id="sb-connect" class="sb-connect-btn">Connect Storybook</button>
@@ -189,12 +244,17 @@
             <button id="sb-disconnect">Disconnect</button>
           </div>
 
+          <div class="sb-memory" id="sb-memory">
+            <div class="sb-memory-label">Agent memory written to:</div>
+            <div class="sb-memory-files" id="sb-memory-files"></div>
+          </div>
+
           <label class="sb-check-row sb-check-pad">
             <input type="checkbox" id="sb-auto-conn"/>
-            <span>Auto-reference design tokens before each message</span>
+            <span>Also prepend a reminder before each message (e.g. for Aider)</span>
           </label>
 
-          <div class="sb-preview">
+          <div class="sb-preview" id="sb-preview" style="display:none">
             <div class="sb-preview-label">Context prepended to each message:</div>
             <div class="sb-preview-text" id="sb-preview-text"></div>
           </div>
@@ -202,12 +262,106 @@
 
       </div>
       <!-- WebContentsView is positioned over this area by the main process -->
-      <div id="browser-placeholder"></div>
+      <div id="browser-placeholder">
+        <div id="wf-empty">
+          <div class="wf-empty-inner">
+            <svg class="wf-hero" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="9" r="7.25"/><circle cx="9" cy="9" r="3.25"/><circle cx="9" cy="9" r="0.6" fill="currentColor" stroke="none"/>
+            </svg>
+            <h2 class="wf-title">Target a project to work on</h2>
+            <p class="wf-desc">Point the Working File at a <strong>live site</strong> or a <strong>local dev server</strong> — then use the tools and your agent to inspect, edit, and iterate on it.</p>
+
+            <div class="wf-url-row">
+              <input id="wf-url" type="text" placeholder="https://example.com   ·   localhost:3000" spellcheck="false" />
+              <button id="wf-go">Open</button>
+            </div>
+
+            <div class="wf-or"><span>or have your agent set it up</span></div>
+
+            <div class="wf-actions">
+              <button class="wf-action" id="wf-clone">
+                <svg viewBox="0 0 18 18" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="2"/><circle cx="5" cy="14" r="2"/><circle cx="13" cy="9" r="2"/><path d="M5 6v6"/><path d="M5 9h4a2 2 0 0 0 2-2V6"/></svg>
+                <span class="wf-action-title">Pull down a repo</span>
+                <span class="wf-action-sub">Clone a Git repo, install, and run it</span>
+              </button>
+              <button class="wf-action" id="wf-serve">
+                <svg viewBox="0 0 18 18" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.25" y="3" width="13.5" height="5" rx="1.5"/><rect x="2.25" y="10" width="13.5" height="5" rx="1.5"/><circle cx="5" cy="5.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="5" cy="12.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+                <span class="wf-action-title">Start a dev server</span>
+                <span class="wf-action-sub">Spin it up on a free localhost port</span>
+              </button>
+            </div>
+
+            <div id="wf-clone-row" class="wf-clone-row">
+              <input id="wf-repo" type="text" placeholder="https://github.com/owner/repo.git" spellcheck="false" />
+              <button id="wf-clone-go">Clone &amp; run</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CODE tab: Monaco-based read-only project code viewer -->
+      <div id="code-panel">
+        <!-- No project folder yet -->
+        <div id="code-empty">
+          <div class="code-empty-inner">
+            <svg class="code-hero" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6.5 6.25L3.75 9l2.75 2.75"/><path d="M11.5 6.25L14.25 9l-2.75 2.75"/><path d="M10 4.25L8 13.75"/>
+            </svg>
+            <h2 class="code-title">Browse your project's code</h2>
+            <p class="code-desc">Open a project folder to read its files right here — syntax-highlighted, alongside the agent that's editing them.</p>
+            <button id="code-open-folder">Open folder…</button>
+          </div>
+        </div>
+
+        <!-- File tree + editor -->
+        <div id="code-main">
+          <div id="code-sidebar">
+            <div id="code-sidebar-head">
+              <span id="code-root-name" title=""></span>
+              <div class="code-head-btns">
+                <button id="code-refresh" title="Refresh file tree">
+                  <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.75v3.5h-3.5"/><path d="M3.5 13.25v-3.5h3.5"/><path d="M14.13 8.25a5.25 5.25 0 0 0-9.4-2.06L3.5 8.25"/><path d="M3.87 9.75a5.25 5.25 0 0 0 9.4 2.06l1.23-2.06"/></svg>
+                </button>
+                <button id="code-change-folder" title="Change folder">
+                  <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 5.25c0-.69.56-1.25 1.25-1.25h2.4c.4 0 .78.19 1.02.51l.66.88h5.92c.69 0 1.25.56 1.25 1.25v6.36c0 .69-.56 1.25-1.25 1.25H4c-.69 0-1.25-.56-1.25-1.25V5.25Z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="code-tree"></div>
+          </div>
+          <div id="code-editor-wrap">
+            <div id="code-breadcrumb">
+              <span id="code-file-path">No file selected</span>
+              <span id="code-updated">updated</span>
+              <span id="code-readonly-badge">Read-only</span>
+            </div>
+            <div id="code-editor"></div>
+            <div id="code-welcome">
+              <svg viewBox="0 0 18 18" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"><path d="M6.5 6.25L3.75 9l2.75 2.75"/><path d="M11.5 6.25L14.25 9l-2.75 2.75"/><path d="M10 4.25L8 13.75"/></svg>
+              <span>Select a file to view it</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- DevTools panel slides in from right (WebContentsView overlaid, this reserves the space) -->
     <div id="devtools-placeholder"></div>
   </div>
+  <!-- Audit Prompts modal -->
+  <div id="audit-prompts-modal" class="modal-backdrop">
+    <div class="modal-box" id="audit-prompts-box">
+      <div class="modal-title">Audit Prompts</div>
+      <p class="modal-desc">Edit, add, or remove prompts. Changes take effect immediately in the Audit menu.</p>
+      <div id="audit-prompts-list"></div>
+      <button id="audit-prompts-add" class="ap-add-btn">+ Add Prompt</button>
+      <div class="modal-actions ap-modal-actions">
+        <button class="modal-btn-cancel" id="audit-prompts-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="audit-prompts-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- API Key modal -->
   <div id="api-key-modal" class="modal-backdrop">
     <div class="modal-box">
@@ -221,6 +375,323 @@
     </div>
   </div>
 
+  <!-- MCP Tools modal -->
+  <div id="mcp-modal" class="modal-backdrop">
+    <div class="modal-box" id="mcp-modal-box">
+      <button id="mcp-cancel" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">MCP Connections</div>
+      <p class="modal-desc">Connect a tool once — it's added to every installed agent (Claude, Gemini, Codex) at user scope, so it's available in all your sessions.</p>
+      <div id="mcp-modal-list"></div>
+      <div id="mcp-restart-notice" class="mcp-restart-notice">
+        <span>Restart the active session to pick up new connections.</span>
+        <button id="mcp-restart-btn" class="mcp-restart-btn">Restart Session</button>
+      </div>
+      <div class="tabs-modal-divider"></div>
+      <div class="tabs-modal-addsection">
+        <div class="modal-title" style="margin-bottom:4px">Add Service</div>
+        <p class="modal-desc" style="margin-bottom:12px">Pick a service, paste its token (if needed), then Connect. It's added to all installed agents.</p>
+        <select id="mcp-service-select" class="modal-input tabs-add-select-field">
+          <option value="">Select a service…</option>
+          <option value="figma-framelink">Figma — Framelink (token)</option>
+          <option value="figma-devmode">Figma — Dev Mode (desktop app)</option>
+          <option value="github">GitHub</option>
+          <option value="linear">Linear</option>
+          <option value="browser">Browser (Playwright)</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <div id="mcp-custom-fields">
+          <div class="tabs-add-field">
+            <span class="tabs-add-field-label">Service Name</span>
+            <input id="mcp-add-name" type="text" class="modal-input" placeholder="e.g. Slack" autocomplete="off" />
+          </div>
+          <div class="tabs-add-field">
+            <span class="tabs-add-field-label">npx Package</span>
+            <input id="mcp-add-package" type="text" class="modal-input" placeholder="e.g. slack-mcp-server" autocomplete="off" />
+          </div>
+          <div class="tabs-add-field">
+            <span class="tabs-add-field-label">Token Env Variable</span>
+            <input id="mcp-add-envvar" type="text" class="modal-input" placeholder="e.g. SLACK_TOKEN" autocomplete="off" />
+          </div>
+        </div>
+        <div id="mcp-no-token-info" class="mcp-no-token-info"></div>
+        <div id="mcp-token-field" class="tabs-add-field">
+          <span class="tabs-add-field-label">Access Token</span>
+          <input id="mcp-add-token-input" type="password" class="modal-input" placeholder="Token / API key" autocomplete="off" spellcheck="false" />
+          <span id="mcp-token-hint" class="mcp-token-hint"></span>
+        </div>
+        <button id="mcp-add-btn" class="ap-add-btn">Connect</button>
+        <div id="mcp-connect-msg" class="mcp-connect-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Tabs modal -->
+  <div id="tabs-modal" class="modal-backdrop">
+    <div class="modal-box" id="tabs-modal-box">
+      <div class="modal-title">Edit Tabs</div>
+      <p class="modal-desc">Reorder, remove, or add tabs to the right panel.</p>
+      <div id="tabs-modal-list"></div>
+      <div class="tabs-modal-divider"></div>
+      <div class="tabs-modal-addsection">
+        <div class="modal-title" style="margin-bottom:4px">Add Tab</div>
+        <p class="modal-desc" style="margin-bottom:12px">Select a preconfigured option or add your own</p>
+        <select id="tabs-add-select" class="modal-input tabs-add-select-field">
+          <!-- options populated dynamically -->
+        </select>
+        <div id="tabs-add-url-fields">
+          <div class="tabs-add-field">
+            <span class="tabs-add-field-label">Label</span>
+            <input id="tabs-add-label" type="text" class="modal-input" placeholder="e.g. Kindo" autocomplete="off" />
+          </div>
+          <div class="tabs-add-field">
+            <span class="tabs-add-field-label">URL</span>
+            <input id="tabs-add-url-input" type="text" class="modal-input" placeholder="https://…" autocomplete="off" />
+          </div>
+        </div>
+        <button id="tabs-add-btn" class="ap-add-btn tabs-add-submit">+ Add Tab</button>
+      </div>
+      <div class="tabs-modal-divider tabs-modal-footer-divider"></div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="tabs-modal-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="tabs-modal-save">Apply Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts modal -->
+  <div id="kb-modal" class="modal-backdrop">
+    <div class="modal-box" id="kb-modal-box">
+      <button id="kb-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Keyboard Shortcuts</div>
+      <div id="kb-table">
+
+        <div class="kb-group-header">Navigation</div>
+        <div class="kb-row">
+          <span class="kb-action">Toggle terminal / browser panel</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">\</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Switch to previous tab</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">Shift</span><span class="kb-plus">+</span><span class="kb-key">←</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Switch to next tab</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">Shift</span><span class="kb-plus">+</span><span class="kb-key">→</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Focus address bar</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">L</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">New browser tab</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">T</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Close browser tab</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">W</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Reload page</span>
+          <span class="kb-keys"><span class="kb-key">F5</span></span>
+        </div>
+
+        <div class="kb-group-header">Developer Tools</div>
+        <div class="kb-row">
+          <span class="kb-action">Toggle DevTools panel</span>
+          <span class="kb-keys"><span class="kb-key">F12</span></span>
+        </div>
+
+        <div class="kb-group-header">Tools</div>
+        <div class="kb-row">
+          <span class="kb-action">Box Select</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">B</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Lasso Select</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">L</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Screenshot</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">I</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Resize Element</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">R</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Storybook Component</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">S</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Marker Annotations</span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">M</span></span>
+        </div>
+
+        <div class="kb-group-header">Message Input</div>
+        <div class="kb-row">
+          <span class="kb-action">Send message</span>
+          <span class="kb-keys"><span class="kb-key">Enter</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Save prompt</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">S</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">New line</span>
+          <span class="kb-keys"><span class="kb-key">Shift</span><span class="kb-plus">+</span><span class="kb-key">Enter</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Pick numbered option</span>
+          <span class="kb-keys"><span class="kb-key">Ctrl</span><span class="kb-plus">+</span><span class="kb-key">1–9</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Scroll message history</span>
+          <span class="kb-keys"><span class="kb-key">↑</span><span class="kb-plus"> </span><span class="kb-key">↓</span></span>
+        </div>
+        <div class="kb-row">
+          <span class="kb-action">Open slash commands</span>
+          <span class="kb-keys"><span class="kb-key">/</span></span>
+        </div>
+
+        <div class="kb-group-header">General</div>
+        <div class="kb-row">
+          <span class="kb-action">Close modal / cancel action</span>
+          <span class="kb-keys"><span class="kb-key">Esc</span></span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Profiles modal -->
+  <div id="profiles-modal" class="modal-backdrop">
+    <div class="modal-box" id="profiles-modal-box">
+      <div class="modal-title">Manage LLMs</div>
+      <div class="profiles-tabs">
+        <button class="profiles-tab active" data-tab="mine">My active LLM Models</button>
+        <button class="profiles-tab" data-tab="install">Install LLM Models</button>
+      </div>
+      <div class="profiles-tab-panel" id="profiles-tab-mine">
+        <p class="modal-desc">Configure the AI models and CLI assistants launched when you open a new terminal session.</p>
+        <div class="ap-section-title">Active Profiles</div>
+        <div id="profiles-list"></div>
+        <button id="profiles-add" class="ap-add-btn">+ Add Profile</button>
+      </div>
+      <div class="profiles-tab-panel" id="profiles-tab-install" style="display:none">
+        <p class="modal-desc">Install LLM tools and add them as sessions in one click.</p>
+        <div id="install-models-list"></div>
+      </div>
+      <div class="modal-actions ap-modal-actions" id="profiles-footer-mine">
+        <button class="modal-btn-cancel" id="profiles-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="profiles-save">Save</button>
+      </div>
+      <div class="modal-actions ap-modal-actions" id="profiles-footer-install" style="display:none">
+        <button class="modal-btn-confirm" id="profiles-install-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authentication modal -->
+  <div id="auth-modal" class="modal-backdrop">
+    <div class="modal-box" id="auth-modal-box">
+      <div class="modal-title">Authentication</div>
+
+      <div class="auth-section">
+        <div class="auth-section-label">Claude Account</div>
+        <div id="auth-account-status"></div>
+      </div>
+
+      <div class="auth-section">
+        <div class="auth-section-label">API Keys</div>
+        <p class="modal-desc" style="margin-bottom:8px">For models that require a direct API key (Codex, Gemini, etc.)</p>
+        <div id="api-keys-list"></div>
+        <div id="api-key-new-form" style="display:none">
+          <input id="api-key-new-name"  class="modal-input" placeholder="Label (e.g. Personal)" autocomplete="off" />
+          <input id="api-key-new-value" class="modal-input" type="password" placeholder="sk-ant-…" spellcheck="false" autocomplete="off" />
+          <div class="api-key-form-actions">
+            <button id="api-key-new-cancel" class="modal-btn-cancel">Cancel</button>
+            <button id="api-key-new-save"   class="modal-btn-confirm">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="api-key-new-open" class="modal-btn-cancel">+ Add Key</button>
+        <button id="auth-done"        class="modal-btn-confirm">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLAUDE.md editor modal -->
+  <div id="claude-md-modal" class="modal-backdrop">
+    <div class="modal-box" id="claude-md-modal-box">
+      <div class="modal-title">Edit CLAUDE.md</div>
+      <p class="modal-desc">Global agent instructions for Claude Code — saved to <code>~/.claude/CLAUDE.md</code></p>
+      <textarea id="claude-md-textarea" class="claude-md-textarea" spellcheck="false" placeholder="# Agent Instructions&#10;&#10;Write instructions for Claude here…"></textarea>
+      <div class="modal-actions">
+        <button id="claude-md-cancel" class="modal-btn-cancel">Cancel</button>
+        <button id="claude-md-save"   class="modal-btn-confirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Onboarding (first-run setup + tools tour) ── -->
+  <div id="onboarding" class="modal-backdrop">
+    <div id="onb-panel">
+      <div id="onb-header">
+        <div>
+          <div id="onb-title">Welcome to Cathode Terminal</div>
+          <div id="onb-subtitle">Get the prerequisites installed, then learn what each tool does.</div>
+        </div>
+        <button id="onb-close" title="Close">✕</button>
+      </div>
+      <div id="onb-tabs">
+        <div class="onb-seg">
+          <button class="onb-tab active" data-tab="setup">Setup</button>
+          <button class="onb-tab" data-tab="tools">Meet the tools</button>
+        </div>
+      </div>
+      <div id="onb-body">
+        <div id="onb-setup" class="onb-section">
+          <div class="onb-section-intro">Cathode runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red.</div>
+          <div id="onb-steps"></div>
+          <div class="onb-optional-head">Optional agents</div>
+          <div class="onb-optional-sub">Extra CLI agents you can use alongside Claude Code.</div>
+          <div id="onb-optional"></div>
+        </div>
+        <div id="onb-tools" class="onb-section" style="display:none">
+          <div id="onb-tools-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monaco editor (AMD loader). Carefully preserve Node's require for renderer.js. -->
+  <script>
+    // Node require is global here (nodeIntegration). Monaco's loader.js will
+    // overwrite window.require with its AMD require; stash Node's first.
+    window.__nodeRequire = require;
+    // Absolute file:// URL to Monaco's vs/ directory — used for AMD paths + workers.
+    window.__VS_BASE__ = new URL('../node_modules/monaco-editor/min/vs', document.baseURI).href;
+    self.MonacoEnvironment = {
+      getWorkerUrl: function () {
+        var base = window.__VS_BASE__;
+        var src = 'self.MonacoEnvironment={baseUrl:"' + base + '/"};' +
+                  'importScripts("' + base + '/base/worker/workerMain.js");';
+        return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(src);
+      }
+    };
+  </script>
+  <script src="../node_modules/monaco-editor/min/vs/loader.js"></script>
+  <script>
+    // loader.js replaced window.require with AMD require. Keep it for Monaco,
+    // then restore Node's require so renderer.js can require('electron') etc.
+    window.__amdRequire = window.require;
+    // preferScriptTags: load modules via <script src=file://…> (browser-style)
+    // rather than the Node fs loader — avoids path-conversion edge cases.
+    window.__amdRequire.config({ paths: { vs: window.__VS_BASE__ }, preferScriptTags: true });
+    window.require = window.__nodeRequire;
+  </script>
   <script src="renderer.js"></script>
 </body>
 </html>
