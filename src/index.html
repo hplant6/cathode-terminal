@@ -45,12 +45,12 @@
     <!-- Drag region -->
     <div id="app-bar-spacer"></div>
 
-    <!-- Right: view tabs, separator, pick tools, devtools, window-controls clearance -->
+    <!-- Right: view tabs, sysperf toggle, separator, pick tools, window-controls clearance -->
     <div id="right-panel-tabs">
       <div id="view-tab-thumb"></div>
       <!-- tabs rendered dynamically by renderer.js -->
     </div>
-    <button id="btn-devtools" title="Toggle DevTools"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.25 13.25L1.75 9L5.25 4.75"></path><path d="M12.75 13.25L16.25 9L12.75 4.75"></path><path d="M7.75 13.25L10.25 4.75"></path></g></svg></button>
+    <button id="btn-sysperf-toggle" class="active" title="Toggle system performance graph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M15.25 8.75H12.809C12.6196 8.75 12.4465 8.857 12.3618 9.0264L11.1808 11.3885C10.9996 11.7508 10.4854 11.7586 10.2934 11.4019L7.70671 6.5981C7.51471 6.2414 7.00042 6.2492 6.81932 6.6115L5.63832 8.9736C5.55362 9.143 5.38052 9.25 5.19112 9.25H2.75012"></path><path d="M15.25 4.75C15.25 3.645 14.355 2.75 13.25 2.75H4.75C3.645 2.75 2.75 3.645 2.75 4.75V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V4.75Z"></path></g></svg></button>
     <span class="app-bar-sep"></span>
     <!-- ── Toolbar ──────────────────────────────────────────────── -->
     <div id="toolbar">
@@ -58,9 +58,11 @@
         <button id="btn-pick-box"       class="pick-btn" title="Box select element (Alt+B)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></button>
         <button id="btn-pick-lasso"     class="pick-btn" title="Lasso select element (Alt+L)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
         <button id="btn-pick-resize"    class="pick-btn" title="Resize element (Alt+R)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></button>
-        <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" style="display:none" title="AI Developer — inspect, interact, inject &amp; extract via browser tools (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5,14c1.3-2,3.5-3.2,6-3.2"/><path d="M14.5,16.2h-6.2l1.9-4.2c0-.2.3-.3.5-.3h5.4c.4,0,.6.4.5.7l-1.6,3.5c0,.2-.3.3-.5.3Z"/><line x1="8.3" y1="16.2" x2="5.3" y2="16.2"/><rect x="3.3" y="1.8" width="8.5" height="6.5" rx="2" ry="2"/><circle cx="6.3" cy="5.8" r=".8" stroke="none" fill="currentColor"/><circle cx="9.3" cy="5.8" r=".8" stroke="none" fill="currentColor"/><line x1="11.8" y1="5.2" x2="13" y2="5.2"/><line x1="2" y1="5.2" x2="3.3" y2="5.2"/></svg></button>
         <button id="btn-pick-component" class="pick-btn" title="Pick Storybook component (Alt+S)" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></button>
       </div>
+      <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" title="Extract — download images / SVGs / videos or pull styles, colors, type &amp; more from a selection (Shift = whole page) (Alt+E)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="10.25 12.75 12.75 15.25 15.25 12.75"/><line x1="12.75" y1="15.25" x2="12.75" y2="2.75"/><rect x="2.75" y="10.25" width="5" height="5" rx="1" ry="1"/><path d="M2.75,6.5v.25c0,.552,.448,1,1,1h.25"/><path d="M4,2.75h-.25c-.552,0-1,.448-1,1v.25"/><path d="M7.75,4v-.25c0-.552-.448-1-1-1h-.25"/><path d="M6.5,7.75h.25c.552,0,1-.448,1-1v-.25"/></svg></button>
+      <button id="btn-pick-eyedropper" class="pick-btn" title="Eyedropper — sample a color, edit it live or send to chat (Alt+C)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></button>
+      <button id="btn-pick-a11y" class="pick-btn" title="Accessibility &amp; contrast check — flag WCAG issues, send to chat (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></button>
       <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
       <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
     </div>
@@ -71,6 +73,35 @@
 
     <!-- LEFT: Claude Code sessions -->
     <div id="left-panel">
+      <!-- System performance graph (CPU / RAM / GPU + top processes by memory) -->
+      <div id="sysperf">
+        <div id="sysperf-head">
+          <span id="sysperf-title">System</span>
+          <div id="sysperf-view-toggle">
+            <button id="sysperf-view-all" class="sysperf-view-btn active" title="Resource usage (CPU / RAM / GPU)">All</button>
+            <button id="sysperf-view-ram" class="sysperf-view-btn" title="Top processes by memory">RAM</button>
+            <button id="sysperf-view-cpu" class="sysperf-view-btn" title="Top processes by CPU">CPU</button>
+          </div>
+        </div>
+        <div id="sysperf-bars">
+          <div class="sysperf-row">
+            <span class="sysperf-label">CPU</span>
+            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-cpu-fill"></div></div>
+            <span class="sysperf-pct" id="sysperf-cpu-pct">—</span>
+          </div>
+          <div class="sysperf-row">
+            <span class="sysperf-label">RAM</span>
+            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-ram-fill"></div></div>
+            <span class="sysperf-pct" id="sysperf-ram-pct">—</span>
+          </div>
+          <div class="sysperf-row">
+            <span class="sysperf-label">GPU</span>
+            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-gpu-fill"></div></div>
+            <span class="sysperf-pct" id="sysperf-gpu-pct">—</span>
+          </div>
+        </div>
+        <div id="sysperf-procs" style="display:none"></div>
+      </div>
       <div id="terminal-header">
         <div id="pty-tabs-container"></div>
         <div id="new-pty-wrap">
@@ -190,6 +221,12 @@
         <button id="btn-new-tab" title="New tab">&#xff0b;</button>
         <input id="address-bar" type="text" placeholder="Enter URL or localhost:3000" spellcheck="false" />
         <button id="btn-reload" title="Reload">&#x21BB;</button>
+        <button id="btn-device" title="Device emulation — resize the viewport to a device">
+          <svg class="device-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.25" y="3.25" width="9.5" height="11.5" rx="1.5"/><rect x="12.75" y="6.75" width="3" height="8" rx="1"/><line x1="5.5" y1="13" x2="8.5" y2="13"/></svg>
+          <span id="btn-device-label">Responsive</span>
+          <svg class="device-caret" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10" fill="none"><polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="btn-devtools" title="Toggle DevTools"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.25 13.25L1.75 9L5.25 4.75"></path><path d="M12.75 13.25L16.25 9L12.75 4.75"></path><path d="M7.75 13.25L10.25 4.75"></path></g></svg></button>
       </div>
 
       <div id="right-storybook">
@@ -343,10 +380,75 @@
           </div>
         </div>
       </div>
+
+      <!-- Console & Network — captured from the Working File page -->
+      <div id="console-panel">
+        <div id="console-toolbar">
+          <div id="console-filters">
+            <button class="console-filter active" data-filter="all">All</button>
+            <button class="console-filter" data-filter="error">Errors</button>
+            <button class="console-filter" data-filter="warn">Warnings</button>
+            <button class="console-filter" data-filter="net">Network</button>
+          </div>
+          <div id="console-actions">
+            <span id="console-count"></span>
+            <button id="console-send-errors" title="Send all errors &amp; failed requests to chat">Send errors</button>
+            <button id="console-clear" title="Clear console">Clear</button>
+          </div>
+        </div>
+        <div id="console-list"></div>
+        <div id="console-empty">No output captured yet.<br>Interact with the page in <b>Working File</b> — console logs, errors, and failed requests appear here.</div>
+      </div>
+
+      <!-- Changes / Diff — git working-tree diff of the project -->
+      <div id="diff-panel">
+        <div id="diff-sidebar">
+          <div id="diff-head">
+            <span id="diff-title">Changes</span>
+            <span id="diff-branch"></span>
+            <button id="diff-refresh" title="Refresh"><svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15.25 9a6.25 6.25 0 1 1-1.83-4.42"/><polyline points="15.25 2.75 15.25 5.75 12.25 5.75"/></svg></button>
+          </div>
+          <div id="diff-list"></div>
+          <div id="diff-foot">
+            <button id="diff-send" title="Ask the agent to review these changes">Review in chat</button>
+          </div>
+        </div>
+        <div id="diff-main">
+          <div id="diff-editor"></div>
+          <div id="diff-empty">No project folder open.</div>
+        </div>
+      </div>
     </div>
 
     <!-- DevTools panel slides in from right (WebContentsView overlaid, this reserves the space) -->
     <div id="devtools-placeholder"></div>
+
+    <!-- Device-emulation resize handles + drag ghost (positioned from main) -->
+    <div id="device-resize-layer">
+      <div id="device-handle-r" class="device-handle"><span class="device-grip"><svg viewBox="0 0 18 18" width="12" height="12" fill="currentColor"><circle cx="6.75" cy="3.75" r=".9"/><circle cx="6.75" cy="9" r=".9"/><circle cx="6.75" cy="14.25" r=".9"/><circle cx="11.25" cy="3.75" r=".9"/><circle cx="11.25" cy="9" r=".9"/><circle cx="11.25" cy="14.25" r=".9"/></svg></span></div>
+      <div id="device-handle-b" class="device-handle"><span class="device-grip device-grip-h"><svg viewBox="0 0 18 18" width="12" height="12" fill="currentColor"><circle cx="6.75" cy="3.75" r=".9"/><circle cx="6.75" cy="9" r=".9"/><circle cx="6.75" cy="14.25" r=".9"/><circle cx="11.25" cy="3.75" r=".9"/><circle cx="11.25" cy="9" r=".9"/><circle cx="11.25" cy="14.25" r=".9"/></svg></span></div>
+      <div id="device-handle-c" class="device-handle"></div>
+      <div id="device-ghost"><span id="device-ghost-dims"></span></div>
+    </div>
+  </div>
+  <!-- Custom Devices modal -->
+  <div id="devices-modal" class="modal-backdrop">
+    <div class="modal-box" id="devices-box">
+      <div class="modal-title">Custom Devices</div>
+      <p class="modal-desc">Add your own viewport sizes. Built-in presets always appear in the dropdown.</p>
+      <div id="devices-list"></div>
+      <div class="dev-add-row">
+        <input id="dev-add-name" class="modal-input" placeholder="Device name" />
+        <input id="dev-add-w" class="modal-input dev-num" type="number" min="100" placeholder="W" />
+        <span class="dev-x">×</span>
+        <input id="dev-add-h" class="modal-input dev-num" type="number" min="100" placeholder="H" />
+        <button id="dev-add-btn" class="ap-add-btn dev-add-btn">+ Add</button>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="devices-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="devices-save">Save</button>
+      </div>
+    </div>
   </div>
   <!-- Audit Prompts modal -->
   <div id="audit-prompts-modal" class="modal-backdrop">
@@ -503,6 +605,10 @@
 
         <div class="kb-group-header">Tools</div>
         <div class="kb-row">
+          <span class="kb-action">Extract <span class="kb-action-note">(Shift = whole page)</span></span>
+          <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">E</span></span>
+        </div>
+        <div class="kb-row">
           <span class="kb-action">Box Select</span>
           <span class="kb-keys"><span class="kb-key">Alt</span><span class="kb-plus">+</span><span class="kb-key">B</span></span>
         </div>
@@ -625,9 +731,9 @@
   <!-- CLAUDE.md editor modal -->
   <div id="claude-md-modal" class="modal-backdrop">
     <div class="modal-box" id="claude-md-modal-box">
-      <div class="modal-title">Edit CLAUDE.md</div>
-      <p class="modal-desc">Global agent instructions for Claude Code — saved to <code>~/.claude/CLAUDE.md</code></p>
-      <textarea id="claude-md-textarea" class="claude-md-textarea" spellcheck="false" placeholder="# Agent Instructions&#10;&#10;Write instructions for Claude here…"></textarea>
+      <div class="modal-title" id="claude-md-title">Edit CLAUDE.md</div>
+      <p class="modal-desc" id="claude-md-desc">Instructions for Claude Code — written to its <code>CLAUDE.md</code>.</p>
+      <textarea id="claude-md-textarea" class="claude-md-textarea" spellcheck="false" placeholder="# Agent Instructions&#10;&#10;Write instructions here…"></textarea>
       <div class="modal-actions">
         <button id="claude-md-cancel" class="modal-btn-cancel">Cancel</button>
         <button id="claude-md-save"   class="modal-btn-confirm">Save</button>

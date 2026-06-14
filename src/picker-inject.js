@@ -11,10 +11,13 @@ const BOX_CURSOR = `url("data:image/svg+xml;base64,${BOX_B64}") 14 4, crosshair`
 const STORYBOOK_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
 const STORYBOOK_CURSOR = `url("data:image/svg+xml;base64,${STORYBOOK_B64}") 9 9, crosshair`;
 
+const EXTRACT_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'extract-cursor.svg'), 'utf8')).toString('base64');
+const EXTRACT_CURSOR = `url("data:image/svg+xml;base64,${EXTRACT_B64}") 3 3, crosshair`;
+
 function getPickerScript(mode) {
   const cursorCss = mode === 'lasso' ? LASSO_CURSOR
     : mode === 'box'       ? BOX_CURSOR
-    : mode === 'aidev'     ? BOX_CURSOR
+    : mode === 'aidev'     ? EXTRACT_CURSOR
     : mode === 'component' ? STORYBOOK_CURSOR
     : 'crosshair';
   return `(function() {
@@ -111,8 +114,8 @@ function getPickerScript(mode) {
     overlay.addEventListener('mousedown', (e) => {
       e.preventDefault();
 
-      // AI Developer: Ctrl/Cmd-click selects the whole page
-      if (MODE === 'aidev' && (e.ctrlKey || e.metaKey)) {
+      // Extract tool: holding Shift selects the whole page
+      if (MODE === 'aidev' && e.shiftKey) {
         done({
           mode: 'click', wholePage: true,
           cx: e.clientX, cy: e.clientY,

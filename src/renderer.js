@@ -35,6 +35,10 @@ const LS = {
   usageMini:    'cathode-usage-mini',
   onboarded:    'cathode-onboarded',
   projectDir:   'cathode-project-dir',
+  devices:      'cathode-devices',        // custom emulation devices
+  deviceActive: 'cathode-device-active',  // selected device name (persisted)
+  sysperf:      'cathode-sysperf',         // system performance graph on/off
+  sysperfView:  'cathode-sysperf-view',    // perf graph view: bars | procs
 };
 
 // ── Theme init ────────────────────────────────────────────────────
@@ -112,15 +116,31 @@ function getDefaultProfile() {
   return sessionProfiles[0] || { name: 'Claude Code', command: 'claude' };
 }
 
+// Agents that speak ACP (and thus get the chat front-end). Aider (a REPL) and
+// LLM (one-shot) have no agent protocol — they stay terminal-only.
+const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex']);
+function acpAgentFor(command) {
+  const base = (command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
+  return ACP_AGENT_KEYS.has(base) ? base : null;
+}
+// The agent key for any session (used for per-agent memory file, etc.)
+function sessionAgent(s) {
+  if (!s) return 'claude';
+  if (s.type === 'acp') return s.agent || 'claude';
+  return (s.command || '').trim().split(/\s+/)[0].replace(/.*\//, '') || 'claude';
+}
+
 function createSession(name, command, acp) {
   const profile = getDefaultProfile();
   const cmd     = command != null ? command : profile.command;
-  const isAcp   = acp != null ? (acp === true) : (command == null && profile.acp === true);
+  const wantAcp = acp != null ? (acp === true) : (command == null && profile.acp === true);
+  const agent   = acpAgentFor(cmd);
+  const isAcp   = wantAcp && !!agent;   // only ACP-capable agents get chat
   const id      = nextId++;
   const sName   = name || profile.name;
 
   if (isAcp) {
-    createAcpSession(id, sName);
+    createAcpSession(id, sName, agent, cmd);
     return id;
   }
 
@@ -157,7 +177,7 @@ function createSession(name, command, acp) {
 }
 
 
-function createAcpSession(id, name) {
+function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   const el = document.createElement('div');
   el.className = 'pty-session';
   ptySessionsEl.appendChild(el);
@@ -203,13 +223,13 @@ function createAcpSession(id, name) {
   chatEl.appendChild(statusEl);
 
   sessions.set(id, {
-    name, type: 'acp', el, chatEl, msgsEl, dotEl, statusTextEl,
+    name, type: 'acp', agent, command, el, chatEl, msgsEl, dotEl, statusTextEl,
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
     toolCards: new Map(),
     streamEl: null, streamTextEl: null, streamMsgId: null,
   });
-  ipcRenderer.send('acp-spawn', { id });
+  ipcRenderer.send('acp-spawn', { id, agent });
   switchSession(id);
 }
 
@@ -256,7 +276,7 @@ function switchAcpView(id, view) {
   if (view === 'term') {
     if (!s._ptySpawned) {
       s._ptySpawned = true;
-      ipcRenderer.send('pty-spawn', { id, command: 'claude' });
+      ipcRenderer.send('pty-spawn', { id, command: s.command || 'claude' });
     }
     refitSession(id, 50);
   }
@@ -362,7 +382,7 @@ function selectModel(modelId) {
     acpSetStatus(s, 'connecting');
     s.statusTextEl.textContent = 'Switching model…';
     ipcRenderer.send('acp-kill', { id: activeId });
-    ipcRenderer.send('acp-spawn', { id: activeId, model: modelId });
+    ipcRenderer.send('acp-spawn', { id: activeId, model: modelId, agent: s.agent });
   } else {
     s.term.clear();
     ipcRenderer.send('pty-restart', { id: activeId, command: commandWithModel(s.command, key, modelId) });
@@ -385,6 +405,12 @@ function finishModelSwitch(s) {
 const usagePanel   = document.getElementById('usage-panel');
 const usageBody    = document.getElementById('usage-body');
 const usageModelEl = document.getElementById('usage-model');
+
+function fmtCost(usd) {
+  if (!(usd > 0)) return '';
+  if (usd < 0.01) return '<$0.01';
+  return '$' + usd.toFixed(2);
+}
 const btnUsage     = document.getElementById('btn-usage');
 const usageViewFull = document.getElementById('usage-view-full');
 const usageViewMini = document.getElementById('usage-view-mini');
@@ -430,7 +456,7 @@ function gaugeSvg(pct, color) {
   pct = Math.max(0, Math.min(100, pct || 0));
   const fillStyle = color ? ` style="stroke:${color}"` : '';
   const fillCls   = color ? '' : ` ${barClass(pct)}`;
-  return `<svg class="gauge" width="58" height="35" viewBox="0 0 80 48">
+  return `<svg class="gauge" viewBox="0 0 80 48" preserveAspectRatio="xMidYMid meet">
     <path class="g-track" fill="none" stroke-linecap="round" d="M8,44 A32,32 0 0 1 72,44" pathLength="100"></path>
     <path class="g-fill${fillCls}"${fillStyle} fill="none" stroke-linecap="round" d="M8,44 A32,32 0 0 1 72,44" pathLength="100" stroke-dasharray="${pct} 100"></path>
     <text class="g-pct" x="40" y="43">${Math.round(pct)}%</text>
@@ -460,15 +486,15 @@ function renderUsage({ ctx, lim, isClaude }) {
     });
   }
   if (lim && lim.ok) {
+    // No fixed color → gauges use the same threshold coloring as the bars
+    // (accent/blue when low, amber, then red as they fill up).
     metrics.push({
       label: 'Current session (5h)', mini: 'Usage limit:<br>This session',
       pct: lim.fiveHour.utilization, sub: fmtReset(lim.fiveHour.resetsAt),
-      color: '#B32D2D',
     });
     if (lim.sevenDay) metrics.push({
       label: 'Current week (all models)', mini: 'Usage limit:<br>Current week',
       pct: lim.sevenDay.utilization, sub: fmtReset(lim.sevenDay.resetsAt),
-      color: '#B32D2D',
     });
   }
 
@@ -481,9 +507,14 @@ function renderUsage({ ctx, lim, isClaude }) {
     return;
   }
 
-  usageBody.innerHTML = usageMini
+  const cost = (ctx && ctx.ok) ? fmtCost(ctx.costUsd) : '';
+  const costRow = cost
+    ? `<div class="usage-cost-row"><span class="usage-cost-label">Session cost</span><span class="usage-cost-val">${cost}</span></div>`
+    : '';
+
+  usageBody.innerHTML = (usageMini
     ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub, m.color)).join('')}</div>`
-    : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('');
+    : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow;
 }
 
 async function refreshUsage() {
@@ -805,7 +836,7 @@ function renderPtyTabs() {
     settingsBtn.addEventListener('click', e => {
       e.stopPropagation();
       const rect = settingsBtn.getBoundingClientRect();
-      ipcRenderer.send('show-tab-settings-menu', { x: Math.round(rect.left), y: Math.round(rect.bottom + 4) });
+      ipcRenderer.send('show-tab-settings-menu', { x: Math.round(rect.left), y: Math.round(rect.bottom + 4), agent: sessionAgent(s) });
     });
     tab.appendChild(settingsBtn);
 
@@ -897,11 +928,13 @@ const DEFAULT_PROFILES = [
   { id: 'claude', name: 'Claude Code', command: 'claude', acp: true },
 ];
 
+// `acp: true` → speaks the Agent Client Protocol, so it gets the chat front-end
+// by default. Aider (REPL) and LLM (one-shot) are terminal-only.
 const AVAILABLE_MODELS = [
-  { id: 'codex',  name: 'OpenAI Codex CLI', desc: "OpenAI's AI coding agent for the terminal",       install: 'npm install -g @openai/codex',                                                              command: 'codex'  },
-  { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini' },
-  { id: 'aider',  name: 'Aider',             desc: 'AI pair programming in your terminal',            install: 'curl -fsSL https://aider.chat/install.sh | sh',                                             command: 'aider'  },
-  { id: 'llm',    name: 'LLM CLI',           desc: 'Multi-model CLI tool, supports many providers',   install: 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install llm',       command: 'llm'    },
+  { id: 'codex',  name: 'OpenAI Codex CLI', desc: "OpenAI's AI coding agent for the terminal",       install: 'npm install -g @openai/codex',                                                              command: 'codex',  acp: true  },
+  { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
+  { id: 'aider',  name: 'Aider',             desc: 'AI pair programming in your terminal',            install: 'curl -fsSL https://aider.chat/install.sh | sh',                                             command: 'aider',  acp: false },
+  { id: 'llm',    name: 'LLM CLI',           desc: 'Multi-model CLI tool, supports many providers',   install: 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install llm',       command: 'llm',    acp: false },
 ];
 
 // ── Per-tool model catalog ────────────────────────────────────────
@@ -947,7 +980,9 @@ const MODEL_CATALOG = {
 // Map a session to its tool key in MODEL_CATALOG (or null if no models known)
 function sessionToolKey(s) {
   if (!s) return null;
-  if (s.type === 'acp') return 'claude';
+  // ACP model switching is only wired for Claude (ANTHROPIC_MODEL on respawn).
+  // Gemini/Codex ACP run at their default model → hide the selector for now.
+  if (s.type === 'acp') return s.agent === 'claude' ? 'claude' : null;
   const base = (s.command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
   return MODEL_CATALOG[base] ? base : null;
 }
@@ -963,11 +998,22 @@ let sessionProfiles = (() => {
   try {
     const s = localStorage.getItem(PROFILES_KEY);
     if (s) {
-      const parsed = JSON.parse(s);
-      // Migrate: claude profile gets acp:true; all others default to acp:false
-      return parsed.map(p => p.id === 'claude'
+      let parsed = JSON.parse(s);
+      // Base migration: claude defaults to acp:true; others respect their flag.
+      parsed = parsed.map(p => p.id === 'claude'
         ? { ...p, acp: p.acp !== false }
         : { ...p, acp: p.acp === true });
+      // One-time v2 upgrade: ACP-capable agents (Gemini/Codex) now default to
+      // the chat front-end. Terminal stays one click away via the toggle.
+      if (!localStorage.getItem('cathode-profiles-acpv2')) {
+        parsed = parsed.map(p => {
+          const base = (p.command || '').trim().split(/\s+/)[0];
+          return (base === 'gemini' || base === 'codex') ? { ...p, acp: true } : p;
+        });
+        localStorage.setItem('cathode-profiles-acpv2', '1');
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
+      }
+      return parsed;
     }
   } catch (_) {}
   return DEFAULT_PROFILES.map(p => ({ ...p }));
@@ -1117,7 +1163,7 @@ function renderInstallModels() {
       if (installed) {
         btn.textContent = 'Add Profile';
         btn.addEventListener('click', () => {
-          sessionProfiles.push({ id: `profile-${Date.now()}`, name: model.name, command: model.command, acp: false });
+          sessionProfiles.push({ id: `profile-${Date.now()}`, name: model.name, command: model.command, acp: model.acp === true });
           saveProfiles();
           btn.textContent = 'Added ✓';
           btn.classList.add('added');
@@ -1149,7 +1195,7 @@ function renderInstallModels() {
             btn.classList.add('added');
             progressEl.textContent += '\n✓ Done';
             if (!sessionProfiles.some(p => p.command === model.command)) {
-              sessionProfiles.push({ id: `profile-${Date.now()}`, name: model.name, command: model.command, acp: false });
+              sessionProfiles.push({ id: `profile-${Date.now()}`, name: model.name, command: model.command, acp: model.acp === true });
               saveProfiles();
             }
           };
@@ -1195,7 +1241,9 @@ document.getElementById('profiles-save').addEventListener('click', () => {
       // Match by stored id, NOT by index — after a deletion, index pairing
       // shifted and could hand another profile Claude's acp flag.
       const existing = sessionProfiles.find(p => p.id === card.dataset.profileId);
-      updated.push({ id: existing?.id || `profile-${Date.now()}-${i}`, name, command, acp: existing?.acp === true });
+      // Keep an existing profile's choice; a new ACP-capable command defaults to chat.
+      const acp = existing ? existing.acp === true : (acpAgentFor(command) != null);
+      updated.push({ id: existing?.id || `profile-${Date.now()}-${i}`, name, command, acp });
     }
   });
   if (!updated.length) return;
@@ -1362,6 +1410,7 @@ function stripAnsi(str) {
 
 function acpSetStatus(s, state) {
   const labels = { ready: 'Ready', thinking: 'Thinking…', connecting: 'Connecting…', installing: 'Installing adapter…', error: 'Error', closed: 'Session ended' };
+  s.status = state;
   s.dotEl.className = 'acp-status-dot' + (state === 'thinking' ? ' active' : '');
   s.statusTextEl.textContent = labels[state] || state;
 }
@@ -1377,18 +1426,20 @@ function acpScrollEnd(s) {
   });
 }
 
+const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
 function renderAcpBanner(s, version, model, cwd) {
   // Drop any prior banner (e.g. when respawning after a model switch)
   s.msgsEl.querySelector('.acp-banner')?.remove();
   const banner = document.createElement('div');
   banner.className = 'acp-banner';
 
+  const agentLabel = ACP_LABELS[s.agent] || 'Agent';
   const versionStr = version ? `v${version}` : '';
-  const modelLine  = model || 'Claude';
+  const modelLine  = model || agentLabel;
   const logo = document.createElement('pre');
   logo.className = 'acp-banner-logo';
   logo.textContent = [
-    ` ▐▛███▜▌   Claude Code ${versionStr}`,
+    ` ▐▛███▜▌   ${agentLabel} ${versionStr}`,
     `▝▜█████▛▘  ${modelLine}`,
     `  ▘▘ ▝▝    ${cwd}`,
   ].join('\n');
@@ -1415,6 +1466,29 @@ function acpFinalizeStream(s) {
   }
 }
 
+const COPY_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12.25 5.75H13.75C14.85 5.75 15.75 6.65 15.75 7.75V13.75C15.75 14.85 14.85 15.75 13.75 15.75H7.75C6.65 15.75 5.75 14.85 5.75 13.75V12.25"></path><path d="M10.25 2.25H4.25C3.15 2.25 2.25 3.15 2.25 4.25V10.25C2.25 11.35 3.15 12.25 4.25 12.25H10.25C11.35 12.25 12.25 11.35 12.25 10.25V4.25C12.25 3.15 11.35 2.25 10.25 2.25Z"></path></svg>';
+const COPY_DONE_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 9.5 7 13 14.5 5"></polyline></svg>';
+
+// Hover copy button for a chat message. `getText` reads the text at click time
+// (so it works for still-streaming assistant messages).
+function attachCopyBtn(msgEl, getText) {
+  const btn = document.createElement('button');
+  btn.className = 'acp-copy-btn';
+  btn.title = 'Copy message';
+  btn.innerHTML = COPY_ICON;
+  btn.addEventListener('mousedown', (e) => e.preventDefault());   // don't clear the user's text selection
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const text = (getText() || '').trim();
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.innerHTML = COPY_DONE_ICON; btn.classList.add('copied'); btn.title = 'Copied';
+      setTimeout(() => { btn.innerHTML = COPY_ICON; btn.classList.remove('copied'); btn.title = 'Copy message'; }, 1300);
+    }).catch(() => {});
+  });
+  msgEl.appendChild(btn);
+}
+
 function acpAddUserMsg(s, text) {
   s._bannerCollecting = false;
   acpFinalizeStream(s);
@@ -1439,6 +1513,7 @@ function acpAppendChunk(s, text, messageId) {
     const t = document.createElement('div');
     t.className = 'acp-msg-text';
     el.appendChild(t);
+    attachCopyBtn(el, () => t.textContent);
     s.msgsEl.appendChild(el);
     s.streamEl = el; s.streamTextEl = t;
     s.streamMsgId = messageId;
@@ -1563,9 +1638,10 @@ ipcRenderer.on('acp-install-progress', (_, { id, text }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on('acp-ready', (_, { id, version, model, cwd }) => {
+ipcRenderer.on('acp-ready', (_, { id, version, model, cwd, agent }) => {
   const s = sessions.get(id);
   if (!s || s.type !== 'acp') return;
+  if (agent) s.agent = agent;
   if (s._installEl) {
     s._installEl.remove();
     s._installEl = null;
@@ -1836,6 +1912,7 @@ ipcRenderer.on('settings-action', (_, action) => {
     case 'edit-tabs':     openEditTabsModal?.();     break;
     case 'mcp-tools':          openMcpToolsModal?.();          break;
     case 'keyboard-shortcuts': openKeyboardShortcutsModal?.(); break;
+    case 'edit-devices':       openEditDevicesModal?.();       break;
     case 'theme-minimal': applyTheme('minimal'); break;
     case 'theme-winamp':  applyTheme('winamp');  break;
     case 'new-window':    ipcRenderer.send('new-window'); break;
@@ -2007,35 +2084,53 @@ document.getElementById('auth-done').addEventListener('click', () => authModalCt
 // ── CLAUDE.md editor modal ────────────────────────────────────────
 const claudeMdModal    = document.getElementById('claude-md-modal');
 const claudeMdTextarea = document.getElementById('claude-md-textarea');
+const claudeMdTitle    = document.getElementById('claude-md-title');
+const claudeMdDesc     = document.getElementById('claude-md-desc');
 
 const claudeMdModalCtl = wireModal(claudeMdModal);
 
-async function openClaudeMdModal() {
+const MEMORY_FILE  = { claude: 'CLAUDE.md', gemini: 'GEMINI.md', codex: 'AGENTS.md' };
+const MEMORY_LABEL = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
+let memoryAgent = 'claude';   // which agent's memory file the modal is editing
+
+async function openMemoryModal(agent = 'claude') {
+  memoryAgent = agent;
+  const file  = MEMORY_FILE[agent] || 'AGENTS.md';
+  const label = MEMORY_LABEL[agent] || agent;
+  if (claudeMdTitle) claudeMdTitle.textContent = `Edit ${file}`;
+  if (claudeMdDesc)  claudeMdDesc.innerHTML = `Instructions for ${escHtml(label)} — written to its <code>${escHtml(file)}</code>.`;
   claudeMdTextarea.value = '';
   claudeMdTextarea.placeholder = 'Loading…';
   claudeMdModalCtl.open();
-  const content = await ipcRenderer.invoke('claude-md-read');
+  const content = await ipcRenderer.invoke('agent-md-read', { agent });
+  if (memoryAgent !== agent) return;   // a newer open superseded this
   claudeMdTextarea.value = content;
-  claudeMdTextarea.placeholder = '# Agent Instructions\n\nWrite instructions for Claude here…';
+  claudeMdTextarea.placeholder = `# Agent Instructions\n\nWrite instructions for ${label} here…`;
   claudeMdTextarea.focus();
 }
+// Back-compat shim (settings menu still calls this for Claude).
+const openClaudeMdModal = () => openMemoryModal('claude');
 
 document.getElementById('claude-md-cancel').addEventListener('click', () => claudeMdModalCtl.close());
 document.getElementById('claude-md-save').addEventListener('click', async () => {
   const btn = document.getElementById('claude-md-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  const ok = await ipcRenderer.invoke('claude-md-write', claudeMdTextarea.value);
+  const ok = await ipcRenderer.invoke('agent-md-write', { agent: memoryAgent, content: claudeMdTextarea.value });
   btn.disabled = false;
   btn.textContent = 'Save';
   if (ok) claudeMdModalCtl.close();
 });
+
+ipcRenderer.on('edit-agent-memory', (_, agent) => openMemoryModal(agent || 'claude'));
 
 // ── Right panel view switching ────────────────────────────────────
 const tabBar            = document.getElementById('tab-bar');
 const rightSb           = document.getElementById('right-storybook');
 const browserPlaceholder = document.getElementById('browser-placeholder');
 const codePanel         = document.getElementById('code-panel');
+const consolePanel      = document.getElementById('console-panel');
+const diffPanel         = document.getElementById('diff-panel');
 
 const viewTabThumb = document.getElementById('view-tab-thumb');
 
@@ -2057,6 +2152,8 @@ const TAB_ICONS = {
   storybook: `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m9,15.051c.17,0,.339-.045.494-.134.643-.371,1.732-.847,3.141-.845.899.001,1.667.197,2.27.435.648.255,1.344-.24,1.344-.937V4.487c0-.354-.181-.68-.486-.86-.5393-.3183-1.4027-.7163-2.513-.8308"/><path d="m9,15.051c-.17,0-.339-.045-.494-.134-.643-.371-1.732-.847-3.141-.845-.899.001-1.667.197-2.27.435-.648.255-1.344-.237-1.344-.933V4.484c0-.354.181-.676.486-.856.637-.376,1.726-.863,3.14-.863,1.89,0,3.198.872,3.624,1.182"/><path d="m8.999,15.051c.6301-1.3222,1.9537-2.2143,3.6105-2.3971.3692-.0407.6405-.3676.6405-.739V2.3259c0-.4569-.4081-.8165-.8599-.7486-1.5127.2275-2.7746,1.0598-3.3911,2.3686v11.105Z"/></g></svg>`,
   url:       `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><circle cx="9" cy="9" r="7"/><path d="M9 2c0 0-2.5 3-2.5 7s2.5 7 2.5 7"/><path d="M9 2c0 0 2.5 3 2.5 7S9 16 9 16"/><line x1="2" y1="9" x2="16" y2="9"/><path d="M2.75 6h12.5"/><path d="M2.75 12h12.5"/></g></svg>`,
   code:      `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><rect x="1.75" y="2.75" width="14.5" height="12.5" rx="2"/><circle cx="4.25" cy="5.25" r=".75" fill="currentColor" stroke="none"/><circle cx="6.75" cy="5.25" r=".75" fill="currentColor" stroke="none"/><polyline points="10.75 12.25 13 10 10.75 7.75"/><polyline points="7.25 12.25 5 10 7.25 7.75"/></g></svg>`,
+  console:   `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><rect x="1.75" y="2.75" width="14.5" height="12.5" rx="2"/><polyline points="4.75 7 7.25 9 4.75 11"/><line x1="8.75" y1="11.5" x2="12.5" y2="11.5"/></g></svg>`,
+  diff:      `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><circle cx="4.75" cy="4" r="1.75"/><circle cx="4.75" cy="14" r="1.75"/><path d="M4.75 5.75v6.5"/><path d="M13.25 14V8.5c0-1.1-.9-2-2-2H8.5"/><polyline points="10.5 4.25 8 6.5 10.5 8.75"/></g></svg>`,
 };
 
 function toRoman(n) {
@@ -2113,6 +2210,8 @@ function equalizeTabWidths() {
 const TAB_TYPES = {
   project:   { label: 'Working File' },
   code:      { label: 'Code Viewer' },
+  diff:      { label: 'Changes' },
+  console:   { label: 'Console' },
   figma:     { label: 'Figma' },
   storybook: { label: 'Storybook' },
 };
@@ -2122,24 +2221,34 @@ function defaultTabFor(type) {
   return { id: type, type, label: TAB_TYPES[type].label };
 }
 
-const DEFAULT_TABS_CONFIG = BUILTIN_TAB_ORDER.map(defaultTabFor);
+// Code Viewer is opt-in — not a default tab (add it via Edit Tabs). The Changes
+// tab covers diffs, which is what most people reach the Code Viewer for.
+const DEFAULT_TABS_CONFIG = BUILTIN_TAB_ORDER.filter(t => t !== 'code').map(defaultTabFor);
 
 let tabsConfig = (() => {
   try {
     const s = localStorage.getItem(LS.tabs);
     if (s) {
       const cfg = JSON.parse(s);
-      // Migration: ensure the Code Viewer tab exists (and carries its current
-      // label) for users with an older saved config.
       if (Array.isArray(cfg)) {
         let changed = false;
-        const codeTab = cfg.find(t => t.type === 'code');
-        if (!codeTab) {
+        // Code Viewer is no longer a default tab — retire the auto-added default
+        // once. Renamed/custom code tabs are left alone, and it can be re-added.
+        if (!localStorage.getItem('cathode-code-tab-retired')) {
+          const ci = cfg.findIndex(t => t.type === 'code' && (t.label === 'Code' || t.label === 'Code Viewer'));
+          if (ci !== -1) { cfg.splice(ci, 1); changed = true; }
+          localStorage.setItem('cathode-code-tab-retired', '1');
+        }
+        // Ensure the Changes (diff) tab exists (after Working File) for older configs.
+        if (!cfg.find(t => t.type === 'diff')) {
           const at = Math.max(0, cfg.findIndex(t => t.type === 'project')) + 1;
-          cfg.splice(at, 0, defaultTabFor('code'));
+          cfg.splice(at, 0, defaultTabFor('diff'));
           changed = true;
-        } else if (codeTab.label === 'Code') {
-          codeTab.label = TAB_TYPES.code.label;   // rename only the old default; leave custom names
+        }
+        // Ensure the Console tab exists (after the Changes tab) for older configs.
+        if (!cfg.find(t => t.type === 'console')) {
+          const at = Math.max(0, cfg.findIndex(t => t.type === 'diff')) + 1;
+          cfg.splice(at, 0, defaultTabFor('console'));
           changed = true;
         }
         if (changed) localStorage.setItem(LS.tabs, JSON.stringify(cfg));
@@ -2190,13 +2299,27 @@ function activateViewTab(tabId, silent = false) {
   const isProject   = tab.type === 'project';
   const isStorybook = tab.type === 'storybook';
   const isCode      = tab.type === 'code';
+  const isConsole   = tab.type === 'console';
+  const isDiff      = tab.type === 'diff';
   tabBar.style.display             = isProject   ? '' : 'none';
   rightSb.style.display            = isStorybook ? 'flex' : 'none';
   browserPlaceholder.style.display = isProject   ? '' : 'none';
   if (codePanel) codePanel.style.display = isCode ? 'flex' : 'none';
+  if (consolePanel) consolePanel.style.display = isConsole ? 'flex' : 'none';
+  if (diffPanel) diffPanel.style.display = isDiff ? 'flex' : 'none';
   setProjectToolsVisible(isProject, !silent);
+  // The Code Viewer, Console and Changes tabs have no live web page, so none of
+  // the page tools apply — hide every always-visible pick tool there.
+  // `disabled` also blocks their Alt-hotkeys.
+  const noPageTools = isCode || isConsole || isDiff;
+  document.querySelectorAll('#toolbar > .pick-btn').forEach(b => {
+    b.style.display = noPageTools ? 'none' : '';
+    b.disabled = noPageTools;
+  });
   if (isCode) window.__onCodeTabActive?.();
   else window.__onCodeTabInactive?.();
+  if (isConsole) window.__onConsoleTabActive?.();
+  if (isDiff) window.__onDiffTabActive?.();
   if (!silent) {
     const mode = tab.type === 'url' ? 'url:' + tab.url : tab.type;
     ipcRenderer.send('right-panel-mode', mode);
@@ -2363,6 +2486,233 @@ addressBar.addEventListener('keydown', e => {
 addressBar.addEventListener('focus', () => addressBar.select());
 document.getElementById('btn-reload').addEventListener('click', () => ipcRenderer.send('browser-reload'));
 
+// ── Device emulation dropdown ─────────────────────────────────────
+let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
+(function initDeviceDropdown() {
+  const btn   = document.getElementById('btn-device');
+  const label = document.getElementById('btn-device-label');
+  if (!btn) return;
+
+  // Built-in presets (CSS-pixel viewport sizes) — mirrors Chrome's list.
+  const DEVICE_PRESETS = [
+    { name: 'iPhone SE', width: 375, height: 667 },
+    { name: 'iPhone XR', width: 414, height: 896 },
+    { name: 'iPhone 12 Pro', width: 390, height: 844 },
+    { name: 'iPhone 14 Pro Max', width: 430, height: 932 },
+    { name: 'Pixel 7', width: 412, height: 915 },
+    { name: 'Samsung Galaxy S8+', width: 360, height: 740 },
+    { name: 'Samsung Galaxy S20 Ultra', width: 412, height: 915 },
+    { name: 'iPad Mini', width: 768, height: 1024 },
+    { name: 'iPad Air', width: 820, height: 1180 },
+    { name: 'iPad Pro', width: 1024, height: 1366 },
+    { name: 'Surface Pro 7', width: 912, height: 1368 },
+    { name: 'Surface Duo', width: 540, height: 720 },
+    { name: 'Galaxy Z Fold 5', width: 344, height: 882 },
+    { name: 'Asus Zenbook Fold', width: 853, height: 1280 },
+    { name: 'Samsung Galaxy A51/71', width: 412, height: 914 },
+    { name: 'Nest Hub', width: 1024, height: 600 },
+    { name: 'Nest Hub Max', width: 1280, height: 800 },
+  ];
+
+  function customDevices() {
+    try { return JSON.parse(localStorage.getItem(LS.devices) || '[]'); } catch (_) { return []; }
+  }
+  function allDevices() { return [...DEVICE_PRESETS, ...customDevices()]; }
+
+  const MIN = 160;
+
+  // active emulation descriptor. `default:true` = clean full-panel browser (no
+  // handles); name '' (no default) = Responsive (resizable, with handles); name
+  // set = a device preset. Default view is the startup default.
+  let active;
+  try { active = JSON.parse(localStorage.getItem(LS.deviceActive)); } catch (_) {}
+  if (!active || typeof active !== 'object') active = { default: true };
+
+  function persist() { localStorage.setItem(LS.deviceActive, JSON.stringify(active)); }
+  function setLabel() {
+    label.textContent = active.default ? 'Default view' : (active.name || 'Responsive');
+    btn.classList.toggle('emulating', !active.default);
+  }
+  function sendActive() {
+    if (active.default)   ipcRenderer.send('set-device', { default: true });
+    else if (active.name) ipcRenderer.send('set-device', { name: active.name, width: active.width, height: active.height });
+    else if (active.fit)  ipcRenderer.send('set-device', { responsive: true });
+    else                  ipcRenderer.send('set-device', { name: '', width: active.width, height: active.height });
+  }
+  setLabel();
+
+  // Estimate the native menu's width from its longest label so we can
+  // right-align its right edge with the button (native menus position from
+  // their top-left, with no width API). +60 ≈ check gutter + side padding.
+  function menuWidth(devices) {
+    const labels = ['Default view', 'Responsive', 'Edit…', ...devices.map(d => d.name)];
+    const ctx2 = (menuWidth._c || (menuWidth._c = document.createElement('canvas'))).getContext('2d');
+    ctx2.font = '12px "Segoe UI", system-ui, sans-serif';
+    let max = 0;
+    for (const l of labels) max = Math.max(max, ctx2.measureText(l).width);
+    return Math.ceil(max) + 60;
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const r = btn.getBoundingClientRect();
+    const devices = allDevices();
+    ipcRenderer.send('show-device-menu', {
+      x: Math.round(r.right - menuWidth(devices)), y: Math.round(r.bottom + 2),
+      devices, activeName: active.name, defaultView: !!active.default,
+    });
+  });
+
+  // Native-menu selection. Reconstruct the descriptor.
+  ipcRenderer.on('device-changed', (_, { name, default: isDefault }) => {
+    if (isDefault) {
+      active = { default: true };
+    } else if (name) {
+      const d = allDevices().find(x => x.name === name);
+      active = d ? { name, width: d.width, height: d.height, fit: false } : { default: true };
+    } else {
+      active = { name: '', fit: true };
+    }
+    persist(); setLabel();
+  });
+
+  // Edit modal saved — re-apply (the active custom device may have changed/gone).
+  window.__reapplyActiveDevice = () => {
+    if (active.name && !allDevices().find(d => d.name === active.name)) {
+      active = { name: '', fit: true }; persist(); setLabel();
+    }
+    sendActive();
+  };
+
+  // ── Resize handles + ghost drag ─────────────────────────────────
+  const layer = document.getElementById('device-resize-layer');
+  const ghost = document.getElementById('device-ghost');
+  const ghostDims = document.getElementById('device-ghost-dims');
+  const hr = document.getElementById('device-handle-r');
+  const hb = document.getElementById('device-handle-b');
+  const hc = document.getElementById('device-handle-c');
+  const HANDLE = 14;
+  let bounds = null, drag = null;
+
+  function placeHandles() {
+    if (!bounds) { layer.classList.remove('active'); return; }
+    layer.classList.add('active');
+    const { x, y, width, height } = bounds;
+    hr.style.cssText = `left:${x + width}px;top:${y}px;width:${HANDLE}px;height:${height}px`;
+    hb.style.cssText = `left:${x}px;top:${y + height}px;width:${width}px;height:${HANDLE}px`;
+    hc.style.cssText = `left:${x + width}px;top:${y + height}px;width:${HANDLE}px;height:${HANDLE}px`;
+  }
+  ipcRenderer.on('device-view-bounds', (_, b) => { bounds = b; if (!drag) placeHandles(); });
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  function showGhost(w, h) {
+    const gx = Math.round(drag.panelX + (drag.panelW - w) / 2);   // centered horizontally
+    ghost.style.cssText = `left:${gx}px;top:${drag.panelY}px;width:${w}px;height:${h}px;display:block`;
+    ghostDims.textContent = `${Math.round(w)} × ${Math.round(h)}`;
+  }
+  function onMove(e) {
+    if (!drag) return;
+    let w = drag.w, h = drag.h;
+    // Centered → width resizes symmetrically (both edges move), so the right
+    // handle still tracks the cursor 1:1.
+    if (drag.axis !== 'y') w = clamp(drag.w + 2 * (e.clientX - drag.sx), MIN, drag.maxW);
+    if (drag.axis !== 'x') h = clamp(drag.h + (e.clientY - drag.sy), MIN, drag.maxH);
+    drag.cw = w; drag.ch = h;
+    showGhost(w, h);
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove, true);
+    document.removeEventListener('mouseup', onUp, true);
+    document.body.style.cursor = '';
+    const w = Math.round(drag.cw ?? drag.w), h = Math.round(drag.ch ?? drag.h);
+    ghost.style.display = 'none';
+    ipcRenderer.send('device-resize-end', { width: w, height: h });
+    active = { name: '', width: w, height: h, fit: false };
+    persist(); setLabel();
+    drag = null;
+  }
+  function startDrag(axis, e) {
+    if (!bounds) return;
+    e.preventDefault();
+    drag = { axis, sx: e.clientX, sy: e.clientY, w: bounds.width, h: bounds.height,
+             panelX: bounds.panelX, panelY: bounds.panelY, panelW: bounds.panelW,
+             maxW: bounds.panelW - HANDLE * 2, maxH: bounds.panelH - HANDLE };
+    ipcRenderer.send('device-resize-start');   // main hides the view
+    document.body.style.cursor = axis === 'x' ? 'ew-resize' : axis === 'y' ? 'ns-resize' : 'nwse-resize';
+    showGhost(drag.w, drag.h);
+    document.addEventListener('mousemove', onMove, true);
+    document.addEventListener('mouseup', onUp, true);
+  }
+  hr.addEventListener('mousedown', e => startDrag('x', e));
+  hb.addEventListener('mousedown', e => startDrag('y', e));
+  hc.addEventListener('mousedown', e => startDrag('xy', e));
+
+  // Apply the persisted emulation on startup (once the browser view exists).
+  setTimeout(sendActive, 300);
+})();
+
+// ── Custom Devices modal ──────────────────────────────────────────
+(function initDevicesModal() {
+  const modal  = document.getElementById('devices-modal');
+  const listEl = document.getElementById('devices-list');
+  const nameIn = document.getElementById('dev-add-name');
+  const wIn    = document.getElementById('dev-add-w');
+  const hIn    = document.getElementById('dev-add-h');
+  const addBtn = document.getElementById('dev-add-btn');
+  const saveBtn   = document.getElementById('devices-save');
+  const cancelBtn = document.getElementById('devices-cancel');
+  if (!modal) return;
+
+  let draft = [];
+
+  function render() {
+    listEl.innerHTML = '';
+    if (!draft.length) {
+      listEl.innerHTML = '<div class="dev-empty">No custom devices yet.</div>';
+      return;
+    }
+    draft.forEach((d, i) => {
+      const row = document.createElement('div');
+      row.className = 'dev-row';
+      row.innerHTML = `<span class="dev-row-name"></span><span class="dev-row-dims">${d.width} × ${d.height}</span><button class="dev-row-del" title="Remove">${trashIcon(14)}</button>`;
+      row.querySelector('.dev-row-name').textContent = d.name;
+      row.querySelector('.dev-row-del').addEventListener('click', () => { draft.splice(i, 1); render(); });
+      listEl.appendChild(row);
+    });
+  }
+
+  function addFromInputs() {
+    const name = nameIn.value.trim();
+    const w = parseInt(wIn.value, 10), h = parseInt(hIn.value, 10);
+    if (!name || !(w > 0) || !(h > 0)) return;
+    draft.push({ name, width: w, height: h, custom: true });
+    nameIn.value = ''; wIn.value = ''; hIn.value = '';
+    nameIn.focus();
+    render();
+  }
+  addBtn.addEventListener('click', addFromInputs);
+  [nameIn, wIn, hIn].forEach(el => el.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); addFromInputs(); }
+  }));
+
+  const ctl = wireModal(modal);
+
+  saveBtn.addEventListener('click', () => {
+    localStorage.setItem(LS.devices, JSON.stringify(draft));
+    window.__reapplyActiveDevice?.();   // active device may have been edited/removed
+    ctl.close();
+  });
+  cancelBtn.addEventListener('click', ctl.close);
+
+  openEditDevicesModal = function() {
+    try { draft = JSON.parse(localStorage.getItem(LS.devices) || '[]'); } catch (_) { draft = []; }
+    nameIn.value = ''; wIn.value = ''; hIn.value = '';
+    render();
+    ctl.open();
+  };
+})();
+
 ipcRenderer.on('browser-url-changed', (_, url) => {
   addressBar.value = (url && url !== 'about:blank') ? url : '';
   const tab = tabs.find(t => t.id === activeTabId);
@@ -2383,7 +2733,7 @@ ipcRenderer.on('devtools-closed', () => devToolsBtn.classList.remove('active'));
 // ── Pick mode ─────────────────────────────────────────────────────
 let pickMode = null;
 
-const PICK_CURSORS = { box: 'crosshair', lasso: 'crosshair', screenshot: 'crosshair', resize: 'move', component: 'cell', draw: 'crosshair', aidev: 'crosshair' };
+const PICK_CURSORS = { box: 'crosshair', lasso: 'crosshair', screenshot: 'crosshair', resize: 'move', component: 'cell', draw: 'crosshair', aidev: 'crosshair', eyedropper: 'crosshair' };
 function applyPickCursor(mode) {
   document.documentElement.setAttribute('data-pick', mode || '');
 }
@@ -2431,22 +2781,228 @@ document.getElementById('btn-draw').addEventListener('click', () => {
   ipcRenderer.send('pick-draw');
 });
 
+document.getElementById('btn-pick-eyedropper').addEventListener('click', () => {
+  if (pickMode === 'eyedropper') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  clearPickMode();
+  pickMode = 'eyedropper';
+  applyPickCursor('eyedropper');
+  document.getElementById('btn-pick-eyedropper').classList.add('active');
+  ipcRenderer.send('pick-eyedropper');
+});
+
+document.getElementById('btn-pick-a11y').addEventListener('click', () => {
+  if (pickMode === 'a11y') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  clearPickMode();
+  pickMode = 'a11y';
+  applyPickCursor('a11y');
+  document.getElementById('btn-pick-a11y').classList.add('active');
+  ipcRenderer.send('pick-a11y');
+});
+
 function clearPickMode() {
   pickMode = null;
   applyPickCursor(null);
   document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
 }
 
+// ── Mirror toolbar tools into the browser-view context menu ──────────
+// The context menu is native (it composites over the WebContentsView), so it
+// needs raster icons — rasterize each toolbar SVG to a PNG the menu can show.
+(function registerBrowserTools() {
+  const TOOLS = [
+    { id: 'btn-pick-box',    key: 'b', label: 'Box select',   accel: 'Alt+B' },
+    { id: 'btn-pick-lasso',  key: 'l', label: 'Lasso select', accel: 'Alt+L' },
+    { id: 'btn-pick-resize', key: 'r', label: 'Resize',       accel: 'Alt+R' },
+    { id: 'btn-pick-aidev',  key: 'e', label: 'Extract',      accel: 'Alt+E' },
+    { id: 'btn-pick-eyedropper', key: 'c', label: 'Eyedropper', accel: 'Alt+C' },
+    { id: 'btn-pick-a11y',   key: 'a', label: 'Accessibility', accel: 'Alt+A' },
+    { id: 'btn-screenshot',  key: 'i', label: 'Screenshot',   accel: 'Alt+I' },
+    { id: 'btn-draw',        key: 'm', label: 'Draw',         accel: 'Alt+M' },
+  ];
+
+  function svgToPng(svgEl, px, color) {
+    return new Promise((resolve) => {
+      const clone = svgEl.cloneNode(true);
+      clone.setAttribute('width', px); clone.setAttribute('height', px);
+      clone.setAttribute('color', color); clone.style.color = color;
+      const xml = new XMLSerializer().serializeToString(clone);
+      const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = px; c.height = px;
+        c.getContext('2d').drawImage(img, 0, 0, px, px);
+        try { resolve(c.toDataURL('image/png')); } catch (_) { resolve(''); }
+      };
+      img.onerror = () => resolve('');
+      img.src = src;
+    });
+  }
+
+  Promise.all(TOOLS.map(async (t) => {
+    const svg = document.querySelector(`#${t.id} svg`);
+    const icon = svg ? await svgToPng(svg, 16, '#c8ccd4') : '';
+    return { key: t.key, label: t.label, accel: t.accel, icon };
+  })).then((tools) => ipcRenderer.send('register-browser-tools', tools));
+})();
+
 ipcRenderer.on('pick-cancelled', () => clearPickMode());
 ipcRenderer.on('pick-complete',  () => clearPickMode());
+
+// ── System performance graph (CPU / RAM / GPU) ───────────────────────
+// App-bar toggle: show/hide the graph (persisted, default on).
+(function initSysperfToggle() {
+  const btn = document.getElementById('btn-sysperf-toggle');
+  const panel = document.getElementById('sysperf');
+  if (!btn || !panel) return;
+  let on = localStorage.getItem(LS.sysperf) !== '0';
+  const apply = () => { panel.style.display = on ? '' : 'none'; btn.classList.toggle('active', on); };
+  apply();
+  btn.addEventListener('click', () => {
+    on = !on;
+    localStorage.setItem(LS.sysperf, on ? '1' : '0');
+    apply();
+  });
+})();
+
+// View toggle: All (resource bars) ↔ RAM ↔ CPU (top processes). The process
+// views poll main only while open and the panel is visible.
+(function initSysperfView() {
+  const allBtn  = document.getElementById('sysperf-view-all');
+  const ramBtn  = document.getElementById('sysperf-view-ram');
+  const cpuBtn  = document.getElementById('sysperf-view-cpu');
+  const barsEl  = document.getElementById('sysperf-bars');
+  const procsEl = document.getElementById('sysperf-procs');
+  const titleEl = document.getElementById('sysperf-title');
+  const panel   = document.getElementById('sysperf');
+  if (!allBtn || !ramBtn || !cpuBtn || !barsEl || !procsEl) return;
+
+  const VIEWS = ['all', 'ram', 'cpu'];
+  let stored = localStorage.getItem(LS.sysperfView);
+  if (stored === 'bars')  stored = 'all';     // migrate old keys
+  if (stored === 'procs') stored = 'ram';
+  let view  = VIEWS.includes(stored) ? stored : 'all';
+  let timer = null;
+
+  const ROWS = 6;
+  let prevIsAll = null;
+
+  function fmtBytes(b) {
+    const gb = b / (1024 ** 3);
+    if (gb >= 1) return gb.toFixed(1) + ' GB';
+    return Math.round(b / (1024 ** 2)) + ' MB';
+  }
+  // Persistent rows: reusing the same nodes lets the bars animate (via the CSS
+  // `width` transition) into place and between polls instead of popping.
+  function ensureRows() {
+    if (procsEl.childElementCount === ROWS && procsEl.firstElementChild.classList.contains('sysperf-proc')) return;
+    let html = '';
+    for (let i = 0; i < ROWS; i++) {
+      html += '<div class="sysperf-proc" style="display:none">'
+            + '<span class="sysperf-proc-name"></span>'
+            + '<div class="sysperf-bar"><div class="sysperf-fill" style="width:0%"></div></div>'
+            + '<span class="sysperf-proc-mem"></span></div>';
+    }
+    procsEl.innerHTML = html;
+  }
+  function renderProcs(res, kind) {
+    if (!res || !res.ok || !res.procs || !res.procs.length) {
+      procsEl.innerHTML = '<div class="sysperf-proc-empty">Process data unavailable</div>';
+      return;
+    }
+    ensureRows();
+    const rows = procsEl.children;
+    const procs = res.procs;
+    const max = procs[0].value || 1;
+    for (let i = 0; i < ROWS; i++) {
+      const row = rows[i];
+      if (i < procs.length) {
+        const p = procs[i];
+        const name = row.children[0], fill = row.children[1].children[0], mem = row.children[2];
+        row.style.display = '';
+        name.textContent = p.name; name.title = p.name;
+        fill.style.width = Math.max(3, Math.round(100 * p.value / max)) + '%';
+        mem.textContent = kind === 'cpu' ? Math.round(p.value) + '%' : fmtBytes(p.value);
+      } else {
+        row.style.display = 'none';
+      }
+    }
+  }
+  async function pollProcs() {
+    if (view === 'all' || (panel && panel.style.display === 'none')) return;
+    const kind = view;   // 'ram' | 'cpu'
+    let res = null;
+    try { res = await ipcRenderer.invoke('top-procs', kind); } catch (_) {}
+    if (view !== kind) return;   // view changed mid-flight
+    renderProcs(res, kind);
+  }
+  function fadeShow(el) {
+    el.style.display = '';
+    el.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { el.style.opacity = '1'; }));
+  }
+  function apply() {
+    const isAll = view === 'all';
+    allBtn.classList.toggle('active', view === 'all');
+    ramBtn.classList.toggle('active', view === 'ram');
+    cpuBtn.classList.toggle('active', view === 'cpu');
+    if (titleEl) titleEl.textContent = isAll ? 'System' : (view === 'ram' ? 'Top RAM' : 'Top CPU');
+
+    // Crossfade only when switching between the bars and the process list;
+    // RAM↔CPU keeps the same container (rows morph in place — no flash).
+    if (prevIsAll !== isAll) {
+      if (isAll) { procsEl.style.display = 'none'; fadeShow(barsEl); }
+      else       { barsEl.style.display = 'none'; ensureRows(); fadeShow(procsEl); }
+    } else if (!isAll) {
+      ensureRows();
+    }
+    prevIsAll = isAll;
+
+    if (timer) { clearInterval(timer); timer = null; }
+    if (!isAll) { pollProcs(); timer = setInterval(pollProcs, 3000); }
+  }
+  function set(v) { view = v; localStorage.setItem(LS.sysperfView, v); apply(); }
+  allBtn.addEventListener('click', () => set('all'));
+  ramBtn.addEventListener('click', () => set('ram'));
+  cpuBtn.addEventListener('click', () => set('cpu'));
+  apply();
+})();
+
+ipcRenderer.on('sysperf', (_, m) => {
+  const set = (key, val) => {
+    const fill = document.getElementById(`sysperf-${key}-fill`);
+    const pct  = document.getElementById(`sysperf-${key}-pct`);
+    if (!fill || !pct) return;
+    if (val == null || isNaN(val)) { fill.style.width = '0%'; pct.textContent = '—'; return; }
+    const v = Math.max(0, Math.min(100, Math.round(val)));
+    fill.style.width = v + '%';
+    pct.textContent  = v + '%';
+  };
+  set('cpu', m && m.cpu); set('ram', m && m.ram); set('gpu', m && m.gpu);
+});
 
 // Route a message to the active session — chat (ACP) or PTY. The single
 // sending path for tools, audits, and the composer. `display` is what the
 // chat bubble shows when it differs from the full prompt text (e.g. chip
 // summaries instead of full Figma instructions).
+// Esc-to-stop: interrupt the active agent. ACP → cancel the running prompt
+// (only when it's actually working); PTY → send Ctrl-C.
+function interruptActiveSession() {
+  const s = sessions.get(activeId);
+  if (!s) return false;
+  if (s.type === 'acp') {
+    if (s.status !== 'thinking') return false;
+    ipcRenderer.send('acp-cancel', { id: activeId });
+    return true;
+  }
+  ipcRenderer.send('pty-input', { id: activeId, data: '\x03' });
+  return true;
+}
+
+// Returns true if there was an active session to receive the message.
 function routeToActiveSession(text, display = text) {
   const s = sessions.get(activeId);
-  if (!s) return;
+  if (!s) return false;
   if (s.type === 'acp') {
     acpAddUserMsg(s, display);
     acpSetStatus(s, 'thinking');
@@ -2455,10 +3011,249 @@ function routeToActiveSession(text, display = text) {
     s.term.paste(text);
     setTimeout(() => ipcRenderer.send('pty-input', { id: activeId, data: '\r' }), PTY_SEND_DELAY);
   }
+  return true;
 }
 
 // Route pick/screenshot output to the active session
 ipcRenderer.on('pick-send-to-session', (_, message) => routeToActiveSession(message));
+
+// ── Console & Network tab ─────────────────────────────────────────
+(function initConsole() {
+  const listEl  = document.getElementById('console-list');
+  const emptyEl = document.getElementById('console-empty');
+  const countEl = document.getElementById('console-count');
+  if (!listEl) return;
+
+  const MAX = 800;
+  let entries = [];
+  let filter = 'all';
+  const LC = { error: '#ef4444', warn: '#f59e0b', info: '#4a9eff', debug: '#777', log: '#bbb' };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const shortSrc = (s) => { try { const u = new URL(s); return (u.pathname.split('/').pop() || u.hostname); } catch (_) { return String(s).split('/').pop() || s; } };
+
+  function matches(e) {
+    if (filter === 'all')   return true;
+    if (filter === 'net')   return e.kind === 'net';
+    if (filter === 'error') return e.kind === 'net' || e.level === 'error';
+    if (filter === 'warn')  return e.kind === 'console' && e.level === 'warn';
+    return true;
+  }
+  function isErr(e) { return e.kind === 'net' || e.level === 'error'; }
+
+  function rowHtml(e) {
+    if (e.kind === 'net') {
+      const status = e.error ? e.error.replace('net::', '') : (e.status || '');
+      return '<div class="console-row net" data-id="' + e.id + '">'
+        + '<span class="c-tag net">NET</span>'
+        + '<span class="c-method">' + esc(e.method || 'GET') + '</span>'
+        + '<span class="c-status bad">' + esc(status) + '</span>'
+        + '<span class="c-msg">' + esc(e.url) + '</span>'
+        + '<button class="c-send" title="Send to chat">→</button></div>';
+    }
+    return '<div class="console-row ' + e.level + '" data-id="' + e.id + '">'
+      + '<span class="c-tag" style="color:' + (LC[e.level] || '#bbb') + '">' + e.level.toUpperCase() + '</span>'
+      + '<span class="c-msg" style="color:' + (e.level === 'error' ? '#f3b0b0' : e.level === 'warn' ? '#e7c98a' : '#cfcfcf') + '">' + esc(e.text) + '</span>'
+      + (e.source ? '<span class="c-src">' + esc(shortSrc(e.source)) + (e.line ? ':' + e.line : '') + '</span>' : '')
+      + '<button class="c-send" title="Send to chat">→</button></div>';
+  }
+  function updateCount() {
+    const errs = entries.filter(isErr).length;
+    countEl.textContent = entries.length + (errs ? ' · ' + errs + ' err' : '');
+  }
+  function render() {
+    listEl.innerHTML = entries.filter(matches).map(rowHtml).join('');
+    emptyEl.style.display = entries.length ? 'none' : '';
+    updateCount();
+    listEl.scrollTop = listEl.scrollHeight;
+  }
+  function add(e) {
+    entries.push(e);
+    if (entries.length > MAX) entries.shift();
+    if (consolePanel && consolePanel.style.display !== 'none') {
+      if (matches(e)) {
+        const atBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 40;
+        listEl.insertAdjacentHTML('beforeend', rowHtml(e));
+        emptyEl.style.display = 'none';
+        if (atBottom) listEl.scrollTop = listEl.scrollHeight;
+      }
+      updateCount();
+    }
+  }
+  function sendOne(e) {
+    let msg;
+    if (e.kind === 'net') {
+      msg = '───── Failed request ─────\n' + (e.method || 'GET') + ' ' + e.url + '\n'
+        + (e.error ? 'Error: ' + e.error : 'Status: ' + e.status) + '\n\nFind and fix what makes this request fail.';
+    } else {
+      msg = '───── Console ' + e.level + ' ─────\n' + e.text
+        + (e.source ? '\nAt: ' + e.source + (e.line ? ':' + e.line : '') : '') + '\n\nInvestigate and fix this.';
+    }
+    showToast(routeToActiveSession(msg) ? 'Sent to chat' : 'No active session', { duration: 1500 });
+  }
+
+  ipcRenderer.on('console-entry', (_, e) => add(e));
+  ipcRenderer.invoke('console-get').then(list => { entries = (list || []).slice(-MAX); render(); }).catch(() => {});
+
+  document.querySelectorAll('.console-filter').forEach(b => {
+    b.addEventListener('click', () => {
+      filter = b.dataset.filter;
+      document.querySelectorAll('.console-filter').forEach(x => x.classList.toggle('active', x === b));
+      render();
+    });
+  });
+  document.getElementById('console-clear').addEventListener('click', () => {
+    entries = []; ipcRenderer.send('console-clear'); render();
+  });
+  document.getElementById('console-send-errors').addEventListener('click', () => {
+    const errs = entries.filter(isErr);
+    if (!errs.length) { showToast('No errors to send', { duration: 1400 }); return; }
+    const lines = ['───── Console errors (' + errs.length + ') ─────'];
+    errs.forEach(e => {
+      if (e.kind === 'net') lines.push('• [request] ' + (e.method || 'GET') + ' ' + e.url + ' — ' + (e.error || ('HTTP ' + e.status)));
+      else lines.push('• [console] ' + e.text + (e.source ? '  (' + shortSrc(e.source) + (e.line ? ':' + e.line : '') + ')' : ''));
+    });
+    lines.push('', 'Investigate and fix these.');
+    showToast(routeToActiveSession(lines.join('\n')) ? 'Sent ' + errs.length + ' to chat' : 'No active session', { duration: 1500 });
+  });
+  listEl.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.c-send'); if (!btn) return;
+    const id = +btn.closest('.console-row').dataset.id;
+    const e = entries.find(x => x.id === id); if (e) sendOne(e);
+  });
+
+  window.__onConsoleTabActive = () => render();
+})();
+
+// ── Changes / Diff tab ────────────────────────────────────────────
+(function initDiff() {
+  const panel = document.getElementById('diff-panel');
+  if (!panel) return;
+  const listEl   = document.getElementById('diff-list');
+  const emptyEl  = document.getElementById('diff-empty');
+  const editorEl = document.getElementById('diff-editor');
+  const branchEl = document.getElementById('diff-branch');
+  const sendBtn  = document.getElementById('diff-send');
+
+  let monaco = null, diffEditor = null, models = null;
+  let files = [], selected = null;
+  let reqToken = 0;   // guards against out-of-order diff-file responses
+
+  const EXT_LANG = {
+    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    ts: 'typescript', tsx: 'typescript', json: 'json', html: 'html', htm: 'html',
+    css: 'css', scss: 'scss', less: 'less', md: 'markdown', markdown: 'markdown',
+    py: 'python', go: 'go', rs: 'rust', java: 'java', c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp',
+    cs: 'csharp', php: 'php', rb: 'ruby', sh: 'shell', bash: 'shell', zsh: 'shell',
+    yml: 'yaml', yaml: 'yaml', xml: 'xml', svg: 'xml', sql: 'sql', vue: 'html', svelte: 'html', toml: 'ini', ini: 'ini',
+  };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const base = (p) => String(p).split(/[\\/]/).pop() || p;
+  function langFor(name) {
+    const b = name.toLowerCase();
+    if (b === 'dockerfile' || b.startsWith('dockerfile.')) return 'dockerfile';
+    const ext = b.includes('.') ? b.split('.').pop() : '';
+    return EXT_LANG[ext] || 'plaintext';
+  }
+  function loadMonaco() {
+    return new Promise(res => {
+      if (window.monaco) return res(window.monaco);
+      if (!window.__amdRequire) return res(null);
+      window.__amdRequire(['vs/editor/editor.main'], () => res(window.monaco));
+    });
+  }
+  async function ensureEditor() {
+    if (diffEditor) return diffEditor;
+    monaco = await loadMonaco();
+    if (!monaco) return null;
+    diffEditor = monaco.editor.createDiffEditor(editorEl, {
+      readOnly: true, theme: 'vs-dark', automaticLayout: true, renderSideBySide: true,
+      fontSize: 12.5, lineHeight: 18, minimap: { enabled: false }, scrollBeyondLastLine: false,
+      renderOverviewRuler: false,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    });
+    return diffEditor;
+  }
+
+  const SM = {
+    added:    { l: 'A', c: '#4ade80' },
+    modified: { l: 'M', c: '#f59e0b' },
+    deleted:  { l: 'D', c: '#ef4444' },
+    renamed:  { l: 'R', c: '#4a9eff' },
+  };
+  function renderList() {
+    listEl.innerHTML = files.map((f, i) => {
+      const m = SM[f.status] || SM.modified;
+      const st = (f.added != null || f.deleted != null)
+        ? '<span class="diff-stat"><span class="add">+' + (f.added || 0) + '</span><span class="del">−' + (f.deleted || 0) + '</span></span>' : '';
+      return '<div class="diff-file' + (selected && f.rel === selected.rel ? ' active' : '') + '" data-i="' + i + '">'
+        + '<span class="diff-badge" style="color:' + m.c + ';border-color:' + m.c + '66">' + m.l + '</span>'
+        + '<span class="diff-name" title="' + esc(f.rel) + '">' + esc(f.rel) + '</span>' + st + '</div>';
+    }).join('');
+  }
+  function showEmpty(reason) {
+    editorEl.style.display = 'none';
+    emptyEl.style.display = 'flex';
+    emptyEl.textContent =
+      reason === 'no-folder' ? 'Open a project folder to see its changes.' :
+      reason === 'not-git'   ? 'This folder is not a git repository.' :
+      reason === 'no-git'    ? 'Git was not found — install it or add it to PATH.' :
+      'No uncommitted changes — the working tree is clean.';
+  }
+  async function selectFile(f) {
+    const token = ++reqToken;          // captured before any await (matches click order)
+    selected = f; renderList();
+    const ed = await ensureEditor();
+    if (!ed) { showEmpty('no-git'); return; }
+    if (token !== reqToken) return;    // superseded while Monaco loaded
+    let res;
+    try { res = await ipcRenderer.invoke('diff-file', { rel: f.rel, status: f.status }); }
+    catch (_) { res = null; }
+    if (token !== reqToken) return;    // a newer selection won — drop this stale result
+    emptyEl.style.display = 'none';
+    editorEl.style.display = '';
+    const lang = res && res.binary ? 'plaintext' : langFor(base(f.rel));
+    const before = res && res.binary ? '(binary file)' : ((res && res.before) || '');
+    const after  = res && res.binary ? '(binary file)' : ((res && res.after) || '');
+    const orig = monaco.editor.createModel(before, lang);
+    const mod  = monaco.editor.createModel(after, lang);
+    ed.setModel({ original: orig, modified: mod });
+    ed.layout();
+    if (models) { models.original.dispose(); models.modified.dispose(); }
+    models = { original: orig, modified: mod };
+  }
+  async function refresh() {
+    const res = await ipcRenderer.invoke('diff-status');
+    if (!res || !res.ok) { files = []; selected = null; branchEl.textContent = ''; renderList(); showEmpty(res ? res.reason : 'not-git'); return; }
+    branchEl.textContent = res.branch || '';
+    files = res.files || [];
+    renderList();
+    if (!files.length) { selected = null; showEmpty('clean'); return; }
+    const keep = selected && files.find(f => f.rel === selected.rel);
+    selectFile(keep || files[0]);
+  }
+
+  listEl.addEventListener('click', (e) => {
+    const row = e.target.closest('.diff-file'); if (!row) return;
+    const f = files[+row.dataset.i]; if (f) selectFile(f);
+  });
+  document.getElementById('diff-refresh').addEventListener('click', refresh);
+  sendBtn.addEventListener('click', () => {
+    if (!files.length) { showToast('No changes to review', { duration: 1400 }); return; }
+    const lines = ['───── Review my uncommitted changes ─────'];
+    if (branchEl.textContent) lines.push('Branch: ' + branchEl.textContent, '');
+    files.forEach(f => {
+      const tag = (SM[f.status] || SM.modified).l;
+      const st = (f.added != null || f.deleted != null) ? '  (+' + (f.added || 0) + ' −' + (f.deleted || 0) + ')' : '';
+      lines.push(tag + '  ' + f.rel + st);
+    });
+    lines.push('', 'Walk through these changes and flag anything incorrect, risky, or incomplete.');
+    showToast(routeToActiveSession(lines.join('\n'))
+      ? 'Sent ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ' to chat'
+      : 'No active session', { duration: 1500 });
+  });
+
+  window.__onDiffTabActive = () => { refresh(); if (diffEditor) setTimeout(() => diffEditor.layout(), 0); };
+})();
 
 // Composite draw canvas over page screenshot in the renderer (has Canvas API)
 ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instructions }) => {
@@ -2504,7 +3299,7 @@ document.addEventListener('keydown', e => {
 // before-input-event fires in the main process for whichever WebContentsView
 // currently has keyboard focus, then sends this IPC to the renderer. Tool
 // shortcuts are Alt+<letter>, so no input-focus guard is needed.
-const TOOL_BTN = { b: 'btn-pick-box', l: 'btn-pick-lasso', i: 'btn-screenshot', r: 'btn-pick-resize', s: 'btn-pick-component', m: 'btn-draw', a: 'btn-pick-aidev' };
+const TOOL_BTN = { b: 'btn-pick-box', l: 'btn-pick-lasso', i: 'btn-screenshot', r: 'btn-pick-resize', s: 'btn-pick-component', m: 'btn-draw', e: 'btn-pick-aidev', c: 'btn-pick-eyedropper', a: 'btn-pick-a11y' };
 ipcRenderer.on('shortcut-action', (_, action) => {
   if (action.type === 'tab-switch') {
     const idx = tabsConfig.findIndex(t => t.id === activeViewTabId);
@@ -2513,9 +3308,11 @@ ipcRenderer.on('shortcut-action', (_, action) => {
     document.getElementById(TOOL_BTN[action.key])?.click();
   } else if (action.type === 'panel-toggle') {
     btnPanelToggle.click();
-  } else if (action.type === 'escape' && pickMode) {
-    ipcRenderer.send('pick-cancel');
-    clearPickMode();
+  } else if (action.type === 'escape') {
+    if (pickMode) { ipcRenderer.send('pick-cancel'); clearPickMode(); }
+    // Esc anywhere else stops the agent — but let the composer's own keydown
+    // own that case (and the slash menu) when it's focused.
+    else if (document.activeElement !== uiTextarea) interruptActiveSession();
   }
 });
 
@@ -3413,6 +4210,9 @@ uiTextarea.addEventListener('keydown', e => {
     }
   }
 
+  // Esc while typing → stop the agent (slash menu already handled above).
+  if (e.key === 'Escape') { e.preventDefault(); interruptActiveSession(); return; }
+
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUiMessage(); return; }
   if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
     e.preventDefault(); uiTextarea.value = e.key; sendUiMessage(); return;
@@ -3673,6 +4473,8 @@ let openOnboarding = null;
       { n: 'Box select', d: 'Draw a box to select page elements and send them to chat (Alt+B).', sel: '#btn-pick-box' },
       { n: 'Lasso select', d: 'Freehand-select page elements (Alt+L).', sel: '#btn-pick-lasso' },
       { n: 'Resize', d: 'Resize an element directly on the page (Alt+R).', sel: '#btn-pick-resize' },
+      { n: 'Eyedropper', d: 'Sample any color with a magnifier loupe, then edit it live or send it to chat (Alt+C).', sel: '#btn-pick-eyedropper' },
+      { n: 'Accessibility', d: 'Scan the page for WCAG contrast failures and a11y issues, then send them to chat to fix (Alt+A).', sel: '#btn-pick-a11y' },
       { n: 'Screenshot', d: 'Capture a region of the page for the agent (Alt+I).', sel: '#btn-screenshot' },
       { n: 'Draw', d: 'Annotate the page with a marker, then hand it over (Alt+M).', sel: '#btn-draw' },
     ]},

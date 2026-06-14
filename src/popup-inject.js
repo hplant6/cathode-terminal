@@ -9,6 +9,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
     let resolved = false;
     let items = ${elementsJSON};
     let savedInstruction = '';
+    let introDone = false;
 
     function done(result) {
       if (resolved) return;
@@ -200,6 +201,32 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
           done({ items, instruction: ta.value.trim() });
         }
       });
+
+      // Intro: grow down from the title + fade in (first build only)
+      if (!introDone) {
+        introDone = true;
+        const popup = shadow.querySelector('.popup');
+        const tt = shadow.querySelector('.section-title');
+        const startH = (tt ? tt.offsetHeight : 36) + 4;
+        const fullH = popup ? popup.scrollHeight : 0;
+        if (popup && fullH > startH) {
+          popup.style.transition = 'none';
+          popup.style.opacity = '0';
+          popup.style.height = startH + 'px';
+          void popup.offsetHeight;
+          requestAnimationFrame(() => {
+            popup.style.transition = 'height 0.4s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease';
+            popup.style.opacity = '1';
+            popup.style.height = fullH + 'px';
+          });
+          popup.addEventListener('transitionend', function te(e) {
+            if (e.target !== popup || e.propertyName !== 'height') return;
+            popup.style.height = '';
+            popup.style.transition = '';
+            popup.removeEventListener('transitionend', te);
+          });
+        }
+      }
     }
 
     function escHtml(s) {

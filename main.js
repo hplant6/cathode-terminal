@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeTheme, dialog, safeStorage, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeImage, nativeTheme, dialog, safeStorage, clipboard, net } = require('electron');
 Menu.setApplicationMenu(null);
 nativeTheme.themeSource = 'dark';
 const path = require('path');
@@ -11,6 +11,8 @@ const { getScreenshotScript }     = require('./src/screenshot-inject');
 const { getScreenshotPopupScript } = require('./src/screenshot-popup-inject');
 const { getResizeScript }         = require('./src/resize-inject');
 const { getDrawScript }           = require('./src/draw-inject');
+const { getEyedropperScript }     = require('./src/eyedropper-inject');
+const { getA11yScript }           = require('./src/a11y-inject');
 const http = require('http');
 
 const STORYBOOK_CURSOR_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'src', 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
@@ -94,6 +96,9 @@ const ptyProcesses = {};
 const ptyCommands  = {};
 let modalOpen      = false;
 let browserEmpty   = false;   // project URL is blank → show HTML empty state
+let deviceEmulation = null;   // { name, fit, width, height } → size the view to a device viewport
+let resizingDevice  = false;  // true while the user is ghost-dragging a resize handle
+const DEVICE_HANDLE = 14;     // backdrop reserved on the view's right+bottom for resize handles
 let activePtyId    = null;
 let rightPanelMode = 'project';
 const customViews  = new Map(); // url → WebContentsView
@@ -116,7 +121,10 @@ const OFFSCREEN_BOUNDS = { x: -10000, y: 0, width: 1, height: 1 };
 // ended up behind views in the past. Each member is idempotent and respects
 // modalOpen / rightPanelMode itself.
 function repositionAll() {
-  repositionAll();
+  repositionBrowserView();
+  repositionRightPanelView();
+  repositionDevToolsView();
+  repositionInlinePopup();
 }
 
 let splitFraction = 0.4;
@@ -126,8 +134,12 @@ let splitFraction = 0.4;
 // tabOnly = true  → only tab-switching (safe for utility/popup views)
 // Tool shortcuts are Alt+<letter> so they can never collide with typing
 // (in the composer or inside the browsed page) — no focus tracking needed.
-// 'a' (AI Developer) omitted while that tool's button is hidden — re-add when it returns.
-const TOOL_KEYS = new Set(['b', 'l', 'i', 'r', 's', 'm']);
+const TOOL_KEYS = new Set(['b', 'l', 'i', 'r', 's', 'm', 'e', 'c', 'a']);
+
+// Toolbar tools mirrored into the browser context menu. The renderer registers
+// them (label, accelerator, key, rasterized icon) once the toolbar is built.
+let browserTools = [];
+ipcMain.on('register-browser-tools', (_, tools) => { browserTools = Array.isArray(tools) ? tools : []; });
 function attachShortcutHandler(wc, { tabOnly = false } = {}) {
   wc.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
@@ -199,6 +211,141 @@ async function ensureCDP() {
   cdpReady = true;
 }
 
+// ── Console & Network capture (for the Console tab) ───────────────
+// Uses webContents 'console-message' (page console) + session.webRequest
+// (failed requests) — no CDP, so it never fights DevTools or the extract CDP.
+const CONSOLE_CAP = 600;
+let consoleLog = [];
+let consoleSeq = 0;
+function pushEntry(entry) {
+  entry.id = ++consoleSeq;
+  entry.ts = Date.now();
+  consoleLog.push(entry);
+  if (consoleLog.length > CONSOLE_CAP) consoleLog.shift();
+  uiSend('console-entry', entry);
+}
+function normLevel(level) {
+  if (typeof level === 'string') {
+    const l = level.toLowerCase();
+    if (l.startsWith('err')) return 'error';
+    if (l.startsWith('warn')) return 'warn';
+    if (l.startsWith('debug') || l.startsWith('verbose')) return 'debug';
+    if (l.startsWith('info')) return 'info';
+    return 'log';
+  }
+  return ['log', 'info', 'warn', 'error'][level] || 'log';
+}
+function attachConsoleCapture() {
+  const wc = browserView.webContents;
+  // Page console — handles both the legacy (event, level, message, line, src)
+  // signature and the newer single-event-object form.
+  wc.on('console-message', (...args) => {
+    let level, message, line, src;
+    if (args.length === 1 && args[0] && typeof args[0] === 'object') {
+      const e = args[0]; level = e.level; message = e.message; line = e.lineNumber; src = e.sourceId;
+    } else { [, level, message, line, src] = args; }
+    pushEntry({ kind: 'console', level: normLevel(level), text: String(message == null ? '' : message), source: src || '', line: line || 0 });
+  });
+  // Network failures (4xx/5xx + transport errors) scoped to the browser view.
+  try {
+    wc.session.webRequest.onCompleted((d) => {
+      if (d.webContentsId !== wc.id) return;
+      if (d.statusCode >= 400) pushEntry({ kind: 'net', method: d.method, url: d.url, status: d.statusCode, type: d.resourceType });
+    });
+    wc.session.webRequest.onErrorOccurred((d) => {
+      if (d.webContentsId !== wc.id) return;
+      if (d.error === 'net::ERR_ABORTED') return;
+      pushEntry({ kind: 'net', method: d.method, url: d.url, status: 0, type: d.resourceType, error: d.error });
+    });
+  } catch (_) {}
+}
+ipcMain.handle('console-get', () => consoleLog);
+ipcMain.on('console-clear', () => { consoleLog = []; });
+
+// ── System performance sampler (CPU / RAM / GPU) ──────────────────
+// Pushes {cpu,ram,gpu} percentages to the renderer's perf graph every 2s.
+// CPU/RAM come from `os`; GPU from a persistent Windows perf-counter loop
+// (best effort — null when unavailable, e.g. non-Windows or localized counters).
+let _prevCpu = os.cpus().map(c => ({ ...c.times }));
+function cpuPercent() {
+  const cur = os.cpus().map(c => c.times);
+  let idle = 0, total = 0;
+  for (let i = 0; i < cur.length && i < _prevCpu.length; i++) {
+    const a = _prevCpu[i], b = cur[i];
+    idle  += b.idle - a.idle;
+    total += (b.user + b.nice + b.sys + b.idle + b.irq) - (a.user + a.nice + a.sys + a.idle + a.irq);
+  }
+  _prevCpu = cur;
+  return total > 0 ? Math.max(0, Math.min(100, Math.round(100 * (1 - idle / total)))) : 0;
+}
+function ramPercent() {
+  const total = os.totalmem();
+  return total > 0 ? Math.round(100 * (total - os.freemem()) / total) : 0;
+}
+
+let _gpuPct = null;            // null → unavailable
+let _gpuProc = null;
+function startGpuSampler() {
+  if (process.platform !== 'win32' || _gpuProc) return;
+  // Sum the 3D-engine utilization across all GPU adapters (≈ Task Manager's
+  // "3D" reading). Streams one rounded number every 2s; 'NA' on failure.
+  const script =
+    "while($true){try{" +
+    "$s=(Get-Counter '\\GPU Engine(*engtype_3D)\\Utilization Percentage' -ErrorAction Stop).CounterSamples;" +
+    "$sum=($s|Measure-Object -Property CookedValue -Sum).Sum;" +
+    "Write-Output ([math]::Round($sum))}catch{Write-Output 'NA'};" +
+    "Start-Sleep -Milliseconds 2000}";
+  try {
+    _gpuProc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true });
+    _gpuProc.stdout.on('data', (d) => {
+      const line = d.toString().trim().split(/\r?\n/).pop().trim();
+      _gpuPct = (line === 'NA' || line === '') ? null : Math.max(0, Math.min(100, parseInt(line, 10) || 0));
+    });
+    _gpuProc.on('error', () => { _gpuPct = null; _gpuProc = null; });
+    _gpuProc.on('close', () => { _gpuProc = null; });
+  } catch (_) { _gpuProc = null; }
+}
+
+let _sysPerfTimer = null;
+function startSysPerf() {
+  if (_sysPerfTimer) return;
+  startGpuSampler();
+  _sysPerfTimer = setInterval(() => {
+    uiSend('sysperf', { cpu: cpuPercent(), ram: ramPercent(), gpu: _gpuPct });
+  }, 2000);
+}
+
+// Top processes by memory or CPU, grouped by name and summed so multi-process
+// apps (Chrome, Code…) read as one entry — like Task Manager. On-demand (the
+// renderer polls only while a process-breakdown view is open).
+//   by='cpu' → instantaneous % from perf counters, normalized by logical cores.
+//   else     → working-set bytes via Get-Process.
+ipcMain.handle('top-procs', async (_, by) => {
+  if (process.platform !== 'win32') return { ok: false };
+  const cpu = by === 'cpu';
+  const cmd = cpu
+    ? "$n=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors;" +
+      "(Get-Counter '\\Process(*)\\% Processor Time').CounterSamples | " +
+      "Where-Object { $_.InstanceName -ne '_total' -and $_.InstanceName -ne 'idle' } | " +
+      "Group-Object { $_.InstanceName -replace '#\\d+$','' } | " +
+      "ForEach-Object { [pscustomobject]@{ n=$_.Name; v=[math]::Round((($_.Group | Measure-Object CookedValue -Sum).Sum)/$n,1) } } | " +
+      "Sort-Object v -Descending | Select-Object -First 6 | ConvertTo-Json -Compress"
+    : "Get-Process | Group-Object ProcessName | ForEach-Object { [pscustomobject]@{ n=$_.Name; " +
+      "v=(($_.Group | Measure-Object WorkingSet64 -Sum).Sum) } } | " +
+      "Sort-Object v -Descending | Select-Object -First 6 | ConvertTo-Json -Compress";
+  return new Promise((resolve) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd],
+      { windowsHide: true, maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
+        if (err || !stdout) { resolve({ ok: false }); return; }
+        try {
+          let data = JSON.parse(stdout.trim());
+          if (!Array.isArray(data)) data = [data];
+          resolve({ ok: true, by: cpu ? 'cpu' : 'ram', procs: data.map(d => ({ name: d.n, value: d.v })) });
+        } catch (_) { resolve({ ok: false }); }
+      });
+  });
+});
+
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -207,6 +354,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#1a1a1a',
+    icon: path.join(__dirname, 'icon.png'),   // window/taskbar icon (dev + packaged)
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#252525', symbolColor: '#888888', height: 46 },
     // nodeIntegration required: renderer uses ipcRenderer and node-pty directly
@@ -219,6 +367,7 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   mainWindow.contentView.addChildView(browserView);
+  attachConsoleCapture();
   browserView.webContents.loadURL(loadLastURL()).catch(() => {});
 
   browserView.webContents.on('did-navigate', (_, url) => {
@@ -247,6 +396,21 @@ function createWindow() {
   // ── Context menu: browser view ────────────────────────────────────
   browserView.webContents.on('context-menu', (_, p) => {
     const tpl = [];
+
+    // Toolbar tools on top (with their icons), so they're reachable from the
+    // page without moving to the app toolbar. Same action path as Alt+<key>.
+    if (browserTools.length) {
+      for (const t of browserTools) {
+        tpl.push({
+          label: t.label,
+          accelerator: t.accel,
+          registerAccelerator: false,            // display only — Alt+<key> already handles it
+          icon: t.icon ? nativeImage.createFromDataURL(t.icon) : undefined,
+          click: () => mainWindow.webContents.send('shortcut-action', { type: 'tool', key: t.key }),
+        });
+      }
+      tpl.push({ type: 'separator' });
+    }
 
     if (p.selectionText || p.isEditable) {
       if (p.editFlags.canCut)  tpl.push({ label: 'Cut',  click: () => browserView.webContents.cut()  });
@@ -712,10 +876,14 @@ ipcMain.on('destroy-custom-view', (_, url) => destroyCustomView(url));
 function repositionBrowserView(overrideFraction) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (!browserView || browserView.webContents.isDestroyed()) return;
+  // While ghost-dragging a resize handle the view stays hidden (the renderer
+  // shows a ghost frame); applied on drag-end.
+  if (resizingDevice) { browserView.setBounds(OFFSCREEN_BOUNDS); return; }
   // browserEmpty → the project URL is blank; hide the view so the HTML empty
   // state in #browser-placeholder shows through.
   if (modalOpen || rightPanelMode !== 'project' || browserEmpty) {
     browserView.setBounds(OFFSCREEN_BOUNDS);
+    uiSend('device-view-bounds', null);   // hide the resize handles
     return;
   }
   const [winW, winH] = mainWindow.getContentSize();
@@ -724,7 +892,26 @@ function repositionBrowserView(overrideFraction) {
   const leftW   = Math.round(availW * fraction);
   const rightX  = leftW + 6;
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
-  browserView.setBounds({ x: rightX, y: topOffset, width: availW - rightX, height: winH - topOffset });
+  const panelW = availW - rightX, panelH = winH - topOffset;
+
+  if (deviceEmulation) {
+    // Device emulation: viewport centered horizontally, top-anchored (like
+    // Chrome). DEVICE_HANDLE px of backdrop is reserved on each side (width)
+    // and the bottom (height) for the drag handles. `fit` → fill the available
+    // area (Responsive default); otherwise the device's fixed size, clamped.
+    const maxW = Math.max(160, panelW - DEVICE_HANDLE * 2);
+    const maxH = Math.max(160, panelH - DEVICE_HANDLE);
+    const w = deviceEmulation.fit ? maxW : Math.min(deviceEmulation.width,  maxW);
+    const h = deviceEmulation.fit ? maxH : Math.min(deviceEmulation.height, maxH);
+    const x = rightX + Math.round((panelW - w) / 2);   // centered horizontally
+    const y = topOffset;                               // top-anchored
+    browserView.setBounds({ x, y, width: w, height: h });
+    uiSend('device-view-bounds', { x, y, width: w, height: h, panelW, panelH, panelX: rightX, panelY: topOffset });
+    return;
+  }
+  // No emulation → fill the panel, no handles
+  browserView.setBounds({ x: rightX, y: topOffset, width: panelW, height: panelH });
+  uiSend('device-view-bounds', null);
 }
 
 // ── Project folder ────────────────────────────────────────────────
@@ -735,18 +922,70 @@ function homeDir() { return process.env.USERPROFILE || process.env.HOME || proce
 function sessionCwd() { return currentProjectDir || homeDir(); }
 ipcMain.on('set-project-dir', (_, { dir }) => { currentProjectDir = dir || ''; });
 
+// ── Agent runtime environment (WSL vs Windows) ────────────────────
+// Most tools (claude/aider/llm) run in WSL. But Gemini/Codex may be installed
+// via *Windows* npm — running their `/mnt/c/.../npm` shim under WSL fails
+// ("exec: node: not found"). Detect once per binary and run it where it
+// actually lives: a real WSL install, else the Windows install via cmd.exe.
+const DUAL_ENV_BINS = new Set(['gemini', 'codex']);
+const _agentEnvCache = new Map();   // bin → 'wsl' | 'win' | null
+async function resolveAgentEnv(bin) {
+  if (_agentEnvCache.has(bin)) return _agentEnvCache.get(bin);
+  let env = null;
+  const wslPath = ((await wslExecFile(['bash', '-lic', `command -v ${bin} 2>/dev/null`], 6000)) || '').trim();
+  if (wslPath && !wslPath.startsWith('/mnt/')) {
+    env = 'wsl';                    // a real WSL install (not a /mnt/c interop shim)
+  } else {
+    const onWindows = await new Promise(res => {
+      try { const p = spawn('where.exe', [bin], { stdio: 'ignore' }); p.on('close', c => res(c === 0)); p.on('error', () => res(false)); }
+      catch (_) { res(false); }
+    });
+    env = onWindows ? 'win' : (wslPath ? 'wsl' : null);
+  }
+  _agentEnvCache.set(bin, env);
+  return env;
+}
+function winVersion(bin) {
+  return new Promise(res => {
+    let out = '';
+    try {
+      const p = spawn('cmd.exe', ['/c', bin, '--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+      p.stdout.on('data', d => out += d);
+      p.on('close', () => res(out.trim().split('\n').filter(Boolean).pop() || ''));
+      p.on('error', () => res(''));
+      setTimeout(() => { try { p.kill(); } catch (_) {} res(out.trim()); }, 6000);
+    } catch (_) { res(''); }
+  });
+}
+// cmd.exe can't use a \\wsl.localhost UNC dir as cwd — fall back to the Windows home.
+function winCwd() {
+  const c = sessionCwd();
+  return (c && !c.startsWith('\\\\')) ? c : homeDir();
+}
+
 // ── PTY sessions ──────────────────────────────────────────────────
-function spawnPty(id, command = 'claude') {
+async function spawnPty(id, command = 'claude') {
   ptyCommands[id] = command;
   try {
     const pty  = require('node-pty');
-    // Prepend pip/pipx user-install dir inside WSL so tools like aider are found
-    const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH"; ${command}`;
-    const proc = pty.spawn('wsl.exe', ['bash', '-lic', wrappedCmd], {
-      name: 'xterm-256color', cols: 80, rows: 24,
-      cwd: sessionCwd(),
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
-    });
+    const base = command.trim().split(/\s+/)[0].replace(/.*\//, '');
+    const env  = DUAL_ENV_BINS.has(base) ? await resolveAgentEnv(base) : 'wsl';
+    let proc;
+    if (env === 'win') {
+      // Windows-installed agent (e.g. Gemini/Codex via Windows npm) → run on Windows.
+      proc = pty.spawn('cmd.exe', ['/c', command], {
+        name: 'xterm-256color', cols: 80, rows: 24,
+        cwd: winCwd(), env: process.env,
+      });
+    } else {
+      // Prepend pip/pipx user-install dir inside WSL so tools like aider are found
+      const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH"; ${command}`;
+      proc = pty.spawn('wsl.exe', ['bash', '-lic', wrappedCmd], {
+        name: 'xterm-256color', cols: 80, rows: 24,
+        cwd: sessionCwd(),
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      });
+    }
     proc.onData(data => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pty-output', { id, data });
     });
@@ -878,93 +1117,118 @@ function acpAdapterInstalledVersion() {
     let out = '';
     let done = false;
     const finish = v => { if (!done) { done = true; resolve(v); } };
-    const p = spawn('npm.cmd', ['ls', '-g', ACP_ADAPTER_PKG, '--json', '--depth=0'],
-      { stdio: ['ignore', 'pipe', 'ignore'] });
-    p.stdout.on('data', d => out += d);
-    p.on('close', () => {
-      try { finish(JSON.parse(out).dependencies?.[ACP_ADAPTER_PKG]?.version || null); }
-      catch (_) { finish(null); }
-    });
-    p.on('error', () => finish(null));
-    setTimeout(() => { try { p.kill(); } catch (_) {} finish(null); }, 15000);
+    try {
+      // Run through `cmd.exe /c npm` — Node refuses to spawn a `.cmd` file
+      // directly (throws EINVAL), so never spawn `npm.cmd` itself.
+      const p = spawn('cmd.exe', ['/c', 'npm', 'ls', '-g', ACP_ADAPTER_PKG, '--json', '--depth=0'],
+        { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+      p.stdout.on('data', d => out += d);
+      p.on('close', () => {
+        try { finish(JSON.parse(out).dependencies?.[ACP_ADAPTER_PKG]?.version || null); }
+        catch (_) { finish(null); }
+      });
+      p.on('error', () => finish(null));
+      setTimeout(() => { try { p.kill(); } catch (_) {} finish(null); }, 15000);
+    } catch (_) { finish(null); }   // any spawn failure → treat as "not verified"
   });
 }
 
 const acpSessions      = new Map(); // id → { proc, conn, sessionId }
 const acpTermResolvers = new Map(); // termId  → resolve
 
-async function spawnAcpSession(id, modelOverride = '') {
-  const acp = await requireAcp();
-  const { Readable, Writable } = require('stream');
+// ── Per-agent ACP launch ──────────────────────────────────────────
+// The ACP client/protocol below is agent-agnostic; only *launching* the agent
+// differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
+// Gemini/Codex speak ACP themselves and run inside WSL (bash -lic for the nvm
+// PATH, like the PTY tools). Each launcher returns { proc, version, model }.
+const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
 
-  // ── Ensure the PINNED adapter version (Windows npm, not WSL) ───────
+async function ensureClaudeAdapter(id) {
   let needInstall = false;
   if (!_acpAdapterVerified) {
     const installed = await acpAdapterInstalledVersion();
     if (installed === ACP_ADAPTER_VERSION) _acpAdapterVerified = true;
     else needInstall = true;   // missing OR wrong version → (re)install pinned
   }
+  if (!needInstall) return true;
+  uiSend('acp-installing', { id });
+  const ok = await new Promise(resolve => {
+    // `cmd.exe /c npm` — never spawn `npm.cmd` directly (Node throws EINVAL).
+    const inst = spawn('cmd.exe', ['/c', 'npm', 'install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
+      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    inst.stdout.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
+    inst.stderr.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
+    inst.on('close', code => resolve(code === 0));
+    inst.on('error', () => resolve(false));
+  });
+  if (!ok) { uiSend('acp-error', { id, message: `Failed to install the adapter. Run: npm install -g ${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}` }); return false; }
+  _acpAdapterVerified = true;
+  return true;
+}
 
-  if (needInstall) {
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-installing', { id });
-
-    const ok = await new Promise(resolve => {
-      const inst = spawn(
-        'npm.cmd',
-        ['install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
-        { stdio: ['ignore', 'pipe', 'pipe'] }
-      );
-      inst.stdout.on('data', d => {
-        if (mainWindow && !mainWindow.isDestroyed())
-          mainWindow.webContents.send('acp-install-progress', { id, text: d.toString() });
-      });
-      inst.stderr.on('data', d => {
-        if (mainWindow && !mainWindow.isDestroyed())
-          mainWindow.webContents.send('acp-install-progress', { id, text: d.toString() });
-      });
-      inst.on('close', code => resolve(code === 0));
-      inst.on('error', () => resolve(false));
-    });
-
-    if (!ok) {
-      if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send('acp-error', { id, message: `Failed to install the adapter. Run: npm install -g ${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}` });
-      return;
-    }
-    _acpAdapterVerified = true;
-  }
-
-  // Point the adapter at WSL's ~/.claude so it uses the same OAuth credentials.
-  // wslpath -w returns a Windows UNC path like \\wsl.localhost\Ubuntu\home\hplan\.claude
-  // All three probes run async + parallel — the sync versions froze the UI for
-  // up to ~14s on every ACP spawn and model switch.
+async function launchClaudeAcp(modelOverride) {
+  // Point the adapter at WSL's ~/.claude (same OAuth credentials). Probes run
+  // async + parallel — sync versions froze the UI for ~14s on every spawn.
   const [cfgOut, verOut, setOut] = await Promise.all([
     wslExecFile(['bash', '-lc', 'wslpath -w ~/.claude'], 5000),
     wslExecFile(['bash', '-lc', 'claude --version 2>/dev/null'], 6000),
     wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/settings.json 2>/dev/null'], 3000),
   ]);
   const wslClaudeConfigDir = (cfgOut || '').trim() || null;
-  const acpVersion = (verOut || '').trim().replace(/^Claude\s+Code\s+/i, '').replace(/^v/i, '');
-  let acpModel = '';
-  try { acpModel = JSON.parse(setOut).model || ''; } catch (_) {}
-  if (modelOverride) acpModel = modelOverride;
-  const acpCwd = sessionCwd();
+  const version = (verOut || '').trim().replace(/^Claude\s+Code\s+/i, '').replace(/^v/i, '');
+  let model = '';
+  try { model = JSON.parse(setOut).model || ''; } catch (_) {}
+  if (modelOverride) model = modelOverride;
+  const proc = spawn('cmd.exe', ['/c', 'claude-agent-acp'], {
+    env: {
+      ...process.env,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+      ...(wslClaudeConfigDir ? { CLAUDE_CONFIG_DIR: wslClaudeConfigDir } : {}),
+      ...(modelOverride ? { ANTHROPIC_MODEL: modelOverride } : {}),
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return { proc, version, model };
+}
 
-  // Run adapter on Windows (it was installed to Windows npm, not WSL)
-  const proc = spawn(
-    'cmd.exe',
-    ['/c', 'claude-agent-acp'],
-    {
-      env: {
-        ...process.env,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
-        ...(wslClaudeConfigDir ? { CLAUDE_CONFIG_DIR: wslClaudeConfigDir } : {}),
-        ...(modelOverride ? { ANTHROPIC_MODEL: modelOverride } : {}),
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }
-  );
+// Gemini/Codex speak ACP themselves. They run where they're installed — a real
+// WSL install (bash -lic for the nvm PATH), or a Windows npm install via
+// cmd.exe (the /mnt/c shim can't find node under WSL).
+async function launchAcpAgent(bin, acpArgs, agentKey) {
+  const env = await resolveAgentEnv(bin);
+  if (!env) throw new Error(`${ACP_LABELS[agentKey] || agentKey} not found — install it (e.g. \`npm i -g\`).`);
+  let proc, version = '';
+  if (env === 'win') {
+    version = await winVersion(bin);
+    proc = spawn('cmd.exe', ['/c', bin, ...acpArgs], { stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true });
+  } else {
+    version = ((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').trim().split('\n').filter(Boolean).pop() || '';
+    proc = spawn('wsl.exe', ['bash', '-lic', `${bin} ${acpArgs.join(' ')}`], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
+  }
+  return { proc, version, model: '' };
+}
+
+const ACP_LAUNCH = {
+  claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
+  gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
+  codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
+};
+
+async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
+  const acp = await requireAcp();
+  const { Readable, Writable } = require('stream');
+  const cfg = ACP_LAUNCH[agentKey] || ACP_LAUNCH.claude;
+
+  if (cfg.ensure && !(await cfg.ensure(id))) return;   // ensure() reports its own error
+
+  let proc, acpVersion = '', acpModel = '';
+  try {
+    ({ proc, version: acpVersion, model: acpModel } = await cfg.launch(modelOverride));
+  } catch (err) {
+    uiSend('acp-error', { id, message: `Failed to start ${ACP_LABELS[agentKey] || agentKey}: ${(err && err.message) || err}` });
+    return;
+  }
+  const acpCwd = sessionCwd();
 
   // Accumulate stderr so we can show it if the process dies early
   let stderrBuf = '';
@@ -1037,7 +1301,7 @@ async function spawnAcpSession(id, modelOverride = '') {
   const conn      = new acp.ClientSideConnection(() => client, stream);
 
   const CONNECT_TIMEOUT = 120_000;
-  const timeoutErr = new Error('Adapter did not respond within 120 s — try: npm install -g @agentclientprotocol/claude-agent-acp@0.42.0');
+  const timeoutErr = new Error(`${ACP_LABELS[agentKey] || agentKey} did not respond within 120 s (is its ACP mode available?)`);
   const connectTimer = setTimeout(() => {
     console.error('[acp] connect timeout');
     errorSent = true;
@@ -1055,7 +1319,7 @@ async function spawnAcpSession(id, modelOverride = '') {
     connected = true;
     const entry = { proc, conn, sessionId };
     acpSessions.set(id, entry);
-    send('acp-ready', { id, version: acpVersion, model: acpModel, cwd: acpCwd });
+    send('acp-ready', { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey });
     conn.closed.then(() => {
       // Guard: a model-switch respawn reuses the id — a stale close from the
       // killed session must not delete the replacement (or report it closed).
@@ -1072,8 +1336,8 @@ async function spawnAcpSession(id, modelOverride = '') {
   }
 }
 
-ipcMain.on('acp-spawn', (_, { id, model }) => {
-  spawnAcpSession(id, model || '').catch(err => {
+ipcMain.on('acp-spawn', (_, { id, model, agent }) => {
+  spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
     console.error('[acp] spawn error:', err);
     if (mainWindow && !mainWindow.isDestroyed())
       mainWindow.webContents.send('acp-error', { id, message: err.message });
@@ -1388,6 +1652,44 @@ ipcMain.on('browser-toggle-devtools', () => {
   else openDevToolsPanel();
 });
 
+// ── Device emulation dropdown (Chrome-style) ──────────────────────
+// Native menu (not HTML) because it opens over the browserView, which always
+// composites above HTML. Selecting a device sizes the view to that viewport.
+// d: a named device {name,width,height} → fixed; null / {responsive} → Responsive
+// (fit). `notify` sends device-changed so the renderer reflects/persists it.
+// d: {default:true} → null (clean full-panel browser, no handles);
+// null/{responsive}/nameless → Responsive (fit, with handles); named → device.
+function setEmulation(d, notify = true) {
+  if (d && d.default) deviceEmulation = null;
+  else if (!d || d.responsive || !d.name) deviceEmulation = { name: '', fit: !(d && d.width), width: (d && d.width) || 0, height: (d && d.height) || 0 };
+  else deviceEmulation = { name: d.name, fit: false, width: d.width, height: d.height };
+  repositionBrowserView();
+  if (notify) uiSend('device-changed', { name: deviceEmulation ? deviceEmulation.name : '', default: deviceEmulation === null });
+}
+ipcMain.on('show-device-menu', (_, { x, y, devices, activeName, defaultView }) => {
+  const tpl = [{ label: 'Default view', type: 'checkbox', checked: !!defaultView, click: () => setEmulation({ default: true }) }];
+  tpl.push({ type: 'separator' });
+  tpl.push({ label: 'Responsive', type: 'checkbox', checked: !defaultView && !activeName, click: () => setEmulation({ responsive: true }) });
+  for (const d of (devices || [])) {
+    tpl.push({ label: d.name, type: 'checkbox', checked: d.name === activeName, click: () => setEmulation(d) });
+  }
+  tpl.push({ type: 'separator' });
+  tpl.push({ label: 'Edit…', click: () => uiSend('settings-action', 'edit-devices') });
+  // x is the renderer's right-aligned origin (button right edge − menu width).
+  Menu.buildFromTemplate(tpl).popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
+});
+// Apply a persisted device on startup (renderer drives persistence, so no notify).
+ipcMain.on('set-device', (_, d) => setEmulation(d || null, false));
+
+// Resize-handle drag: hide the view while a ghost frame is dragged, then apply
+// the dragged size as a custom (Responsive) viewport on release.
+ipcMain.on('device-resize-start', () => { resizingDevice = true; repositionBrowserView(); });
+ipcMain.on('device-resize-end', (_, { width, height }) => {
+  resizingDevice = false;
+  if (width > 0 && height > 0) deviceEmulation = { name: '', fit: false, width, height };
+  repositionBrowserView();
+});
+
 // ── IPC: layout ───────────────────────────────────────────────────
 ipcMain.on('split-changed', (_, fraction) => {
   splitFraction = fraction;
@@ -1636,6 +1938,72 @@ ipcMain.handle('code-read', async (_, { rel }) => {
   } catch (e) { return { error: String(e.message || e) }; }
 });
 
+// ── Changes / Diff tab: git working-tree diff ─────────────────────
+// Run git where the project actually lives: WSL git for \\wsl.localhost\…
+// UNC paths, Windows git (git -C) for C:\… paths.
+function gitBase() {
+  const dir = sessionCwd();
+  const m = /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)\\(.*)$/i.exec(dir);
+  if (m) return { bin: 'wsl.exe', prefix: ['-d', m[1], 'git', '-C', '/' + m[2].replace(/\\/g, '/')] };
+  return { bin: 'git', prefix: ['-C', dir] };
+}
+function gitExec(args, { maxBuffer = 8 << 20 } = {}) {
+  const { bin, prefix } = gitBase();
+  return new Promise((resolve) => {
+    execFile(bin, [...prefix, ...args], { windowsHide: true, maxBuffer, encoding: 'utf8' }, (err, stdout, stderr) => {
+      resolve({ failed: !!err, code: err ? err.code : 0, stdout: stdout || '', stderr: stderr || '' });
+    });
+  });
+}
+function looksBinary(s) { return s.indexOf('\u0000') !== -1; }
+
+ipcMain.handle('diff-status', async () => {
+  if (!currentProjectDir) return { ok: false, reason: 'no-folder' };
+  const inside = await gitExec(['rev-parse', '--is-inside-work-tree']);
+  if (inside.failed) return { ok: false, reason: inside.code === 'ENOENT' ? 'no-git' : 'not-git' };
+  const br = await gitExec(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const branch = br.failed ? '' : br.stdout.trim();
+  const st = await gitExec(['-c', 'core.quotepath=false', 'status', '--porcelain=v1', '-uall']);
+  if (st.failed) return { ok: false, reason: 'not-git' };
+
+  const stats = {};
+  const num = await gitExec(['diff', 'HEAD', '--numstat']);
+  if (!num.failed) num.stdout.split('\n').forEach(l => {
+    const m = l.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
+    if (m) stats[m[3]] = { added: m[1] === '-' ? null : +m[1], deleted: m[2] === '-' ? null : +m[2] };
+  });
+
+  const files = [];
+  st.stdout.split('\n').forEach(line => {
+    if (!line.trim()) return;
+    const xy = line.slice(0, 2);
+    let p = line.slice(3);
+    let status;
+    if (xy === '??' || xy.includes('A')) status = 'added';
+    else if (xy.includes('D')) status = 'deleted';
+    else if (xy.includes('R')) { status = 'renamed'; const a = p.split(' -> '); p = a[a.length - 1]; }
+    else status = 'modified';
+    const s = stats[p] || {};
+    files.push({ rel: p, status, added: s.added ?? null, deleted: s.deleted ?? null });
+  });
+  files.sort((a, b) => a.rel.localeCompare(b.rel));
+  return { ok: true, branch, files };
+});
+
+ipcMain.handle('diff-file', async (_, { rel, status }) => {
+  let before = '', after = '';
+  const gitPath = String(rel).replace(/\\/g, '/');
+  if (status !== 'added') {
+    const r = await gitExec(['show', 'HEAD:' + gitPath], { maxBuffer: 16 << 20 });
+    if (!r.failed) before = r.stdout;
+  }
+  if (status !== 'deleted') {
+    try { const f = codeSafeJoin(rel); if (f) after = await fsp.readFile(f, 'utf8'); } catch (_) {}
+  }
+  if (looksBinary(before) || looksBinary(after)) return { binary: true };
+  return { before, after };
+});
+
 // Lightweight mtime probe for live-reload polling. Returns { rel: mtimeMs|null }.
 // File content edits bump the file's mtime; entry add/delete/rename bumps the
 // dir's. Stats run in parallel — over UNC each one is a network round-trip.
@@ -1718,13 +2086,14 @@ ipcMain.on('show-settings-menu', (_, pos) => {
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
 
-ipcMain.on('show-tab-settings-menu', (_, { x, y }) => {
-  const { Menu } = require('electron');
-  const menu = Menu.buildFromTemplate([
-    { label: 'Edit CLAUDE.md',  click: () => mainWindow.webContents.send('settings-action', 'claude-md') },
-    { label: 'Authentication',  click: () => mainWindow.webContents.send('settings-action', 'auth') },
-  ]);
-  menu.popup({ window: mainWindow, x, y });
+ipcMain.on('show-tab-settings-menu', (_, { x, y, agent }) => {
+  const memFile = (AGENT_MEMORY[agent] || {}).file || 'AGENTS.md';
+  const tpl = [
+    { label: `Edit ${memFile}`, click: () => uiSend('edit-agent-memory', agent || 'claude') },
+  ];
+  // The Authentication modal is Claude-OAuth-specific — only meaningful there.
+  if (agent === 'claude') tpl.push({ label: 'Authentication', click: () => uiSend('settings-action', 'auth') });
+  Menu.buildFromTemplate(tpl).popup({ window: mainWindow, x, y });
 });
 
 ipcMain.handle('auth-status-read', async () => {
@@ -1732,13 +2101,42 @@ ipcMain.handle('auth-status-read', async () => {
   try { return JSON.parse(raw); } catch (_) { return null; }
 });
 
-ipcMain.handle('claude-md-read', async () => {
-  const raw = await wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/CLAUDE.md 2>/dev/null'], 5000);
-  return raw || '';
+// ── Per-agent memory file ─────────────────────────────────────────
+// Each agent reads its own instructions file from its config dir; resolve the
+// file + how to reach it (WSL for WSL-installed agents, Windows fs for Windows
+// installs). Unknown agents fall back to the project's AGENTS.md.
+const AGENT_MEMORY = {
+  claude: { dir: '.claude', file: 'CLAUDE.md' },
+  gemini: { dir: '.gemini', file: 'GEMINI.md' },
+  codex:  { dir: '.codex',  file: 'AGENTS.md' },
+};
+async function agentMemoryTarget(agent) {
+  const m = AGENT_MEMORY[agent];
+  if (!m) return { mode: 'fs', path: path.join(sessionCwd(), 'AGENTS.md'), file: 'AGENTS.md' };
+  const runEnv = agent === 'claude' ? 'wsl' : (await resolveAgentEnv(agent)) || 'wsl';
+  if (runEnv === 'win') return { mode: 'fs', path: path.join(homeDir(), m.dir, m.file), file: m.file };
+  return { mode: 'wsl', rel: `~/${m.dir}/${m.file}`, file: m.file };
+}
+
+ipcMain.handle('agent-md-read', async (_, { agent } = {}) => {
+  try {
+    const t = await agentMemoryTarget(agent);
+    if (t.mode === 'fs') { try { return fs.readFileSync(t.path, 'utf8'); } catch (_) { return ''; } }
+    return (await wslExecFile(['-e', 'sh', '-c', `cat ${t.rel} 2>/dev/null`], 5000)) || '';
+  } catch (_) { return ''; }
 });
 
-ipcMain.handle('claude-md-write', async (_, content) => {
-  return wslExecInput(['-e', 'sh', '-c', 'mkdir -p ~/.claude && cat > ~/.claude/CLAUDE.md'], content, 5000);
+ipcMain.handle('agent-md-write', async (_, { agent, content } = {}) => {
+  try {
+    const t = await agentMemoryTarget(agent);
+    if (t.mode === 'fs') {
+      fs.mkdirSync(path.dirname(t.path), { recursive: true });
+      fs.writeFileSync(t.path, content ?? '', 'utf8');
+      return true;
+    }
+    const dir = t.rel.replace(/\/[^/]+$/, '');
+    return wslExecInput(['-e', 'sh', '-c', `mkdir -p ${dir} && cat > ${t.rel}`], content ?? '', 5000);
+  } catch (_) { return false; }
 });
 
 ipcMain.on('show-tabs-context-menu', (_, pos) => {
@@ -1798,8 +2196,8 @@ ipcMain.on('pick-start', async (_, mode) => {
     uiSend('pick-cancelled'); // clear active button state
 
     if (!result) return;
-    const { items, instruction, actions = [] } = result;
-    if (!instruction && items.length === 0 && actions.length === 0) return;
+    const { items, instruction, extracts = [], media = null } = result;
+    if (!instruction && items.length === 0 && extracts.length === 0 && !media) return;
 
     // Phase 3: CSS source refs via CDP (project view only — source maps only meaningful for local dev)
     let cssRefs = [];
@@ -1808,9 +2206,15 @@ ipcMain.on('pick-start', async (_, mode) => {
       cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
     }
 
+    // Phase 3b: media download (folder dialog + write), if requested
+    let mediaSummary = null;
+    if (media && media.dest === 'download' && media.assets.length) {
+      mediaSummary = await downloadMediaAssets(media.assets, view.webContents.session);
+    }
+
     // Phase 4: format source-first and write to PTY
-    const pageUrl = (actions.length > 0) ? view.webContents.getURL() : null;
-    const message = formatSourceMessage({ items, cssRefs, instruction, actions, pageUrl });
+    const pageUrl = (extracts.length > 0 || media) ? view.webContents.getURL() : null;
+    const message = formatSourceMessage({ items, cssRefs, instruction, extracts, media, mediaSummary, pageUrl });
     uiSend('pick-send-to-session', message);
 
   } catch (err) {
@@ -1938,6 +2342,77 @@ ipcMain.on('pick-resize', async () => {
   }
 });
 
+// ── IPC: eyedropper ───────────────────────────────────────────────
+ipcMain.on('pick-eyedropper', async () => {
+  const view = getActivePickView();
+  if (!view) { uiSend('pick-cancelled'); return; }
+  try {
+    // Snapshot the rendered viewport so the loupe can sample exact pixels.
+    const image = await view.webContents.capturePage();
+    const result = await view.webContents.executeJavaScript(getEyedropperScript(image.toDataURL()));
+    uiSend('pick-cancelled');
+    if (!result) return;
+
+    const { selector, property, fromColor, toColor, changed, pickedColor, instruction } = result;
+    let msg;
+    if (changed) {
+      const lines = [
+        '───── Color Change Request ─────',
+        'Selector: ' + selector,
+        '  ' + property + ': ' + fromColor + '  →  ' + toColor,
+      ];
+      if (instruction) lines.push('', 'Additional instructions: ' + instruction);
+      const what = property === 'box-shadow' ? "box-shadow's color" : property;
+      lines.push('', "Update the CSS so this element's " + what + ' is ' + toColor + '.');
+      msg = lines.join('\n');
+    } else {
+      const lines = [
+        '───── Color ─────',
+        'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.',
+      ];
+      if (instruction) lines.push('', instruction);
+      msg = lines.join('\n');
+    }
+    uiSend('pick-send-to-session', msg);
+  } catch (err) {
+    console.error('Eyedropper error:', err);
+    uiSend('pick-cancelled');
+  }
+});
+
+// ── IPC: accessibility / contrast checker ─────────────────────────
+ipcMain.on('pick-a11y', async () => {
+  const view = getActivePickView();
+  if (!view) { uiSend('pick-cancelled'); return; }
+  try {
+    const result = await view.webContents.executeJavaScript(getA11yScript());
+    uiSend('pick-cancelled');
+    if (!result || !result.issues || !result.issues.length) return;
+
+    const groups = {};
+    for (const it of result.issues) (groups[it.category] = groups[it.category] || []).push(it);
+    const lines = ['───── Accessibility Audit ─────', `${result.total} issue${result.total === 1 ? '' : 's'} to fix on ${result.url}`];
+    for (const cat of Object.keys(groups)) {
+      lines.push('', `${cat.toUpperCase()} (${groups[cat].length})`);
+      for (const it of groups[cat]) {
+        lines.push(`• ${it.selector}${it.detail ? ' — ' + it.detail : ''}`);
+        if (it.toText) {
+          const parts = [];
+          if (it.toText !== it.fromText) parts.push(`text ${it.fromText} → ${it.toText}`);
+          if (it.toBg   !== it.fromBg)   parts.push(`background ${it.fromBg} → ${it.toBg}`);
+          if (parts.length) lines.push(`    suggested: ${parts.join(', ')}`);
+        }
+        if (it.instruction) lines.push(`    note: ${it.instruction}`);
+      }
+    }
+    lines.push('', 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.');
+    uiSend('pick-send-to-session', lines.join('\n'));
+  } catch (err) {
+    console.error('A11y check error:', err);
+    uiSend('pick-cancelled');
+  }
+});
+
 // ── Component picker window ───────────────────────────────────────
 let pickerWindow = null;
 
@@ -2061,37 +2536,147 @@ ipcMain.on('pick-component', async () => {
 });
 
 // ── Source-first message formatter ───────────────────────────────
-function formatSourceMessage({ items, cssRefs, instruction, actions = [], pageUrl = null }) {
-  // ── AI Developer mode: browser-tool-aware format ──────────────────
-  if (actions.length > 0) {
-    const lines = [];
-    lines.push('Use your browser tools to perform the following tasks on the live page.');
-    lines.push('');
+// ── Media download (Extract tool) ─────────────────────────────────
+// Bytes are fetched main-side via Electron net (no page CORS; carries the
+// view's session cookies). inline SVG / data: / blob-b64 are written directly.
+function netFetch(url, session) {
+  return new Promise((resolve, reject) => {
+    let req;
+    try { req = net.request({ url, session }); } catch (e) { return reject(e); }
+    req.on('response', res => {
+      if (res.statusCode >= 400) { req.abort(); return reject(new Error('HTTP ' + res.statusCode)); }
+      const chunks = []; let size = 0;
+      res.on('data', c => {
+        size += c.length;
+        if (size > 60 * 1024 * 1024) { req.abort(); return reject(new Error('too large (>60MB)')); }
+        chunks.push(c);
+      });
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
-    if (pageUrl) lines.push(`Page: ${pageUrl}`);
+function sanitizeFilename(name) {
+  let n = String(name || 'asset').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/^\.+/, '').slice(0, 120);
+  return n || 'asset';
+}
+function uniquePath(dir, name) {
+  let fp = path.join(dir, name);
+  if (!fs.existsSync(fp)) return fp;
+  const ext = path.extname(name), base = path.basename(name, ext);
+  for (let i = 1; i < 1000; i++) { fp = path.join(dir, `${base}-${i}${ext}`); if (!fs.existsSync(fp)) return fp; }
+  return path.join(dir, `${base}-${Date.now()}${ext}`);
+}
 
-    if (items.length > 0) {
-      lines.push('');
-      lines.push('Targeted element(s):');
-      for (const item of items) {
-        const selector = item.cssSelector || item.label;
-        const display  = item.reactComponent ? `${item.reactComponent} (${selector})` : selector;
-        lines.push(`  • ${display}`);
-        if (item.debugSource) {
-          lines.push(`    source: ${shortPath(item.debugSource.file)}:${item.debugSource.line}`);
-        }
-        if (item.selectedCSS && item.selectedCSS.length > 0) {
-          for (const css of item.selectedCSS) lines.push(`    ${css}`);
-        }
+async function downloadMediaAssets(assets, session) {
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose a folder to save the extracted media',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  const dir = filePaths && filePaths[0];
+  if (!dir) return { cancelled: true };
+  const written = [], failed = [];
+  for (const a of assets) {
+    const name = sanitizeFilename(a.name);
+    try {
+      let buf;
+      if (a.inline)            buf = Buffer.from(a.inline, 'utf8');           // inline <svg>
+      else if (a.b64)          buf = Buffer.from(a.b64, 'base64');           // resolved blob:
+      else if (a.fetchError)   { failed.push(`${name} (${a.fetchError})`); continue; }
+      else if (!a.url)         { failed.push(`${name} (no source)`); continue; }
+      else if (a.url.startsWith('data:')) {
+        const comma = a.url.indexOf(',');
+        buf = /;base64/i.test(a.url.slice(0, comma)) ? Buffer.from(a.url.slice(comma + 1), 'base64')
+                                                     : Buffer.from(decodeURIComponent(a.url.slice(comma + 1)), 'utf8');
+      } else {
+        buf = await netFetch(a.url, session);
       }
+      const fp = uniquePath(dir, name);
+      fs.writeFileSync(fp, buf);
+      written.push(path.basename(fp));
+    } catch (e) { failed.push(`${name} (${String(e.message || e)})`); }
+  }
+  return { dir, written, failed };
+}
+
+// Render one extractor's data as compact text for the agent message.
+function renderExtract(key, data) {
+  if (data == null) return '(no data)';
+  if (typeof data === 'string') return data || '(empty)';
+  if (data.error) return `(extraction failed: ${data.error})`;
+  if (Array.isArray(data) && data.length === 0) return '(none found)';
+  switch (key) {
+    case 'styles':
+      return data.map(e => `${e.selector} {\n` + Object.entries(e.props).map(([k, v]) => `  ${k}: ${v};`).join('\n') + '\n}').join('\n\n');
+    case 'palette':
+      return data.map(c => `${c.hex}   ×${c.count}`).join('\n');
+    case 'spacing':
+      return data.map(s => `${s.value}   ×${s.count}`).join('\n');
+    case 'typography':
+      return data.map(t => `${t.size}/${t.lineHeight}  ${t.weight}  ${t.family}`
+        + (t.letterSpacing && t.letterSpacing !== 'normal' ? `  ls:${t.letterSpacing}` : '')
+        + (t.textTransform && t.textTransform !== 'none' ? `  ${t.textTransform}` : '')
+        + `   ×${t.count}`).join('\n');
+    case 'tokens':
+      return data.map(t => `${t.name}: ${t.value}`).join('\n');
+    case 'text':
+      return data.map(t => `<${t.tag}> ${t.text}`).join('\n');
+    default:
+      try { return JSON.stringify(data, null, 2); } catch (_) { return String(data); }
+  }
+}
+
+function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media = null, mediaSummary = null, pageUrl = null }) {
+  // ── Extract mode: the app already read the live page; hand the agent the
+  // actual data / downloaded files (it should NOT re-fetch — this is the
+  // current DOM).
+  if (extracts.length > 0 || media) {
+    const lines = [];
+    lines.push('I used the Extract tool on the live page in the app. Everything below is the actual current DOM/styles/assets of what I selected — use it directly; do not re-open or re-fetch the page.');
+    lines.push('');
+    if (pageUrl) lines.push(`Page: ${pageUrl}`);
+    if (items.length > 0) {
+      const sel = items.map(it => it.reactComponent ? `${it.reactComponent} (${it.cssSelector || it.label})` : (it.cssSelector || it.label)).join(', ');
+      lines.push(`Selection: ${sel}`);
     }
 
-    lines.push('');
-    lines.push('Tasks:');
-    actions.forEach(({ label, instruction: inst }, i) => {
-      lines.push(`${i + 1}. ${label}`);
-      lines.push(`   ${inst}`);
-    });
+    for (const ex of extracts) {
+      lines.push('');
+      lines.push(`## ${ex.label}`);
+      if (ex.analysis) lines.push(ex.analysis);
+      lines.push('```');
+      lines.push(renderExtract(ex.key, ex.data));
+      lines.push('```');
+    }
+
+    if (media) {
+      lines.push('');
+      lines.push(`## Media (${media.types.join(', ')})`);
+      if (media.dest === 'download') {
+        if (mediaSummary?.cancelled) {
+          lines.push('(download cancelled — no folder chosen)');
+        } else if (mediaSummary) {
+          if (mediaSummary.written.length)
+            lines.push(`Downloaded ${mediaSummary.written.length} file(s) to ${mediaSummary.dir}:\n` + mediaSummary.written.map(f => `  • ${f}`).join('\n'));
+          if (mediaSummary.failed && mediaSummary.failed.length)
+            lines.push(`Could not download:\n` + mediaSummary.failed.map(f => `  • ${f}`).join('\n'));
+          if (!mediaSummary.written.length && !(mediaSummary.failed || []).length)
+            lines.push('(no media found in the selection)');
+        }
+      } else {
+        // Send-to-chat: hand the agent the asset references to act on.
+        if (!media.assets.length) lines.push('(no media found in the selection)');
+        else lines.push('```\n' + media.assets.map(a => {
+          if (a.kind === 'svg' && a.inline) return `[svg] inline${a.title ? ' "' + a.title + '"' : ''}${a.viewBox ? ' viewBox=' + a.viewBox : ''}`;
+          const dims = a.w ? `  ${a.w}×${a.h}` : '';
+          const flags = [a.broken ? 'BROKEN' : '', a.hasAlt === false ? 'no-alt' : '', a.loading === 'lazy' ? 'lazy' : ''].filter(Boolean).join(' ');
+          return `[${a.kind}] ${a.url}${dims}${flags ? '  (' + flags + ')' : ''}`;
+        }).join('\n') + '\n```');
+      }
+    }
 
     if (instruction) {
       lines.push('');
@@ -2222,10 +2807,12 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+  startSysPerf();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
 app.on('window-all-closed', () => {
   Object.values(ptyProcesses).forEach(p => { try { p.kill(); } catch (_) {} });
+  if (_gpuProc) { try { _gpuProc.kill(); } catch (_) {} }
   if (process.platform !== 'darwin') app.quit();
 });

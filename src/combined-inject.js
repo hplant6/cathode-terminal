@@ -372,7 +372,227 @@ function cathodeCombinedPage(OPTS) {
       });
     }
 
-    function sendResult() {
+    // ── Inspect/Extract: the APP reads the live page and hands the agent
+    // structured data — no parallel/agent-owned browser involved. Each entry
+    // runs in the real page over the user's selection. ─────────────────────
+    function _xRoots() { return items.map(it => it.el).filter(Boolean); }
+    function _xNodes(cap) {
+      const seen = new Set();
+      for (const r of _xRoots()) {
+        seen.add(r);
+        for (const k of r.querySelectorAll('*')) { if (seen.size >= cap) break; seen.add(k); }
+        if (seen.size >= cap) break;
+      }
+      return [...seen];
+    }
+    function _xHex(c) {
+      const m = c && c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return (c || '').trim();
+      const p = m[1].split(',').map(s => parseFloat(s));
+      if (p.length < 3) return c;
+      if (p.length === 4 && p[3] === 0) return 'transparent';
+      const h = n => ('0' + Math.round(n).toString(16)).slice(-2);
+      const hex = '#' + h(p[0]) + h(p[1]) + h(p[2]);
+      return (p.length === 4 && p[3] < 1) ? hex + ' (' + p[3] + 'a)' : hex;
+    }
+    const EXTRACTORS = {
+      // "Extract the styling of this button so we can make something similar"
+      styles() {
+        return items.filter(it => it.el).map(it => {
+          const cs = getComputedStyle(it.el);
+          const props = {};
+          for (const name of CSS_PROPS) {
+            const v = (cs.getPropertyValue(name) || '').trim();
+            if (!v || v === 'rgba(0, 0, 0, 0)') continue;
+            if (/^(padding|margin)/.test(name) && v === '0px') continue;
+            props[name] = v;
+          }
+          return { selector: it.cssSelector || it.label, props };
+        });
+      },
+      palette() {
+        const PROPS = ['color','background-color','border-top-color','border-right-color','border-bottom-color','border-left-color','outline-color','text-decoration-color','fill','stroke'];
+        const counts = {};
+        const bump = hex => { if (hex && hex !== 'transparent' && hex !== 'none') counts[hex] = (counts[hex] || 0) + 1; };
+        for (const el of _xNodes(4000)) {
+          const cs = getComputedStyle(el);
+          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v) bump(_xHex(v)); }
+          for (const p of ['box-shadow','background-image']) {
+            (cs.getPropertyValue(p).match(/rgba?\([^)]+\)/g) || []).forEach(c => bump(_xHex(c)));
+          }
+        }
+        return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([hex,count]) => ({ hex, count }));
+      },
+      typography() {
+        const combos = {};
+        for (const el of _xNodes(4000)) {
+          if (!el.textContent || !el.textContent.trim()) continue;
+          const cs = getComputedStyle(el);
+          const key = [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.letterSpacing, cs.textTransform, cs.fontFamily].join('|');
+          combos[key] = (combos[key] || 0) + 1;
+        }
+        return Object.entries(combos).sort((a,b) => b[1]-a[1]).slice(0, 40).map(([k,count]) => {
+          const [size,lineHeight,weight,letterSpacing,textTransform,family] = k.split('|');
+          return { size, lineHeight, weight, letterSpacing, textTransform, family, count };
+        });
+      },
+      spacing() {
+        const PROPS = ['margin-top','margin-right','margin-bottom','margin-left','padding-top','padding-right','padding-bottom','padding-left','gap','row-gap','column-gap'];
+        const vals = {};
+        for (const el of _xNodes(4000)) {
+          const cs = getComputedStyle(el);
+          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v && v !== '0px' && v !== 'normal') vals[v] = (vals[v] || 0) + 1; }
+        }
+        return Object.entries(vals).sort((a,b) => parseFloat(a[0]) - parseFloat(b[0])).map(([value,count]) => ({ value, count }));
+      },
+      tokens() {
+        const names = new Set();
+        try {
+          for (const sheet of document.styleSheets) {
+            let rules; try { rules = sheet.cssRules; } catch (_) { continue; }
+            for (const rule of rules) {
+              if (rule.style) for (const prop of rule.style) if (prop.startsWith('--')) names.add(prop);
+              if (names.size >= 400) break;
+            }
+            if (names.size >= 400) break;
+          }
+        } catch (_) {}
+        const rootCS = getComputedStyle(document.documentElement);
+        const out = [];
+        for (const name of names) { const v = rootCS.getPropertyValue(name).trim(); if (v) out.push({ name, value: v }); }
+        return out.sort((a,b) => a.name.localeCompare(b.name));
+      },
+      dom() {
+        const el = _xRoots()[0];
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('[id^="__cathode"]').forEach(n => n.remove());
+        let html = clone.outerHTML || '';
+        if (html.length > 6000) html = html.slice(0, 6000) + '\n…(truncated)';
+        return html;
+      },
+      text() {
+        const out = [];
+        for (const root of _xRoots()) {
+          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walk.nextNode())) {
+            const t = n.textContent.trim();
+            if (!t) continue;
+            const parent = n.parentElement;
+            if (!parent) continue;
+            const cs = getComputedStyle(parent);
+            if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+            out.push({ tag: parent.tagName.toLowerCase(), text: t.slice(0, 200) });
+            if (out.length >= 200) return out;
+          }
+        }
+        return out;
+      },
+      forms() {
+        const fields = [];
+        for (const root of _xRoots()) {
+          const list = root.matches && root.matches('input,select,textarea') ? [root] : [];
+          root.querySelectorAll('input,select,textarea').forEach(e => list.push(e));
+          for (const f of list) {
+            const labelled = !!(f.labels && f.labels.length) || !!f.getAttribute('aria-label') || !!f.getAttribute('aria-labelledby');
+            fields.push({
+              tag: f.tagName.toLowerCase(), type: f.type || '', name: f.name || '', id: f.id || '',
+              required: !!f.required, disabled: !!f.disabled,
+              placeholder: f.placeholder || '', pattern: f.getAttribute('pattern') || '', hasLabel: labelled,
+            });
+            if (fields.length >= 100) return fields;
+          }
+        }
+        return fields;
+      },
+      a11y() {
+        const out = [];
+        const INTERACTIVE = new Set(['a','button','input','select','textarea']);
+        for (const el of _xNodes(2000)) {
+          const tag = el.tagName.toLowerCase();
+          const role = el.getAttribute('role');
+          const tabindex = el.getAttribute('tabindex');
+          const aria = {};
+          for (const at of el.attributes) if (at.name.startsWith('aria-')) aria[at.name] = at.value;
+          const interactive = INTERACTIVE.has(tag) || role === 'button' || role === 'link' || tabindex === '0';
+          if (!interactive && !role && Object.keys(aria).length === 0 && tabindex === null) continue;
+          const name = el.getAttribute('aria-label')
+            || (el.labels && el.labels.length ? el.labels[0].textContent.trim() : '')
+            || (interactive ? (el.textContent || '').trim().slice(0, 40) : '');
+          out.push({ tag, role: role || '', name, tabindex: tabindex, aria, missingName: interactive && !name });
+          if (out.length >= 150) break;
+        }
+        return out;
+      },
+    };
+
+    // ── Media collection (images / videos / svgs) ────────────────────
+    function _xName(url, fallbackBase, ext) {
+      try {
+        const u = new URL(url, location.href);
+        let base = (u.pathname.split('/').pop() || '').split('?')[0];
+        if (base && /\.[a-z0-9]{2,5}$/i.test(base)) return base;
+        if (base) return base + ext;
+      } catch (_) {}
+      return fallbackBase + '-' + Math.random().toString(36).slice(2, 7) + ext;
+    }
+    function collectMedia(types) {
+      const assets = [];
+      const seen = new Set();
+      const add = a => { const k = a.inline || a.url; if (k && !seen.has(k)) { seen.add(k); assets.push(a); } };
+      for (const root of _xRoots()) {
+        if (types.includes('images')) {
+          const list = root.matches && root.matches('img') ? [root] : [];
+          root.querySelectorAll('img').forEach(i => list.push(i));
+          for (const img of list) {
+            const url = img.currentSrc || img.src;
+            if (url) add({ kind: 'image', url, name: _xName(url, 'image', '.png'),
+              alt: img.getAttribute('alt'), hasAlt: img.hasAttribute('alt'),
+              w: img.naturalWidth, h: img.naturalHeight,
+              loading: img.loading || 'eager', broken: !!(img.complete && img.naturalWidth === 0) });
+            if (assets.length >= 120) return assets;
+          }
+          for (const el of _xNodes(2000)) {
+            const m = (getComputedStyle(el).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
+            if (m && !m[1].startsWith('data:')) add({ kind: 'image', url: m[1], name: _xName(m[1], 'bg', '.png'), source: 'css-background' });
+          }
+        }
+        if (types.includes('svgs')) {
+          const list = root.matches && root.matches('svg') ? [root] : [];
+          root.querySelectorAll('svg').forEach(s => list.push(s));
+          list.forEach(s => add({ kind: 'svg', inline: s.outerHTML, name: 'icon-' + (assets.length + 1) + '.svg',
+            viewBox: s.getAttribute('viewBox') || '', title: (s.querySelector('title') && s.querySelector('title').textContent) || (s.getAttribute('aria-label') || '') }));
+          root.querySelectorAll('img[src$=".svg"]').forEach(i => { if (i.src) add({ kind: 'svg', url: i.src, name: _xName(i.src, 'icon', '.svg') }); });
+        }
+        if (types.includes('videos')) {
+          const list = root.matches && root.matches('video') ? [root] : [];
+          root.querySelectorAll('video').forEach(v => list.push(v));
+          for (const v of list) {
+            const src = v.currentSrc || v.src || (v.querySelector('source') && v.querySelector('source').src);
+            if (src) add({ kind: 'video', url: src, name: _xName(src, 'video', '.mp4') });
+            if (v.poster) add({ kind: 'image', url: v.poster, name: _xName(v.poster, 'poster', '.jpg'), source: 'video-poster' });
+          }
+        }
+      }
+      return assets;
+    }
+    // Only blob: URLs must be resolved in-page (main can't fetch them); http(s)
+    // and data: are downloaded main-side (no CORS, carries the page session).
+    async function resolveBlobAssets(assets) {
+      for (const a of assets) {
+        if (a.url && a.url.startsWith('blob:')) {
+          try {
+            const blob = await (await fetch(a.url)).blob();
+            a.mime = blob.type || '';
+            a.b64 = await new Promise(r => { const fr = new FileReader(); fr.onloadend = () => r((fr.result || '').toString().split(',')[1] || ''); fr.readAsDataURL(blob); });
+            delete a.url;
+          } catch (e) { a.fetchError = String((e && e.message) || e); }
+        }
+      }
+    }
+
+    async function sendResult() {
       const ta = shadow.querySelector('textarea');
       const instruction = ta ? ta.value.trim() : '';
       const resultItems = items.map(({ label, cssSelector, reactComponent, tag, debugSource, cssProps }, i) => {
@@ -388,8 +608,29 @@ function cathodeCombinedPage(OPTS) {
           });
         return { label, cssSelector, reactComponent, tag, debugSource, selectedCSS };
       });
-      const actions = aiDevMode ? Array.from(shadow.querySelectorAll('.aidev-cb:checked')).map(cb => ({ label: cb.nextElementSibling?.textContent || '', instruction: cb.dataset.instruction || '' })) : [];
-      done({ items: resultItems, instruction, actions });
+      // Extract mode: run the selected extractors / collect media in-page NOW
+      // (while we still hold live element refs) and return the actual data.
+      const extracts = [];
+      let media = null;
+      if (aiDevMode) {
+        shadow.querySelectorAll('.aidev-cb[data-extract]:checked').forEach(cb => {
+          const key = cb.dataset.extract;
+          const label = (cb.nextElementSibling && cb.nextElementSibling.textContent) || key;
+          const analysis = cb.dataset.instruction || '';
+          let data = null;
+          try { data = EXTRACTORS[key] ? EXTRACTORS[key]() : null; }
+          catch (e) { data = { error: String((e && e.message) || e) }; }
+          extracts.push({ key, label, analysis, data });
+        });
+        const types = [...shadow.querySelectorAll('.media-cb:checked')].map(cb => cb.dataset.media);
+        if (types.length) {
+          const dest = shadow.querySelector('.media-seg-btn.active')?.dataset.dest || 'chat';
+          const assets = collectMedia(types);
+          if (dest === 'download') await resolveBlobAssets(assets);
+          media = { dest, types, assets };
+        }
+      }
+      done({ items: resultItems, instruction, extracts, media });
     }
 
     function build() {
@@ -580,41 +821,40 @@ function cathodeCombinedPage(OPTS) {
           }
           .send-btn:hover { color: #aaa; }
           .actions-wrap { border-bottom: 1px solid #1c1c1c; padding-bottom: 4px; }
-          .actions-search {
-            display: block; width: calc(100% - 32px);
-            margin: 6px 16px 4px; padding: 5px 8px;
-            background: #111; border: 1px solid #252525; border-radius: 4px;
-            color: #aaa; font-size: 11px; outline: none; box-sizing: border-box;
-            font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
-          }
-          .actions-search::placeholder { color: #333; }
-          .actions-search:focus { border-color: #333; }
           .actions-scroll {
             max-height: 180px; overflow-y: auto; padding: 2px 0 4px;
           }
           .actions-scroll::-webkit-scrollbar { width: 4px; }
           .actions-scroll::-webkit-scrollbar-track { background: transparent; }
           .actions-scroll::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
-          .action-drawer-header {
-            display: flex; align-items: center; justify-content: space-between;
-            font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
-            font-size: 9px; font-weight: 700; letter-spacing: 0.14em;
-            text-transform: uppercase; color: #444;
-            padding: 8px 16px 4px; cursor: pointer; user-select: none;
-          }
-          .action-drawer-header:hover { color: #666; }
-          .drawer-chevron {
-            width: 10px; height: 10px; flex-shrink: 0;
-            transition: transform 0.15s; transform: rotate(-90deg);
-          }
-          .action-drawer-header.open .drawer-chevron { transform: rotate(0deg); }
-          .action-drawer-body { overflow: hidden; }
-          .action-drawer-body.collapsed { display: none; }
-          .action-row { display: flex; align-items: center; gap: 8px; padding: 4px 16px; cursor: pointer; }
+          .action-row { display: flex; align-items: center; gap: 8px; padding: 5px 16px; cursor: pointer; }
           .action-row:hover { background: #111; }
           .aidev-cb { accent-color: #4a9eff; cursor: pointer; flex-shrink: 0; }
           .action-label { font-size: 12px; color: #666; cursor: pointer; user-select: none; }
           .action-row:hover .action-label { color: #aaa; }
+          .ax-group { padding-bottom: 4px; }
+          .ax-group + .ax-group { border-top: 1px solid #161616; margin-top: 2px; }
+          .ax-group-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 16px 4px;
+          }
+          .ax-group-title {
+            font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
+            font-size: 9px; font-weight: 700; letter-spacing: 0.14em;
+            text-transform: uppercase; color: #555;
+          }
+          .ax-group-note { font-size: 9px; color: #3a3a3a; font-family: system-ui,-apple-system,'Segoe UI',sans-serif; }
+          .media-dest { padding: 6px 16px 8px; }
+          .media-seg { display: flex; width: 100%; background: #111; border: 1px solid #222; border-radius: 6px; padding: 2px; gap: 2px; }
+          .media-seg-btn {
+            flex: 1; height: 28px;
+            background: transparent; border: none; color: #888;
+            font-size: 11.5px; font-weight: 600; border-radius: 5px;
+            cursor: pointer; font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
+            pointer-events: all; transition: background 0.12s, color 0.12s;
+          }
+          .media-seg-btn:hover { color: #bbb; }
+          .media-seg-btn.active { background: rgba(74,158,255,0.16); color: #4a9eff; box-shadow: inset 0 0 0 1px rgba(74,158,255,0.4); }
           .action-tip {
             position: fixed; z-index: 2147483646;
             max-width: 270px; padding: 9px 11px;
@@ -645,72 +885,33 @@ function cathodeCombinedPage(OPTS) {
           <div class="el-list">${drawerRows}</div>
           <div class="divider"></div>
           ${aiDevMode ? `
-          <div class="inst-title">Actions to Perform</div>
+          <div class="inst-title">Extract</div>
           <div class="actions-wrap">
-            <input class="actions-search" type="text" placeholder="Search actions...">
             <div class="actions-scroll" id="__aidev_actions__">
-            <div class="action-drawer">
-            <div class="action-drawer-header"><span>Inspect &amp; Audit</span><svg class="drawer-chevron" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"></polyline></svg></div>
-            <div class="action-drawer-body collapsed">
-            <label class="action-row" data-keywords="css computed styles properties inspect appearance look"><input class="aidev-cb" type="checkbox" data-instruction="Check the styles for the selected component."><span class="action-label">Check Styles</span></label>
-            <label class="action-row" data-keywords="text readable legible clipped overflow wrap truncate ellipsis contrast"><input class="aidev-cb" type="checkbox" data-instruction="Check if the selected element has visible text content that is clipped, overflows its container, triggers an unexpected multi-line wrap, or is using a color that is unreadable against the background."><span class="action-label">Text Readability</span></label>
-            <label class="action-row" data-keywords="contrast wcag accessibility a11y ratio color colour aa legible"><input class="aidev-cb" type="checkbox" data-instruction="For the targeted element/area, calculate the contrast ratio and ensure nothing fails the WCAG AA 4.5:1 standard."><span class="action-label">Color Contrast</span></label>
-            <label class="action-row" data-keywords="design tokens variables css custom properties theme theming consistency"><input class="aidev-cb" type="checkbox" data-instruction="Extract the selected element's computed CSS properties and ensure it is using proper design tokens."><span class="action-label">Verify Design Tokens</span></label>
-            <label class="action-row" data-keywords="keyboard tab focus a11y accessibility navigation enter space reachable"><input class="aidev-cb" type="checkbox" data-instruction="Verify keyboard events for the targeted element — ensure it is reachable via Tab, activatable via Enter/Space, and that focus is visually indicated."><span class="action-label">Keyboard Navigation</span></label>
-            <label class="action-row" data-keywords="form error validation input field message invalid required state"><input class="aidev-cb" type="checkbox" data-instruction="Check the error states of the targeted input field or interactive element — verify error messages appear correctly, are accessible, and the field is styled appropriately on error."><span class="action-label">Verify Form Error States</span></label>
-            <label class="action-row" data-keywords="z-index zindex stacking layer overlap hidden behind covered visibility"><input class="aidev-cb" type="checkbox" data-instruction="Inspect the computed z-index of the targeted element and check if it is being incorrectly hidden or overlapped by another element."><span class="action-label">Z-index Visibility</span></label>
-
-            </div></div>
-            <div class="action-drawer">
-            <div class="action-drawer-header"><span>Interact</span><svg class="drawer-chevron" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"></polyline></svg></div>
-            <div class="action-drawer-body collapsed">
-            <label class="action-row" data-keywords="hover focus state pointer mouse keyboard tab interaction"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, hover over the targeted element and take a screenshot to capture its hover state. Then focus it via keyboard Tab and capture the focus state. Report any missing, unexpected, or inaccessible visual changes."><span class="action-label">Hover &amp; Focus States</span></label>
-            <label class="action-row" data-keywords="scroll overflow scrollbar bottom top sticky lazy"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, scroll the targeted element or area to its absolute bottom, take a screenshot, then scroll back to the absolute top and take another screenshot. Report any overflow issues, missing scroll indicators, or content cut-off."><span class="action-label">Scroll</span></label>
-            <label class="action-row" data-keywords="input form field type text validation submit entry typing"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, locate input fields within the targeted element or area. Type sample text to observe the active state, clear the field to observe the static/empty state, then trigger validation (submit or blur) to observe the error state. Screenshot each state and report any styling or accessibility issues."><span class="action-label">Input &amp; Forms</span></label>
-            <label class="action-row" data-keywords="dropdown menu select combobox popover flyout open close"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, click any dropdown or menu trigger within the targeted element or area. Check and screenshot the open state for readability, z-index layering, color contrast, and alignment issues. Also verify the menu closes correctly on outside click or Escape."><span class="action-label">Dropdown &amp; Menus</span></label>
-            <label class="action-row" data-keywords="link anchor href navigation url target blank broken dead"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, find all anchor links within the targeted element or area. For each link, check the href value, whether it opens in the same tab (_self) or a new tab (_blank), and navigate to verify the destination is correct and not broken. Report any dead links or unexpected target behavior."><span class="action-label">Verify Links</span></label>
-            <label class="action-row" data-keywords="refresh reload page persistence reset load reflow"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, take a screenshot of the targeted element or area before refreshing the page. Refresh the page, wait for load to complete, then take another screenshot of the same area. Compare the before and after states and report any elements that failed to load, shifted position, or changed unexpectedly."><span class="action-label">Page Refreshing</span></label>
-            <label class="action-row" data-keywords="tab tabs tabpanel switch active panel segment"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, find all tab elements within the targeted area. Click each tab one by one, taking a screenshot after each click to capture the active state. Also check the static (unselected), inactive (disabled if any), and focus states. Report any styling inconsistencies, missing states, or accessibility issues."><span class="action-label">Tabs</span></label>
-            <label class="action-row" data-keywords="video media play playback autoplay controls audio mute"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, locate any video elements within the targeted area. Check whether the video is autoplaying when it should not (or failing to autoplay when it should). Observe and screenshot the playback controls. Check if the video source is loading correctly or if the element shows a broken/missing state. Report all findings."><span class="action-label">Video &amp; Playback</span></label>
-            <label class="action-row" data-keywords="drag drop dnd sortable reorder move draggable"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, locate any draggable elements within the targeted area. Attempt to drag an item and drop it onto a valid target. Take screenshots before, during (if possible), and after the drag operation. Verify the drop registers correctly, the UI updates as expected, and report any broken drag handles, missing drop zones, or incorrect state after drop."><span class="action-label">Drag &amp; Drop</span></label>
-            <label class="action-row" data-keywords="modal dialog popup overlay lightbox focus trap backdrop escape"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, trigger any modal or dialog within the targeted area. Screenshot the open state and verify: content is readable, focus is trapped inside (Tab cycles within the modal), the backdrop dismisses on click, and Escape closes it. Then close the modal and verify focus returns to the trigger element. Report any issues with focus management, z-index, or missing close behavior."><span class="action-label">Modal &amp; Dialog</span></label>
-            <label class="action-row" data-keywords="responsive resize breakpoint mobile tablet desktop viewport rwd media query"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, resize the browser viewport to 375px (mobile), 768px (tablet), and 1280px (desktop) widths. Take a screenshot of the targeted element at each breakpoint. Report any layout breaks, overflowing content, elements that overlap, text that becomes unreadable, or interactions that stop working at smaller sizes."><span class="action-label">Resize / Responsive</span></label>
-            <label class="action-row" data-keywords="copy clipboard paste button toast"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, locate any copy-to-clipboard buttons or interactions within the targeted area. Click each one and verify via browser console or page feedback (toast, tooltip, button state change) that the copy action triggered. Where possible, paste the clipboard content to confirm the correct value was copied. Report any buttons that fail silently or copy incorrect content."><span class="action-label">Copy to Clipboard</span></label>
-            <label class="action-row" data-keywords="animation transition motion transform keyframe jank fade slide easing"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, trigger any CSS animations or transitions on the targeted element (hover, click, page load). Take screenshots before and after the transition. Check that transitions complete smoothly without flickering, layout shift, or paint artifacts. Verify animation duration feels appropriate and that no elements are left in a broken mid-animation state. Report any jank, unexpected movement, or missing transitions."><span class="action-label">Animation &amp; Transitions</span></label>
-
-            </div></div>
-            <div class="action-drawer">
-            <div class="action-drawer-header"><span>Inject &amp; Script</span><svg class="drawer-chevron" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"></polyline></svg></div>
-            <div class="action-drawer-body collapsed">
-            <label class="action-row" data-keywords="accessibility a11y audit axe wcag violations aria contrast scan"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, inject the axe-core accessibility library (https://cdnjs.cloudflare.com/ajax/libs/axe-core/4.9.1/axe.min.js) via page.evaluate, then run axe.run() scoped to the targeted element. Report all violations with their WCAG rule ID, impact level (critical/serious/moderate/minor), the failing element selector, and a description of how to fix each issue."><span class="action-label">Run Accessibility Audit</span></label>
-            <label class="action-row" data-keywords="state loading error empty success force component react vue class data-state"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, attempt to force the targeted element or component into each of these states: loading, error, empty, and success. Try each approach in order: (1) toggle CSS classes like .loading, .error, .empty, .success, (2) set data attributes like data-state, (3) manipulate React/Vue component state via __vue__ or React DevTools fiber, (4) directly modify DOM content. Screenshot each state and report which states exist, which are missing, and any visual issues found."><span class="action-label">Force Component State</span></label>
-            <label class="action-row" data-keywords="css variables custom properties tokens theme override theming"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to collect all CSS custom properties (variables starting with --) that are computed on the targeted element and its ancestors. List each token name and its current value. Then test the element by overriding key color and spacing tokens with injected values to verify the theming system responds correctly. Report any hardcoded values that should be using tokens but are not."><span class="action-label">Override CSS Variables</span></label>
-            <label class="action-row" data-keywords="pseudo hover focus active visited state force style"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to force pseudo-states on the targeted element by injecting a temporary <style> tag that applies the :hover, :focus, and :active CSS rules as regular class overrides. Take a screenshot of each forced state. Then remove the injected styles. Report any missing, inconsistent, or inaccessible pseudo-state styles."><span class="action-label">Force Pseudo-state</span></label>
-            <label class="action-row" data-keywords="network error fetch xhr 500 404 timeout fail offline api mock"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to override the global fetch and XMLHttpRequest on the page so that any network requests triggered by interacting with the targeted element return a simulated error (status 500, status 404, and a network timeout in sequence). Interact with the element to trigger each error condition, screenshot the resulting UI, and report whether the error states are handled gracefully, display appropriate messages, and avoid broken or empty UI."><span class="action-label">Simulate Network Error</span></label>
-            <label class="action-row" data-keywords="dark mode light theme prefers-color-scheme color scheme toggle"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to override window.matchMedia so that prefers-color-scheme returns 'dark', then take a screenshot of the targeted element. Then override it to return 'light' and take another screenshot. Report any colors, icons, or images that do not adapt correctly between modes, any missing dark mode styles, and contrast issues specific to either mode."><span class="action-label">Toggle Dark Mode</span></label>
-            <label class="action-row" data-keywords="spacing margin padding gap layout box overlay visualize grid highlight"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to inject a visual spacing overlay onto the targeted element and its direct children. For each element, draw colored box overlays: blue for margin, green for padding, and yellow for gap. Use absolute-positioned divs with semi-transparent backgrounds injected into the DOM. Take a screenshot showing all spacing overlays. Report any inconsistent spacing values, elements not using design token increments (e.g. 4px/8px grid), or unexpected zero-margin/padding values."><span class="action-label">Highlight Spacing</span></label>
-            <label class="action-row" data-keywords="event listener handler click bind geteventlisteners memory leak"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, use the CDP Runtime.evaluate or page.evaluate with getEventListeners (if available in the execution context) to retrieve all event listeners attached to the targeted element. List each listener by event type, whether it is passive, once-only, or capturing, and the function source if available. Report any duplicate listeners on the same event, potentially missing listeners (e.g. no click handler on a button), or listeners that may cause memory leaks."><span class="action-label">Event Listener Audit</span></label>
-            <label class="action-row" data-keywords="localstorage sessionstorage storage feature flag cookie cache state"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to read all localStorage and sessionStorage keys and values. Identify any keys that appear related to the targeted element or feature (by name, route, or component context). Display their current values and flag any that may be affecting the element's visible behavior, toggling features, or caching stale data. Report any suspicious, outdated, or overly large stored values."><span class="action-label">LocalStorage &amp; Feature Flags</span></label>
-            <label class="action-row" data-keywords="clear reset localstorage cookies first run onboarding fresh cache incognito"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to clear localStorage, sessionStorage, and all cookies accessible from the current origin. Then reload the page and navigate back to the targeted element. Screenshot the element in this clean first-run state. Report any missing onboarding states, broken default values, elements that rely on cached data and fail without it, or any console errors triggered on first load."><span class="action-label">Clear State &amp; First-Run</span></label>
-
-            </div></div>
-            <div class="action-drawer">
-            <div class="action-drawer-header"><span>Extract</span><svg class="drawer-chevron" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"></polyline></svg></div>
-            <div class="action-drawer-body collapsed">
-            <label class="action-row" data-keywords="color colour palette hex rgb swatch extract scrape"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate on the targeted element and all its descendants to collect every unique color value found in computed styles — including color, background-color, border-color, outline-color, box-shadow, and text-decoration-color. Deduplicate the results, convert all values to hex where possible, and output a grouped list showing each unique color alongside the elements and CSS properties that use it."><span class="action-label">Color Palette</span></label>
-            <label class="action-row" data-keywords="typography font text size weight line-height letter-spacing type scale"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate on the targeted element and all its descendants to extract all typography-related computed styles: font-family, font-size, font-weight, line-height, letter-spacing, text-transform, and text-decoration. Group results by unique combinations and list which elements use each combination. Flag any fonts or sizes that appear inconsistent with a design system scale."><span class="action-label">Typography Styles</span></label>
-            <label class="action-row" data-keywords="spacing margin padding gap grid flex layout values scale"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate on the targeted element and all its descendants to extract all spacing and layout values: margin, padding, gap, row-gap, column-gap, grid-template-columns, grid-template-rows, and flex properties. Group by element and flag any values that do not align to a 4px or 8px grid increment, suggesting they fall outside a standard design system spacing scale."><span class="action-label">Spacing &amp; Layout Values</span></label>
-            <label class="action-row" data-keywords="assets media image video font background src url download"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate on the targeted element and all its descendants to collect all external asset references: img src and srcset URLs, video src and poster URLs, CSS background-image URLs, @font-face src URLs, and audio src URLs. Output a categorized list of each asset type with its full resolved URL. Flag any broken, relative-without-base, or suspiciously large asset paths."><span class="action-label">Assets &amp; Media</span></label>
-            <label class="action-row" data-keywords="dom html outerhtml markup structure tree element source"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to extract the full outerHTML of the targeted element. Format it as clean, indented HTML. Strip any injected Cathode overlay elements (id starting with __cathode). Output the result as a code block. This is useful for copying into documentation, filing bug reports, or reproducing UI in isolation."><span class="action-label">DOM Structure</span></label>
-            <label class="action-row" data-keywords="computed styles css export json properties dump getcomputedstyle"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to call getComputedStyle on the targeted element and collect all non-empty CSS property/value pairs. Save the result as a structured JSON object to a file named computed-styles.json. Also highlight any properties that appear to be using hardcoded values where a CSS custom property (design token) would be expected."><span class="action-label">Computed Styles Export</span></label>
-            <label class="action-row" data-keywords="component props state react vue fiber data json"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to walk the React fiber tree or Vue component instance tree for the targeted element. Extract the component name, all current props (excluding event handlers), and current state where accessible. Output the results as a structured JSON object. This is useful for reproducing a specific UI state or understanding what data is driving the component."><span class="action-label">Component Props &amp; State</span></label>
-            <label class="action-row" data-keywords="form schema input field name type required validation pattern"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to find all form elements (input, select, textarea, button[type=submit]) within the targeted area. For each field extract: name, id, type, required, disabled, placeholder, value, pattern, min, max, minlength, maxlength, and autocomplete attributes. Output as a structured table. Flag any fields missing labels, name attributes, or accessible descriptions."><span class="action-label">Form Schema</span></label>
-            <label class="action-row" data-keywords="accessibility a11y aria tree role label semantic screen reader"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to walk the DOM of the targeted element and extract the full accessibility tree: each element's tag, role (explicit aria-role or implicit), aria-label, aria-labelledby, aria-describedby, aria-expanded, aria-hidden, tabindex, and any other aria-* attributes. Output as an indented tree structure. Flag any elements that are interactive but missing accessible names, or that have aria-hidden incorrectly applied."><span class="action-label">Accessibility Tree</span></label>
-            <label class="action-row" data-keywords="text content copy strings i18n localization plain text scrape"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to extract all visible text content from the targeted element, preserving the hierarchy (headings, paragraphs, list items, button labels, link text, placeholder text). Output as structured plain text with element context noted. This is useful for copy audits, internationalization reviews, or passing content to a design or content tool."><span class="action-label">Text Content</span></label>
-            <label class="action-row" data-keywords="network request fetch xhr api endpoint url payload response"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, override fetch and XMLHttpRequest on the page before interacting with the targeted element. Record every network request triggered, including: URL, method, request headers, request body, response status, and response body (truncated if large). Interact with the element (click, submit, hover as appropriate) to trigger its network activity. Output the captured requests as a structured list. This is useful for mapping component-to-API dependencies."><span class="action-label">Network Requests</span></label>
-            <label class="action-row" data-keywords="image img src alt dimensions lazy broken extract scrape"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to find all img elements within the targeted area. For each image extract: src (resolved absolute URL), alt text, width, height, naturalWidth, naturalHeight, loading attribute (lazy/eager), and whether the image is visible in the viewport. Check if any images are broken (naturalWidth === 0), missing alt text, or not using lazy loading when below the fold. Output a structured list and flag all issues found."><span class="action-label">Extract Images</span></label>
-            <label class="action-row" data-keywords="svg vector icon graphic viewbox inline path stroke fill"><input class="aidev-cb" type="checkbox" data-instruction="Using browser tools, run page.evaluate to find all SVG elements within the targeted area — both inline SVGs and those referenced via img src or CSS. For each SVG extract: the element type (inline/img/css), dimensions (width, height, viewBox), presence of a title or aria-label for accessibility, fill and stroke color values, and the full SVG markup for inline elements. Flag any SVGs missing accessible labels, using hardcoded colors that should be currentColor, or with missing viewBox attributes that would prevent responsive scaling. Output a structured report."><span class="action-label">SVG &amp; Vector Elements</span></label>
-            </div></div>
+            <div class="ax-group">
+              <div class="ax-group-row"><span class="ax-group-title">Media</span></div>
+              <label class="action-row" data-keywords="image images photo picture png jpg download"><input class="aidev-cb media-cb" type="checkbox" data-media="images"><span class="action-label">Images</span></label>
+              <label class="action-row" data-keywords="svg vector icon graphic download"><input class="aidev-cb media-cb" type="checkbox" data-media="svgs"><span class="action-label">SVGs</span></label>
+              <label class="action-row" data-keywords="video media mp4 webm clip download"><input class="aidev-cb media-cb" type="checkbox" data-media="videos"><span class="action-label">Videos</span></label>
+              <div class="media-dest">
+                <div class="media-seg">
+                  <button class="media-seg-btn active" data-dest="chat" tabindex="-1">Send to chat</button>
+                  <button class="media-seg-btn" data-dest="download" tabindex="-1">Download…</button>
+                </div>
+              </div>
+            </div>
+            <div class="ax-group">
+              <div class="ax-group-row"><span class="ax-group-title">Styles &amp; Content</span><span class="ax-group-note">→ chat</span></div>
+              <label class="action-row" data-keywords="styles css computed copy clone replicate similar button component"><input class="aidev-cb" type="checkbox" data-extract="styles" data-instruction="The selected element's key computed styles — use them to recreate something visually similar."><span class="action-label">Element Styles</span></label>
+              <label class="action-row" data-keywords="color colour palette hex rgb swatch tokens"><input class="aidev-cb" type="checkbox" data-extract="palette" data-instruction="List each unique color with its usage count, and flag near-duplicate or off-system values that should consolidate to a design token."><span class="action-label">Color Palette</span></label>
+              <label class="action-row" data-keywords="typography font text size weight line-height letter-spacing type scale"><input class="aidev-cb" type="checkbox" data-extract="typography" data-instruction="Review the type styles and flag combinations that break a consistent type scale (odd sizes, weights, or line-heights)."><span class="action-label">Typography</span></label>
+              <label class="action-row" data-keywords="spacing margin padding gap grid flex layout values scale"><input class="aidev-cb" type="checkbox" data-extract="spacing" data-instruction="Review the spacing values and flag any that fall off a 4px/8px grid or look inconsistent."><span class="action-label">Spacing &amp; Layout</span></label>
+              <label class="action-row" data-keywords="design tokens variables css custom properties theme theming"><input class="aidev-cb" type="checkbox" data-extract="tokens" data-instruction="These are the CSS custom properties (design tokens) in scope. Flag where the selection uses hardcoded values that should reference one of these."><span class="action-label">Design Tokens</span></label>
+              <label class="action-row" data-keywords="dom html outerhtml markup structure tree element source"><input class="aidev-cb" type="checkbox" data-extract="dom" data-instruction="The selected element's markup, for reference."><span class="action-label">DOM Structure</span></label>
+              <label class="action-row" data-keywords="text content copy strings i18n localization plain text"><input class="aidev-cb" type="checkbox" data-extract="text" data-instruction="Review the visible copy for clarity, consistency, and i18n readiness."><span class="action-label">Text Content</span></label>
+              <label class="action-row" data-keywords="form schema input field name type required validation pattern label"><input class="aidev-cb" type="checkbox" data-extract="forms" data-instruction="Review the form fields and flag any missing labels, name attributes, or validation."><span class="action-label">Form Schema</span></label>
+              <label class="action-row" data-keywords="accessibility a11y aria tree role label semantic screen reader tabindex"><input class="aidev-cb" type="checkbox" data-extract="a11y" data-instruction="Review the accessibility info and flag interactive elements missing accessible names or with incorrect aria."><span class="action-label">Accessibility</span></label>
+            </div>
             </div>
           </div>
           ` : ''}
@@ -730,8 +931,31 @@ function cathodeCombinedPage(OPTS) {
         ${aiDevMode ? '<div class="action-tip"></div>' : ''}
       `;
 
-      // ── Drag ────────────────────────────────────────────────────
+      // ── Intro: grow down from the titlebar + fade in ────────────
       const popup    = shadow.querySelector('.popup');
+      (function introAnim() {
+        const tb = shadow.querySelector('.popup-titlebar');
+        const startH = (tb ? tb.offsetHeight : 34) + 8;   // show only the title first
+        const fullH  = popup.scrollHeight;
+        if (!fullH || fullH <= startH) return;
+        popup.style.transition = 'none';
+        popup.style.opacity = '0';
+        popup.style.height = startH + 'px';
+        void popup.offsetHeight;                          // commit the start frame
+        requestAnimationFrame(() => {
+          popup.style.transition = 'height 0.4s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease';
+          popup.style.opacity = '1';
+          popup.style.height = fullH + 'px';
+        });
+        popup.addEventListener('transitionend', function te(e) {
+          if (e.target !== popup || e.propertyName !== 'height') return;
+          popup.style.height = '';                        // back to auto (keeps textarea resizable)
+          popup.style.transition = '';
+          popup.removeEventListener('transitionend', te);
+        });
+      })();
+
+      // ── Drag ────────────────────────────────────────────────────
       const titlebar = shadow.querySelector('.popup-titlebar');
       titlebar.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('popup-close')) return;
@@ -981,46 +1205,18 @@ function cathodeCombinedPage(OPTS) {
         e.stopPropagation(); sendResult();
       });
 
-      // ── AI Dev drawers & search ──────────────────────────────────
+      // ── Extract: media destination toggle + tooltips ─────────────
       if (aiDevMode) {
-        shadow.querySelectorAll('.action-drawer-header').forEach(header => {
-          header.addEventListener('mousedown', e => e.stopPropagation());
-          header.addEventListener('click', () => {
-            const body = header.nextElementSibling;
-            const open = header.classList.toggle('open');
-            body.classList.toggle('collapsed', !open);
+        shadow.querySelectorAll('.media-seg-btn').forEach(btn => {
+          btn.addEventListener('mousedown', e => e.stopPropagation());
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            shadow.querySelectorAll('.media-seg-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
           });
         });
-        const srch = shadow.querySelector('.actions-search');
-        if (srch) {
-          srch.addEventListener('mousedown', e => e.stopPropagation());
-          srch.addEventListener('input', () => {
-            const q = srch.value.toLowerCase().trim();
-            shadow.querySelectorAll('.action-drawer').forEach(drawer => {
-              const hdr  = drawer.querySelector('.action-drawer-header');
-              const body = drawer.querySelector('.action-drawer-body');
-              let any = false;
-              body.querySelectorAll('.action-row').forEach(row => {
-                const label = (row.querySelector('.action-label').textContent || '').toLowerCase();
-                const kw    = (row.dataset.keywords || '').toLowerCase();
-                const match = !q || label.includes(q) || kw.includes(q);
-                row.style.display = match ? '' : 'none';
-                if (match) any = true;
-              });
-              drawer.style.display = q && !any ? 'none' : '';
-              if (q) {
-                // While searching, auto-expand drawers that have matches
-                if (any) { hdr.classList.add('open'); body.classList.remove('collapsed'); }
-              } else {
-                // Cleared search → restore default collapsed state
-                hdr.classList.remove('open');
-                body.classList.add('collapsed');
-              }
-            });
-          });
-        }
 
-        // ── Action tooltips ────────────────────────────────────────
+        // ── Action tooltips (shows the agent's analysis ask) ─────────
         const tip = shadow.querySelector('.action-tip');
         if (tip) {
           shadow.querySelectorAll('.action-row').forEach(row => {

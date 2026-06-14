@@ -15,3 +15,18 @@ export const ThreeOptions = {
     defaultValue: 'a',
   },
 };
+
+// Full-width, button-height variant — the Extract tool's media destination toggle.
+export const FullWidthDestination = {
+  name: 'Full Width (Destination)',
+  render: (args) => (
+    <div style={{ width: 320 }}>
+      <SegmentedControl {...args} />
+    </div>
+  ),
+  args: {
+    fullWidth: true,
+    options: [{ value: 'chat', label: 'Send to chat' }, { value: 'download', label: 'Download…' }],
+    defaultValue: 'chat',
+  },
+};
