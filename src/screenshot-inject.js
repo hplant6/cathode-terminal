@@ -41,7 +41,6 @@ function getScreenshotScript() {
     ].join(';');
     overlay.appendChild(sel);
 
-    // Size label
     const lbl = document.createElement('div');
     lbl.style.cssText = [
       'position:fixed', 'pointer-events:none',

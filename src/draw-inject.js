@@ -103,12 +103,7 @@ function getDrawScript() {
         <div id="__cdraw_iro_mount__"></div>
       </div>
 
-      <div>
-        <div style="${LABEL}">Instructions</div>
-        <textarea id="__cdraw_instructions__" placeholder="Describe the change..." style="width:100%;height:48px;min-height:48px;box-sizing:border-box;background:#111117;border:1px solid #383848;border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;font-family:inherit;resize:vertical;outline:none;line-height:1.45;overflow-y:auto;"></textarea>
-      </div>
-
-      <button id="__cdraw_send__" style="width:100%;height:32px;background:#1a6cf5;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-sizing:border-box;">Send</button>
+      <button id="__cdraw_send__" style="width:100%;height:32px;background:#1a6cf5;border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-sizing:border-box;">Done</button>
     \`;
     document.body.appendChild(toolbar);
 
@@ -176,12 +171,9 @@ function getDrawScript() {
     slider.addEventListener('input', updateSlider);
     updateSlider();
 
-    // ── Prevent textarea Enter from bubbling ──────────────────────────
-    document.getElementById('__cdraw_instructions__').addEventListener('keydown', function(e) {
-      e.stopPropagation();
-    });
-
-    // ── Send / Close ──────────────────────────────────────────────────
+    // ── Done / Close ──────────────────────────────────────────────────
+    // Instructions now live in the left-column panel; here "Done" just hands
+    // back the annotation layer.
     return new Promise(function(resolve) {
       function cleanup() {
         canvas.remove();
@@ -193,9 +185,8 @@ function getDrawScript() {
 
       document.getElementById('__cdraw_send__').addEventListener('click', function() {
         var dataUrl = canvas.toDataURL('image/png');
-        var instr   = document.getElementById('__cdraw_instructions__').value.trim();
         cleanup();
-        resolve({ canvasDataUrl: dataUrl, instructions: instr });
+        resolve({ canvasDataUrl: dataUrl });
       });
 
       document.getElementById('__cdraw_close__').addEventListener('click', function() {

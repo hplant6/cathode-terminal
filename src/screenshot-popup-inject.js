@@ -126,7 +126,6 @@ function getScreenshotPopupScript(thumbB64, mouseUpX, mouseUpY) {
       </div>
     \`;
 
-    // Drag
     const popup    = shadow.querySelector('.popup');
     const titlebar = shadow.querySelector('.titlebar');
     titlebar.addEventListener('mousedown', (e) => {

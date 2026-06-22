@@ -2,7 +2,7 @@
   "name": "cathode-terminal",
   "version": "1.0.0",
   "description": "Split chat + browser dev tool for Claude Code",
-  "//": "zod has no direct imports \u2014 it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
+  "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
   "author": "hplan",
   "main": "main.js",
   "scripts": {
@@ -13,12 +13,14 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
+    "@jaames/iro": "^5.5.2",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "gsap": "^3.15.0",
     "monaco-editor": "^0.52.2",
     "node-pty": "^1.1.0",
+    "quill": "^2.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -28,14 +30,13 @@
   "build": {
     "appId": "com.cathode.terminal",
     "productName": "Cathode Terminal",
-    "copyright": "Copyright \u00a9 2025",
+    "copyright": "Copyright © 2025",
     "directories": {
       "buildResources": "assets",
       "output": "dist"
     },
     "files": [
       "main.js",
-      "preload.js",
       "icon.png",
       "src/**/*",
       "node_modules/**/*",

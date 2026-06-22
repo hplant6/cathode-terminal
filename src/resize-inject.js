@@ -1,12 +1,19 @@
-const fs   = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const SHARED = require('./inject-shared');
 
 const RESIZE_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'resize-cursor.svg'), 'utf8')).toString('base64');
 const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 9 9, move`;
 
+// Panel mode: the user hovers + clicks an element, then drags the on-page
+// handles to resize it live. Instead of an in-page toolbar, the instructions /
+// dimensions / Send-Cancel live in the left column. The script resolves as soon
+// as an element is selected (handles stay alive); window.__cathodeResize then
+// drives live dims, reset, the final result, and teardown.
 function getResizeScript() {
   return `(function() {
   ['__cr_ov','__cr_hv','__cr_hr'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+  if (window.__cathodeResize) { try { window.__cathodeResize.clear(); } catch(e){} }
 
   return new Promise(function(resolve) {
     var phase = 'hover';
@@ -18,20 +25,14 @@ function getResizeScript() {
     var rafId = null;
     var resolved = false;
 
-    function done(val) {
-      if (resolved) return;
-      resolved = true;
+    function resolveOnce(val) { if (resolved) return; resolved = true; resolve(val); }
+    function teardown() {
       if (rafId) cancelAnimationFrame(rafId);
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousemove', onMove, true);
       document.removeEventListener('mouseup', onUp, true);
-      var ov = document.getElementById('__cr_ov');
-      var hv = document.getElementById('__cr_hv');
-      var hr = document.getElementById('__cr_hr');
-      if (ov) ov.remove();
-      if (hv) hv.remove();
-      if (hr) hr.remove();
-      resolve(val);
+      ['__cr_ov','__cr_hv','__cr_hr'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+      window.__cathodeResize = null;
     }
 
     // ── Hover overlay ─────────────────────────────────────────────────
@@ -76,11 +77,7 @@ function getResizeScript() {
 
     // ── Keyboard ──────────────────────────────────────────────────────
     function onKey(e) {
-      if (e.key === 'Escape') { revert(); done(null); }
-      // Don't intercept Enter when typing in the textarea
-      if (e.key === 'Enter' && phase === 'selected' && document.activeElement !== instrInput) {
-        e.preventDefault(); apply();
-      }
+      if (e.key === 'Escape' && phase === 'hover') { resolveOnce(null); teardown(); }
     }
     document.addEventListener('keydown', onKey, true);
 
@@ -92,42 +89,65 @@ function getResizeScript() {
       origRect = { left: r.left, top: r.top, width: r.width, height: r.height };
       origW = el.style.width  || '';
       origH = el.style.height || '';
-      hv.style.display = 'none';
-      ov.style.cursor = 'default';
-      ov.style.pointerEvents = 'none';
-      buildUI();
+      if (ov) ov.remove();
+      if (hv) hv.remove();
+      buildHandles();
       rafId = requestAnimationFrame(rafLoop);
+
+      window.__cathodeResize = {
+        dims: function() {
+          var rr = selEl.getBoundingClientRect();
+          return { oW: Math.round(origRect.width), oH: Math.round(origRect.height), nW: Math.round(rr.width), nH: Math.round(rr.height) };
+        },
+        set: function(dim, value) {
+          var v = Math.max(10, Math.round(value));
+          if (dim === 'w') selEl.style.width = v + 'px';
+          else if (dim === 'h') selEl.style.height = v + 'px';
+        },
+        reset: function() { selEl.style.width = origW; selEl.style.height = origH; },
+        result: function() {
+          var rr = selEl.getBoundingClientRect();
+          var snip = selEl.outerHTML.replace(/\\n/g, ' ').replace(/\\s{2,}/g, ' ').slice(0, 160);
+          return { selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), snippet: snip,
+                   oW: Math.round(origRect.width), oH: Math.round(origRect.height),
+                   nW: Math.round(rr.width), nH: Math.round(rr.height) };
+        },
+        clear: function() { teardown(); },
+      };
+
+      resolveOnce({
+        selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl),
+        oW: Math.round(origRect.width), oH: Math.round(origRect.height),
+        vw: window.innerWidth, vh: window.innerHeight,
+      });
     }
 
-    // ── Handles UI ───────────────────────────────────────────────────
-    var hr = null;
-    var sizeLabel = null;
-    var toolbar = null;
-    var instrInput = null;
+    function labelFor(el) {
+      var t = el.tagName.toLowerCase();
+      var id = el.id ? '#' + el.id : '';
+      var cls = (typeof el.className === 'string' && el.className.trim())
+        ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+      return t + id + cls;
+    }
 
-    function buildUI() {
-      if (hr) hr.remove();
+    // ── Handles UI (no toolbar — just box + 8 handles + size label) ───
+    var hr = null, box = null, sizeLabel = null;
+    function buildHandles() {
       hr = document.createElement('div');
       hr.id = '__cr_hr';
       hr.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;overflow:visible;';
       document.body.appendChild(hr);
 
-      // Selection box outline
-      var box = document.createElement('div');
+      box = document.createElement('div');
       box.id = '__cr_box';
       box.style.cssText = 'position:absolute;border:1.5px solid #4a9eff;box-sizing:border-box;pointer-events:none;';
       hr.appendChild(box);
 
-      // 8 resize handles: all corners + edge midpoints
       var handles = [
-        { id: 'nw', cursor: 'nw-resize' },
-        { id: 'n',  cursor: 'n-resize'  },
-        { id: 'ne', cursor: 'ne-resize' },
-        { id: 'e',  cursor: 'e-resize'  },
-        { id: 'se', cursor: 'se-resize' },
-        { id: 's',  cursor: 's-resize'  },
-        { id: 'sw', cursor: 'sw-resize' },
-        { id: 'w',  cursor: 'w-resize'  },
+        { id: 'nw', cursor: 'nw-resize' }, { id: 'n', cursor: 'n-resize' },
+        { id: 'ne', cursor: 'ne-resize' }, { id: 'e', cursor: 'e-resize' },
+        { id: 'se', cursor: 'se-resize' }, { id: 's', cursor: 's-resize' },
+        { id: 'sw', cursor: 'sw-resize' }, { id: 'w', cursor: 'w-resize' },
       ];
       handles.forEach(function(def) {
         var h = document.createElement('div');
@@ -138,145 +158,48 @@ function getResizeScript() {
         box.appendChild(h);
       });
 
-      // Toolbar card
-      toolbar = document.createElement('div');
-      toolbar.id = '__cr_tb';
-      toolbar.style.cssText = 'position:absolute;pointer-events:auto;background:#1e1e1e;border:1px solid #333;' +
-        'border-radius:6px;display:flex;flex-direction:column;overflow:hidden;' +
-        'font:12px/1.4 system-ui,sans-serif;color:#ccc;user-select:none;' +
-        'box-shadow:0 2px 10px rgba(0,0,0,.7);min-width:260px;';
-
-      // Top row: size label | Add Instructions  Reset  Cancel
-      var topRow = document.createElement('div');
-      topRow.style.cssText = 'display:flex;align-items:center;gap:6px;white-space:nowrap;padding:6px 8px;';
-
-      sizeLabel = document.createElement('span');
-      sizeLabel.style.cssText = 'font-variant-numeric:tabular-nums;flex:1;display:inline-block;';
-      topRow.appendChild(sizeLabel);
-
-      var sep = document.createElement('span');
-      sep.textContent = '|'; sep.style.opacity = '0.3';
-      topRow.appendChild(sep);
-
-      // Drawer (instructions textarea only — no button inside)
-      var drawerOpen = false;
-      var drawerEl = document.createElement('div');
-      drawerEl.style.cssText = 'display:none;flex-direction:column;padding:0 8px 8px;border-top:1px solid #2a2a2a;';
-
-      var toggleBtn = mkBtn('▸ Add Instructions', '#888', function() {
-        drawerOpen = !drawerOpen;
-        toggleBtn.textContent = (drawerOpen ? '▾' : '▸') + ' Add Instructions';
-        toggleBtn.style.color = drawerOpen ? '#4a9eff' : '#888';
-        drawerEl.style.display = drawerOpen ? 'flex' : 'none';
-        if (drawerOpen && instrInput) { setTimeout(function(){ instrInput.focus(); }, 0); }
-      });
-      topRow.appendChild(toggleBtn);
-
-      // Reset: restores original dimensions without closing the tool
-      topRow.appendChild(mkSolidBtn('Reset',  function() {
-        if (selEl) { selEl.style.width = origW; selEl.style.height = origH; }
-      }));
-      topRow.appendChild(mkSolidBtn('Cancel', function() { revert(); done(null); }));
-      toolbar.appendChild(topRow);
-
-      // Drawer: textarea only
-      instrInput = document.createElement('textarea');
-      instrInput.placeholder = 'Additional instructions';
-      instrInput.rows = 3;
-      instrInput.style.cssText = 'background:#252525;border:1px solid #3a3a3a;border-radius:3px;' +
-        'color:#ccc;font:12px/1.5 system-ui,sans-serif;padding:5px 8px;outline:none;' +
-        'width:100%;box-sizing:border-box;resize:vertical;min-height:56px;margin-top:8px;';
-      instrInput.addEventListener('focus', function() { instrInput.style.borderColor = '#4a9eff55'; });
-      instrInput.addEventListener('blur',  function() { instrInput.style.borderColor = '#3a3a3a'; });
-      drawerEl.appendChild(instrInput);
-      toolbar.appendChild(drawerEl);
-
-      // Bottom bar: Request a Change — always visible, full width
-      var bottomBar = document.createElement('div');
-      bottomBar.style.cssText = 'padding:6px 8px;border-top:1px solid #2a2a2a;';
-      var applyBtn = document.createElement('button');
-      applyBtn.textContent = 'Request a Change';
-      applyBtn.style.cssText = 'width:100%;box-sizing:border-box;background:#4a9eff1a;' +
-        'border:1px solid #4a9eff55;border-radius:3px;color:#4a9eff;padding:5px 0;' +
-        'font:12px/1.4 system-ui,sans-serif;cursor:pointer;';
-      applyBtn.addEventListener('click', function(e) { e.stopPropagation(); apply(); });
-      bottomBar.appendChild(applyBtn);
-      toolbar.appendChild(bottomBar);
-
-      hr.appendChild(toolbar);
+      sizeLabel = document.createElement('div');
+      sizeLabel.style.cssText = 'position:absolute;pointer-events:none;background:#1e1e1e;border:1px solid #333;' +
+        'border-radius:4px;color:#ccc;font:11px/1.4 system-ui,sans-serif;padding:2px 7px;white-space:nowrap;' +
+        'font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.6);';
+      hr.appendChild(sizeLabel);
 
       positionAll();
-    }
-
-    function mkBtn(text, color, fn) {
-      var b = document.createElement('button');
-      b.textContent = text;
-      b.style.cssText = 'background:transparent;border:1px solid ' + color + '55;border-radius:3px;' +
-        'color:' + color + ';padding:1px 9px;font:11px/1.6 system-ui,sans-serif;cursor:pointer;';
-      b.addEventListener('click', function(e) { e.stopPropagation(); fn(); });
-      return b;
-    }
-
-    function mkSolidBtn(text, fn) {
-      var b = document.createElement('button');
-      b.textContent = text;
-      b.style.cssText = 'background:#2e2e2e;border:1px solid #555;border-radius:3px;' +
-        'color:#ccc;padding:2px 10px;font:11px/1.6 system-ui,sans-serif;cursor:pointer;';
-      b.addEventListener('mouseover', function() { b.style.background = '#3a3a3a'; b.style.color = '#fff'; });
-      b.addEventListener('mouseout',  function() { b.style.background = '#2e2e2e'; b.style.color = '#ccc'; });
-      b.addEventListener('click', function(e) { e.stopPropagation(); fn(); });
-      return b;
     }
 
     function positionAll() {
       if (!selEl || !hr) return;
       var r = selEl.getBoundingClientRect();
-
-      var box = document.getElementById('__cr_box');
       if (box) {
         box.style.left   = r.left   + 'px';
         box.style.top    = r.top    + 'px';
         box.style.width  = r.width  + 'px';
         box.style.height = r.height + 'px';
-
         var mid = { x: Math.round(r.width / 2), y: Math.round(r.height / 2) };
         var pos = {
-          nw: [-5,           -5          ],
-          n:  [mid.x - 5,    -5          ],
-          ne: [r.width - 5,  -5          ],
-          e:  [r.width - 5,  mid.y - 5   ],
-          se: [r.width - 5,  r.height - 5],
-          s:  [mid.x - 5,    r.height - 5],
-          sw: [-5,           r.height - 5],
-          w:  [-5,           mid.y - 5   ],
+          nw: [-5, -5], n: [mid.x - 5, -5], ne: [r.width - 5, -5], e: [r.width - 5, mid.y - 5],
+          se: [r.width - 5, r.height - 5], s: [mid.x - 5, r.height - 5], sw: [-5, r.height - 5], w: [-5, mid.y - 5],
         };
         Object.keys(pos).forEach(function(id) {
           var h = box.querySelector('[data-h="' + id + '"]');
           if (h) { h.style.left = pos[id][0] + 'px'; h.style.top = pos[id][1] + 'px'; }
         });
       }
-
       if (sizeLabel) {
         var nW = Math.round(r.width), nH = Math.round(r.height);
         var oW = Math.round(origRect.width), oH = Math.round(origRect.height);
         var dW = nW - oW, dH = nH - oH;
         var ws = nW + (dW !== 0 ? ' (' + (dW > 0 ? '+' : '') + dW + ')' : '');
         var hs = nH + (dH !== 0 ? ' (' + (dH > 0 ? '+' : '') + dH + ')' : '');
-        sizeLabel.textContent = ws + ' \xd7 ' + hs;
-      }
-
-      if (toolbar) {
-        var toolH = toolbar.offsetHeight || 36;
-        var tTop = r.top >= toolH + 8 ? r.top - toolH - 5 : r.bottom + 5;
-        toolbar.style.left = Math.max(4, r.left) + 'px';
-        toolbar.style.top  = tTop + 'px';
+        sizeLabel.textContent = ws + ' \\u00d7 ' + hs;
+        var lh = sizeLabel.offsetHeight || 20;
+        var lTop = r.top >= lh + 8 ? r.top - lh - 6 : r.bottom + 6;
+        sizeLabel.style.left = Math.max(4, r.left) + 'px';
+        sizeLabel.style.top  = lTop + 'px';
       }
     }
 
-    function rafLoop() {
-      positionAll();
-      rafId = requestAnimationFrame(rafLoop);
-    }
+    function rafLoop() { positionAll(); rafId = requestAnimationFrame(rafLoop); }
 
     // ── Drag ─────────────────────────────────────────────────────────
     function startDrag(e, handleId) {
@@ -287,7 +210,6 @@ function getResizeScript() {
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('mouseup', onUp, { capture: true, once: true });
     }
-
     function onMove(e) {
       if (!activeHandle || !drag) return;
       var dx = e.clientX - drag.x;
@@ -297,45 +219,13 @@ function getResizeScript() {
       if (activeHandle.indexOf('s') !== -1) selEl.style.height = Math.max(10, Math.round(drag.h + dy)) + 'px';
       if (activeHandle.indexOf('n') !== -1) selEl.style.height = Math.max(10, Math.round(drag.h - dy)) + 'px';
     }
-
     function onUp() {
       document.removeEventListener('mousemove', onMove, true);
       activeHandle = null; drag = null;
     }
 
-    // ── Selector helper ───────────────────────────────────────────────
-    function getSelector(el) {
-      if (el.id) return '#' + el.id;
-      var parts = [];
-      var cur = el;
-      for (var i = 0; i < 4 && cur && cur.tagName && cur !== document.documentElement; i++) {
-        var p = cur.tagName.toLowerCase();
-        if (cur.className && typeof cur.className === 'string') {
-          var cls = cur.className.trim().split(/\\s+/).filter(function(c){ return c && !c.startsWith('__cr'); }).slice(0, 2);
-          if (cls.length) p += '.' + cls.join('.');
-        }
-        parts.unshift(p);
-        cur = cur.parentElement;
-      }
-      return parts.join(' > ');
-    }
-
-    // ── Revert inline styles ──────────────────────────────────────────
-    function revert() {
-      if (selEl) { selEl.style.width = origW; selEl.style.height = origH; }
-    }
-
-    // ── Apply ─────────────────────────────────────────────────────────
-    function apply() {
-      if (!selEl) { done(null); return; }
-      var r = selEl.getBoundingClientRect();
-      var nW = Math.round(r.width),       nH = Math.round(r.height);
-      var oW = Math.round(origRect.width), oH = Math.round(origRect.height);
-      var instructions = instrInput ? instrInput.value.trim() : '';
-      if (Math.abs(nW - oW) < 2 && Math.abs(nH - oH) < 2 && !instructions) { done(null); return; }
-      var snippet = selEl.outerHTML.replace(/\\n/g,' ').replace(/\\s{2,}/g,' ').slice(0, 160);
-      done({ selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), snippet: snippet, oW: oW, oH: oH, nW: nW, nH: nH, instructions: instructions });
-    }
+    // ── Selector helper (shared) ──────────────────────────────────────
+${SHARED.selectorHelper('__cr')}
   });
 })()`;
 }

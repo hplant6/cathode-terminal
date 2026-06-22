@@ -4,21 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cathode Terminal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@200;400&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <!-- Fonts are bundled locally in src/fonts/ (see @font-face in styles.css) — no CDN, fully offline -->
+  <link rel="stylesheet" href="styles.css?v=6" />
   <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
 </head>
 <body>
   <div id="app-bar">
-    <!-- Left: logo + settings -->
+    <!-- Left: logo button (logo + settings chevron) — structural seat, bottom-right blob -->
     <div id="app-bar-logo">
-      <img src="cathode-terminal-logo.svg" alt="Cathode Terminal" draggable="false" />
+      <img src="icons/figma/logo.svg" alt="Cathode Terminal" draggable="false" />
+      <button id="btn-settings" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4.5,7 9,11.5 13.5,7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </div>
-    <button id="btn-settings" title="Settings">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4.5,7 9,11.5 13.5,7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
 
     <!-- Settings dropdown -->
     <div id="settings-menu">
@@ -51,33 +49,37 @@
       <!-- tabs rendered dynamically by renderer.js -->
     </div>
     <button id="btn-sysperf-toggle" class="active" title="Toggle system performance graph"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M15.25 8.75H12.809C12.6196 8.75 12.4465 8.857 12.3618 9.0264L11.1808 11.3885C10.9996 11.7508 10.4854 11.7586 10.2934 11.4019L7.70671 6.5981C7.51471 6.2414 7.00042 6.2492 6.81932 6.6115L5.63832 8.9736C5.55362 9.143 5.38052 9.25 5.19112 9.25H2.75012"></path><path d="M15.25 4.75C15.25 3.645 14.355 2.75 13.25 2.75H4.75C3.645 2.75 2.75 3.645 2.75 4.75V13.25C2.75 14.355 3.645 15.25 4.75 15.25H13.25C14.355 15.25 15.25 14.355 15.25 13.25V4.75Z"></path></g></svg></button>
-    <span class="app-bar-sep"></span>
-    <!-- ── Toolbar ──────────────────────────────────────────────── -->
-    <div id="toolbar">
-      <div id="project-tools">
-        <button id="btn-pick-box"       class="pick-btn" title="Box select element (Alt+B)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></button>
-        <button id="btn-pick-lasso"     class="pick-btn" title="Lasso select element (Alt+L)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
-        <button id="btn-pick-resize"    class="pick-btn" title="Resize element (Alt+R)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></button>
-        <button id="btn-pick-component" class="pick-btn" title="Pick Storybook component (Alt+S)" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></button>
-      </div>
-      <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" title="Extract — download images / SVGs / videos or pull styles, colors, type &amp; more from a selection (Shift = whole page) (Alt+E)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="10.25 12.75 12.75 15.25 15.25 12.75"/><line x1="12.75" y1="15.25" x2="12.75" y2="2.75"/><rect x="2.75" y="10.25" width="5" height="5" rx="1" ry="1"/><path d="M2.75,6.5v.25c0,.552,.448,1,1,1h.25"/><path d="M4,2.75h-.25c-.552,0-1,.448-1,1v.25"/><path d="M7.75,4v-.25c0-.552-.448-1-1-1h-.25"/><path d="M6.5,7.75h.25c.552,0,1-.448,1-1v-.25"/></svg></button>
-      <button id="btn-pick-eyedropper" class="pick-btn" title="Eyedropper — sample a color, edit it live or send to chat (Alt+C)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></button>
-      <button id="btn-pick-a11y" class="pick-btn" title="Accessibility &amp; contrast check — flag WCAG issues, send to chat (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></button>
-      <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
-      <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
+    <!-- Custom window controls (frameless titlebar) -->
+    <div id="window-controls">
+      <button id="wc-minimize"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="4" y1="9" x2="14" y2="9"/></svg></button>
+      <button id="wc-maximize">
+        <svg class="wc-ic-max" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="10" height="10" rx="1.5"/></svg>
+        <svg class="wc-ic-restore" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M5.5 5.5V4.5A1.5 1.5 0 0 1 7 3h6.5A1.5 1.5 0 0 1 15 4.5V11a1.5 1.5 0 0 1-1.5 1.5h-1"/></svg>
+      </button>
+      <button id="wc-close"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l8 8M13 5l-8 8"/></svg></button>
     </div>
-    <div id="app-bar-wc-pad"></div>
   </div>
 
   <div id="app">
 
     <!-- LEFT: Claude Code sessions -->
     <div id="left-panel">
+      <!-- Views control bar — skeuomorphic LED toggles (top of the left column) -->
+      <div id="views-bar">
+        <span id="views-label">Views</span>
+        <div id="views-toggles">
+          <div class="view-toggle"><span class="vt-label">Usage</span><button class="vt-switch on" data-view="usage" role="switch" aria-checked="true"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
+          <div class="view-toggle"><span class="vt-label">System</span><button class="vt-switch" data-view="system" role="switch" aria-checked="false"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
+          <div class="view-toggle"><span class="vt-label">Terminal</span><button class="vt-switch" data-view="terminal" role="switch" aria-checked="false"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
+          <div class="view-toggle"><span class="vt-label">DevTools</span><button class="vt-switch" data-view="devtools" role="switch" aria-checked="false"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
+        </div>
+      </div>
       <!-- System performance graph (CPU / RAM / GPU + top processes by memory) -->
       <div id="sysperf">
         <div id="sysperf-head">
           <span id="sysperf-title">System</span>
           <div id="sysperf-view-toggle">
+            <span id="sysperf-toggle-thumb"></span>
             <button id="sysperf-view-all" class="sysperf-view-btn active" title="Resource usage (CPU / RAM / GPU)">All</button>
             <button id="sysperf-view-ram" class="sysperf-view-btn" title="Top processes by memory">RAM</button>
             <button id="sysperf-view-cpu" class="sysperf-view-btn" title="Top processes by CPU">CPU</button>
@@ -86,21 +88,34 @@
         <div id="sysperf-bars">
           <div class="sysperf-row">
             <span class="sysperf-label">CPU</span>
-            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-cpu-fill"></div></div>
+            <div class="sysperf-bar" id="sysperf-cpu-bar"></div>
             <span class="sysperf-pct" id="sysperf-cpu-pct">—</span>
           </div>
           <div class="sysperf-row">
             <span class="sysperf-label">RAM</span>
-            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-ram-fill"></div></div>
+            <div class="sysperf-bar" id="sysperf-ram-bar"></div>
             <span class="sysperf-pct" id="sysperf-ram-pct">—</span>
           </div>
           <div class="sysperf-row">
             <span class="sysperf-label">GPU</span>
-            <div class="sysperf-bar"><div class="sysperf-fill" id="sysperf-gpu-fill"></div></div>
+            <div class="sysperf-bar" id="sysperf-gpu-bar"></div>
             <span class="sysperf-pct" id="sysperf-gpu-pct">—</span>
           </div>
         </div>
         <div id="sysperf-procs" style="display:none"></div>
+      </div>
+      <!-- Usage panel — sits under System Info (toggled by the Views bar) -->
+      <div id="usage-panel" style="display:none">
+        <div id="usage-head">
+          <span id="usage-title">Usage</span>
+          <span id="usage-model"></span>
+          <div id="usage-view-toggle">
+            <span id="usage-toggle-thumb"></span>
+            <button id="usage-view-full" class="usage-view-btn" title="Bar view">bar</button>
+            <button id="usage-view-mini" class="usage-view-btn" title="Dial view">dial</button>
+          </div>
+        </div>
+        <div id="usage-body"></div>
       </div>
       <div id="terminal-header">
         <div id="pty-tabs-container"></div>
@@ -140,28 +155,14 @@
 
       <!-- UI input area — shown when left panel is in UI mode -->
       <div id="ui-input-area">
-        <div id="usage-panel" style="display:none">
-          <div id="usage-head">
-            <span id="usage-title">Usage</span>
-            <span id="usage-model"></span>
-            <div id="usage-view-toggle">
-              <button id="usage-view-full" class="usage-view-btn" title="Detailed view">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2.75" y="3.25" width="12.5" height="4.5" rx="1.5" ry="1.5"></rect><rect x="2.75" y="10.25" width="6.5" height="4.5" rx="1.5" ry="1.5"></rect></svg>
-              </button>
-              <button id="usage-view-mini" class="usage-view-btn" title="Compact view">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 4.5V2.25C10.377 2.25 15.75 7.623 15.75 14.25H13.5"></path><path d="M4.70703 13.293L8.25003 9.75"></path><path d="M10.3669 7.633L12.2339 5.76599"></path><path d="M4 15.25C4.69 15.25 5.25 14.69 5.25 14C5.25 13.31 4.69 12.75 4 12.75C3.31 12.75 2.75 13.31 2.75 14C2.75 14.69 3.31 15.25 4 15.25Z" fill="currentColor" stroke="none"></path></svg>
-              </button>
-            </div>
-          </div>
-          <div id="usage-body"></div>
-        </div>
         <div id="slash-menu"></div>
         <div id="ui-toolbar">
-          <button id="btn-ui-code"   title="Wrap selection in code block">&lt;/&gt;</button>
+          <button id="btn-ui-code"   title="Wrap selection in code block"><svg viewBox="0 0 18 18" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 13C9.41421 13 9.75 12.6642 9.75 12.25C9.75 11.8358 9.41421 11.5 9 11.5C8.58579 11.5 8.25 11.8358 8.25 12.25C8.25 12.6642 8.58579 13 9 13Z" fill="currentColor"/><path d="M11.75 13C12.1642 13 12.5 12.6642 12.5 12.25C12.5 11.8358 12.1642 11.5 11.75 11.5C11.3358 11.5 11 11.8358 11 12.25C11 12.6642 11.3358 13 11.75 13Z" fill="currentColor"/><path d="M6.25 13C6.66421 13 7 12.6642 7 12.25C7 11.8358 6.66421 11.5 6.25 11.5C5.83579 11.5 5.5 11.8358 5.5 12.25C5.5 12.6642 5.83579 13 6.25 13Z" fill="currentColor"/><path d="M2.5498 13.25V10.625C2.5498 10.1146 2.1354 9.7002 1.625 9.7002C1.2384 9.7002 0.924805 9.3866 0.924805 9C0.924805 8.6134 1.2384 8.2998 1.625 8.2998C2.1354 8.2998 2.5498 7.8854 2.5498 7.375V4.75C2.5498 3.2584 3.7584 2.0498 5.25 2.0498H6.25C6.6366 2.0498 6.9502 2.3634 6.9502 2.75C6.9502 3.1366 6.6366 3.4502 6.25 3.4502H5.25C4.5316 3.4502 3.9502 4.0316 3.9502 4.75V7.375C3.9502 8.00786 3.69566 8.58067 3.28516 9C3.69566 9.41933 3.9502 9.99214 3.9502 10.625V13.25C3.9502 13.9684 4.5316 14.5498 5.25 14.5498H6.25C6.6366 14.5498 6.9502 14.8634 6.9502 15.25C6.9502 15.6366 6.6366 15.9502 6.25 15.9502H5.25C3.7584 15.9502 2.5498 14.7416 2.5498 13.25Z" fill="currentColor"/><path d="M14.0498 13.25V10.625C14.0498 9.99239 14.3036 9.41928 14.7139 9C14.3036 8.58072 14.0498 8.00761 14.0498 7.375V4.75C14.0498 4.0316 13.4684 3.4502 12.75 3.4502H11.75C11.3634 3.4502 11.0498 3.1366 11.0498 2.75C11.0498 2.3634 11.3634 2.0498 11.75 2.0498H12.75C14.2416 2.0498 15.4502 3.2584 15.4502 4.75V7.375C15.4502 7.8854 15.8646 8.2998 16.375 8.2998C16.7616 8.2998 17.0752 8.6134 17.0752 9C17.0752 9.3866 16.7616 9.7002 16.375 9.7002C15.8646 9.7002 15.4502 10.1146 15.4502 10.625V13.25C15.4502 14.7416 14.2416 15.9502 12.75 15.9502H11.75C11.3634 15.9502 11.0498 15.6366 11.0498 15.25C11.0498 14.8634 11.3634 14.5498 11.75 14.5498H12.75C13.4684 14.5498 14.0498 13.9684 14.0498 13.25Z" fill="currentColor"/></svg></button>
           <button id="btn-usage" title="Usage">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.75V4.75"></path><path d="M14.127 4.87299L12.712 6.28799"></path><path d="M16.25 10H14.25"></path><path d="M3.87305 4.87299L8.29305 9.293"></path><path d="M1.75 10H3.75"></path><path d="M6.45264 3.2103C7.24504 2.9128 8.10363 2.75 9.00003 2.75C13.004 2.75 16.25 5.996 16.25 10C16.25 12.002 15.439 13.815 14.127 15.127L12.713 13.713"></path><path d="M5.28799 13.712L3.87399 15.126C2.56199 13.814 1.75 12.002 1.75 9.99899C1.75 9.10279 1.91271 8.2445 2.21001 7.4523"></path><path d="M9 11.25C9.69 11.25 10.25 10.69 10.25 10C10.25 9.31 9.69 8.75 9 8.75C8.31 8.75 7.75 9.31 7.75 10C7.75 10.69 8.31 11.25 9 11.25Z" fill="currentColor" stroke="none"></path></svg>
           </button>
           <button id="btn-ui-attach" title="Attach file"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg></button>
+          <button id="btn-ui-attach-folder" title="Attach folder"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></g></svg></button>
           <div id="model-wrap" style="display:none">
             <button id="btn-model" title="Switch model (restarts session)">
               <span id="btn-model-label">Model</span>
@@ -188,25 +189,240 @@
             <div id="figma-menu"></div>
           </div>
           <span id="ui-char-count"></span>
+          <button id="btn-ui-resize" title="Drag to resize input (double-click to reset)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
         </div>
         <div id="composer-chips"></div>
         <div id="ui-editor-wrap">
           <textarea id="ui-textarea" placeholder="Message Claude Code..." spellcheck="true"></textarea>
+        </div>
+        <div id="ui-footer">
+          <span class="ui-hint">Enter to Send &nbsp;·&nbsp; Ctrl + 1-9 Pick Option &nbsp;·&nbsp; / Commands</span>
           <span id="save-prompt-tag">saved</span>
           <button id="btn-save-prompt" title="Save as prompt">
             <svg xmlns="http://www.w3.org/2000/svg" height="14" width="14" viewBox="0 0 18 18"><path d="M14.25,16.25l-5.25-3.5-5.25,3.5V3.75c0-1.105,.895-2,2-2h6.5c1.105,0,2,.895,2,2v12.5Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>
           </button>
-        </div>
-        <div id="ui-footer">
-          <span class="ui-hint">Enter to send &nbsp;·&nbsp; &#x21e7;Enter new line &nbsp;·&nbsp; Ctrl+1&#x2013;9 pick option &nbsp;·&nbsp; / commands &nbsp;·&nbsp; &#x2191;&#x2193; history</span>
           <button id="btn-ui-send">Send</button>
         </div>
       </div>
+
+      <!-- Box/Lasso element panel — overtakes the chat column when a selection is made -->
+      <div id="pick-panel" class="tool-panel" hidden>
+        <div id="pick-panel-head" class="tp-head">
+          <span id="pick-panel-title" class="tp-title">Box Select</span>
+          <span id="pick-panel-sub" class="tp-sub">Targeted Elements</span>
+        </div>
+        <div id="pick-panel-chips">
+          <button class="pp-chip" data-filter="color">color</button>
+          <button class="pp-chip" data-filter="font">font</button>
+          <button class="pp-chip" data-filter="padding">padding</button>
+          <button class="pp-chip" data-filter="border">border</button>
+          <button class="pp-chip" data-filter="height">height</button>
+          <button class="pp-chip" data-filter="width">width</button>
+        </div>
+        <div id="pick-panel-filter-wrap">
+          <input id="pick-panel-filter" class="pp-filter" type="text" placeholder="filter properties…" spellcheck="false" autocomplete="off" />
+        </div>
+        <div id="pick-panel-list"></div>
+        <div id="pick-panel-foot">
+          <textarea id="pick-panel-textarea" placeholder="give instructions here" spellcheck="true"></textarea>
+          <div id="pick-panel-btns">
+            <button id="pick-panel-cancel-btn" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="pick-panel-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resize tool panel — overtakes the chat column while resizing on the page -->
+      <div id="resize-panel" class="tool-panel" hidden>
+        <div id="resize-panel-head" class="tp-head">
+          <span id="resize-panel-title" class="tp-title">Resize</span>
+          <span id="resize-panel-sub" class="tp-sub">Selected Element</span>
+        </div>
+        <div id="resize-panel-body">
+          <div id="resize-panel-el" class="rz-el"></div>
+          <div class="rz-dims">
+            <div class="rz-dim-group">
+              <div class="rz-dim-row"><span class="rz-dim-label">Width</span><span id="resize-w" class="rz-dim-val">—</span></div>
+              <input id="resize-w-slider" class="rz-slider" type="range" min="10" max="2000" value="10" />
+            </div>
+            <div class="rz-dim-group">
+              <div class="rz-dim-row"><span class="rz-dim-label">Height</span><span id="resize-h" class="rz-dim-val">—</span></div>
+              <input id="resize-h-slider" class="rz-slider" type="range" min="10" max="2000" value="10" />
+            </div>
+          </div>
+          <button id="resize-reset" class="pp-btn pp-btn-ghost">Reset to original</button>
+          <div class="rz-hint">Drag the handles on the page to resize.</div>
+        </div>
+        <div id="resize-panel-foot">
+          <textarea id="resize-textarea" placeholder="Additional instructions" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="resize-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="resize-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Storybook component picker panel — overtakes the chat column -->
+      <div id="component-panel" class="tool-panel" hidden>
+        <div id="comp-panel-head" class="tp-head">
+          <span id="comp-panel-title" class="tp-title">Pick Component</span>
+          <span id="comp-panel-sub" class="tp-sub">Storybook</span>
+        </div>
+        <div id="comp-panel-body">
+          <div class="comp-loc">
+            <span class="comp-loc-label">Selected location</span>
+            <span id="comp-loc-link" class="comp-loc-link" title=""></span>
+          </div>
+          <input id="comp-search" class="pp-filter" type="text" placeholder="Search components…" autocomplete="off" spellcheck="false" />
+          <div id="comp-list"></div>
+        </div>
+        <div id="comp-panel-foot">
+          <textarea id="comp-instructions" placeholder="Instructions — how to use this component at the target (optional)…" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="comp-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="comp-insert" class="pp-btn pp-btn-primary" disabled>Insert</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Extract tool panel — overtakes the chat column -->
+      <div id="extract-panel" class="tool-panel" hidden>
+        <div id="extract-panel-head" class="tp-head">
+          <span id="extract-panel-title" class="tp-title">Extract</span>
+          <span class="tp-sub">Targeted Elements</span>
+        </div>
+        <div id="extract-panel-body">
+          <div id="extract-els"></div>
+          <div class="ext-group">
+            <div class="ext-group-row"><span class="ext-group-title">Media</span></div>
+            <div id="extract-media"></div>
+            <div class="ext-media-dest">
+              <div class="ext-seg">
+                <button class="ext-seg-btn active" data-dest="chat">Send to chat</button>
+                <button class="ext-seg-btn" data-dest="download">Download…</button>
+              </div>
+            </div>
+          </div>
+          <div class="ext-group">
+            <div class="ext-group-row"><span class="ext-group-title">Styles &amp; Content</span><span class="ext-group-note">&rarr; chat</span></div>
+            <div id="extract-data"></div>
+          </div>
+        </div>
+        <div id="extract-panel-foot">
+          <textarea id="extract-instructions" placeholder="give instructions here" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="extract-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="extract-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eyedropper tool panel — overtakes the chat column after sampling a color -->
+      <div id="eyedropper-panel" class="tool-panel" hidden>
+        <div class="tp-head">
+          <span id="ed-panel-title" class="tp-title">Eyedropper</span>
+          <span class="tp-sub">Targeted Element</span>
+        </div>
+        <div id="ed-panel-body">
+          <span id="ed-el-link" class="ed-el-link" title=""></span>
+          <div class="ed-field">
+            <span class="ed-field-label">Property</span>
+            <select id="ed-prop"></select>
+          </div>
+          <div class="ed-colors">
+            <div class="ed-col">
+              <span class="ed-col-title">Original color</span>
+              <div class="ed-color"><span id="ed-old-sw" class="ed-sw"></span><span id="ed-old-hex" class="ed-hex"></span></div>
+            </div>
+            <div class="ed-col ed-col-adjust">
+              <span class="ed-col-title">Adjusted color</span>
+              <div id="ed-iro"></div>
+              <input id="ed-hex-input" class="ed-hex-input" type="text" spellcheck="false" autocomplete="off" />
+            </div>
+          </div>
+        </div>
+        <div id="ed-panel-foot">
+          <textarea id="ed-instructions" placeholder="give instructions here" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="ed-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="ed-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Accessibility checker panel — overtakes the chat column -->
+      <div id="a11y-panel" class="tool-panel" hidden>
+        <div class="tp-head">
+          <span class="tp-title">Accessibility</span>
+          <span class="tp-sub">WCAG Contrast &amp; Names</span>
+        </div>
+        <div id="a11y-bar">
+          <span id="a11y-count"></span>
+          <button id="a11y-toggle-all" class="a11y-link">Deselect all</button>
+        </div>
+        <div id="a11y-list"></div>
+        <div id="a11y-foot">
+          <div class="pp-btns">
+            <button id="a11y-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="a11y-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screenshot tool panel — overtakes the chat column after capture -->
+      <div id="screenshot-panel" class="tool-panel" hidden>
+        <div class="tp-head">
+          <span class="tp-title">Screenshot</span>
+          <span class="tp-sub">Captured Region</span>
+        </div>
+        <div id="ss-panel-body">
+          <div id="ss-preview"><img id="ss-preview-img" alt="Screenshot preview" /></div>
+        </div>
+        <div id="ss-panel-foot">
+          <textarea id="ss-instructions" placeholder="What should the agent do with this screenshot? (optional)" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="ss-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="ss-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draw tool panel — overtakes the chat column after annotating -->
+      <div id="draw-panel" class="tool-panel" hidden>
+        <div class="tp-head">
+          <span class="tp-title">Draw</span>
+          <span class="tp-sub">Marker Annotation</span>
+        </div>
+        <div id="draw-panel-body">
+          <div id="draw-preview"><img id="draw-preview-img" alt="Annotation preview" /></div>
+        </div>
+        <div id="draw-panel-foot">
+          <textarea id="draw-instructions" placeholder="Describe the change…" spellcheck="true"></textarea>
+          <div class="pp-btns">
+            <button id="draw-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="draw-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+      </div>
+
       <div id="toast-stack"></div>
     </div>
 
     <!-- DIVIDER (contains toggle — travels with drag handle) -->
     <div id="divider">
+      <div id="toolbar">
+        <div id="project-tools">
+          <button id="btn-pick-box"       class="pick-btn" title="Box select element (Alt+B)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></button>
+          <button id="btn-pick-lasso"     class="pick-btn" title="Lasso select element (Alt+L)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
+          <button id="btn-pick-resize"    class="pick-btn" title="Resize element (Alt+R)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></button>
+          <button id="btn-pick-component" class="pick-btn" title="Pick Storybook component (Alt+S)" disabled><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></button>
+        </div>
+        <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" title="Extract — download images / SVGs / videos or pull styles, colors, type &amp; more from a selection (Shift = whole page) (Alt+E)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="10.25 12.75 12.75 15.25 15.25 12.75"/><line x1="12.75" y1="15.25" x2="12.75" y2="2.75"/><rect x="2.75" y="10.25" width="5" height="5" rx="1" ry="1"/><path d="M2.75,6.5v.25c0,.552,.448,1,1,1h.25"/><path d="M4,2.75h-.25c-.552,0-1,.448-1,1v.25"/><path d="M7.75,4v-.25c0-.552-.448-1-1-1h-.25"/><path d="M6.5,7.75h.25c.552,0,1-.448,1-1v-.25"/></svg></button>
+        <button id="btn-pick-eyedropper" class="pick-btn" title="Eyedropper — sample a color, edit it live or send to chat (Alt+C)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></button>
+        <button id="btn-pick-a11y" class="pick-btn" title="Accessibility &amp; contrast check — flag WCAG issues, send to chat (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></button>
+        <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
+        <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
+      </div>
       <button id="btn-panel-toggle" title="Toggle panel">
         <svg class="panel-icon-open" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6.5" width="5" height="18" rx="2.5" fill="currentColor"/></svg>
         <svg class="panel-icon-closed" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6.5" width="5" height="5" rx="2.5" fill="currentColor"/><rect x="6.5" y="6.5" width="5" height="5" rx="2.5" fill="currentColor"/><rect x="6.5" y="13" width="5" height="5" rx="2.5" fill="currentColor"/></svg>
@@ -798,6 +1014,13 @@
     window.__amdRequire.config({ paths: { vs: window.__VS_BASE__ }, preferScriptTags: true });
     window.require = window.__nodeRequire;
   </script>
+
+  <!-- Image lightbox (click a chat thumbnail to view larger) -->
+  <div id="img-lightbox">
+    <button id="img-lightbox-close" title="Close (Esc)">&#x2715;</button>
+    <img id="img-lightbox-img" alt="" />
+  </div>
+
   <script src="renderer.js"></script>
 </body>
 </html>

@@ -1,7 +1,13 @@
 const { ipcRenderer } = require('electron');
+const { TOOLS: PAGE_TOOLS, accelOf } = require('./tools');
 const { Terminal }    = require('@xterm/xterm');
 const { FitAddon }    = require('@xterm/addon-fit');
 const { gsap }        = require('gsap');
+// Color picker. Vendored locally and required directly — loading the UMD build
+// via a <script>/CDN in this nodeIntegration renderer attaches to module.exports
+// (not window.iro), so the pickers never built. Expose it as window.iro for the
+// existing picker code.
+try { window.iro = require('@jaames/iro'); } catch (_) {}
 
 // Canvas renderer: xterm 5's default DOM renderer mutates dozens of row
 // elements per frame during heavy output. Canvas keeps that off the DOM
@@ -189,6 +195,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   const msgsEl = document.createElement('div');
   msgsEl.className = 'acp-messages';
   chatEl.appendChild(msgsEl);
+  msgsEl.addEventListener('scroll', () => updateMsgsFade(msgsEl), { passive: true });
 
   // Terminal view — real xterm PTY (lazy-spawned on first switch)
   const termEl = document.createElement('div');
@@ -213,17 +220,29 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
 
   const statusEl = document.createElement('div');
   statusEl.className = 'acp-status';
-  const dotEl = document.createElement('div');
-  dotEl.className = 'acp-status-dot';
+  const specEl = document.createElement('ul');   // domino loader (animates while working)
+  specEl.className = 'acp-status-spec';
+  specEl.setAttribute('role', 'presentation');
+  specEl.innerHTML = '<li></li><li></li><li></li><li></li><li></li><li></li><li></li>';
   const statusTextEl = document.createElement('span');
+  statusTextEl.className = 'acp-status-text';
   statusTextEl.textContent = 'Connecting…';
+  // Shown (in place of the loader/status) on hover while the agent is working;
+  // clicking anywhere on the bar then stops it. See .acp-status.working in styles.css.
+  const stopEl = document.createElement('span');
+  stopEl.className = 'acp-status-stop';
+  stopEl.textContent = 'Stop Agent';
 
-  statusEl.appendChild(dotEl);
+  statusEl.appendChild(specEl);
   statusEl.appendChild(statusTextEl);
+  statusEl.appendChild(stopEl);
+  statusEl.appendChild(createNotifToggle());
+  statusEl.addEventListener('click', () => interruptActiveSession());
   chatEl.appendChild(statusEl);
+  const eq = makeStatusAnim(specEl);
 
   sessions.set(id, {
-    name, type: 'acp', agent, command, el, chatEl, msgsEl, dotEl, statusTextEl,
+    name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
     toolCards: new Map(),
@@ -319,7 +338,8 @@ function renderModelSelector() {
   if (!s || !key) { modelWrap.style.display = 'none'; return; }
   modelWrap.style.display = '';
   if (s.model === undefined) s.model = MODEL_CATALOG[key].models[0]?.id ?? '';
-  modelLabel.textContent = currentModelLabel(s, key);
+  const lbl = currentModelLabel(s, key);
+  modelLabel.textContent = lbl === 'Model' ? 'Model' : 'Model: ' + lbl;
 
   modelMenu.innerHTML = '';
   MODEL_CATALOG[key].models.forEach(m => {
@@ -437,39 +457,92 @@ function fmtReset(iso) {
   return 'Resets ' + d.toLocaleString(undefined, opts);
 }
 
+// LED-segmented bar — warm gradient by position; brightness builds toward the
+// leading tip, with the glow concentrated there and fading back (matches the gauge).
+function usageSegments(pct, n) {
+  const GLOW = 11, TRAIL = 0.55;        // glow spans the last ~11 (dense) segments at the tip
+  let litCount = 0;
+  for (let i = 0; i < n; i++) if ((i / (n - 1)) * 100 <= pct) litCount++;
+  const tip = litCount - 1;
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    if (i > tip) { out += '<span class="ub-seg"></span>'; continue; }
+    const [r, g, b] = graphRgbAt(i / (n - 1));
+    const lp = tip > 0 ? i / tip : 1;
+    const bf = TRAIL + (1 - TRAIL) * lp;
+    const cr = Math.round(r * bf), cg = Math.round(g * bf), cb = Math.round(b * bf);
+    const d = tip - i;
+    let glow = '';
+    if (d < GLOW) {
+      const t = 1 - d / GLOW;
+      glow = `;box-shadow:0 0 ${(1.5 + 4 * t).toFixed(1)}px rgba(${r},${g},${b},${(0.9 * t).toFixed(2)})`;
+    }
+    out += `<span class="ub-seg on" style="background:rgb(${cr},${cg},${cb})${glow}"></span>`;
+  }
+  return out;
+}
 function usageBarRow(label, pct, sub) {
   pct = Math.max(0, Math.min(100, pct || 0));
+  // ~2px segment + 2px gap → one cell every 4px of the available width
+  const w = usageBody.clientWidth || 600;
+  const n = Math.max(24, Math.round(w / 4));
   return `
     <div class="usage-row">
       <div class="usage-row-head">
         <span class="usage-row-label">${label}</span>
         <span class="usage-row-value">${pct.toFixed(0)}% used</span>
       </div>
-      <div class="usage-bar"><div class="usage-bar-fill ${barClass(pct)}" style="width:${pct}%"></div></div>
+      <div class="usage-bar">${usageSegments(pct, n)}</div>
       ${sub ? `<div class="usage-sub">${sub}</div>` : ''}
     </div>`;
 }
 
-// Semicircle gauge (speedometer style) for the compact view.
-// `color` overrides the threshold coloring with a fixed fill.
-function gaugeSvg(pct, color) {
+// Semicircle gauge — dense radial ticks in the warm gradient. Brightness builds
+// toward the leading tip (dim trail → bright head), and the glow is concentrated
+// on the last few ticks at the tip, fading back. Inspired by a backlit knob meter.
+const G_GLOW  = 7;     // ticks the tip glow fades over
+const G_TRAIL = 0.55;  // brightness at the start of the lit arc (1 = full at the tip)
+function gaugeSvg(pct) {
   pct = Math.max(0, Math.min(100, pct || 0));
-  const fillStyle = color ? ` style="stroke:${color}"` : '';
-  const fillCls   = color ? '' : ` ${barClass(pct)}`;
-  return `<svg class="gauge" viewBox="0 0 80 48" preserveAspectRatio="xMidYMid meet">
-    <path class="g-track" fill="none" stroke-linecap="round" d="M8,44 A32,32 0 0 1 72,44" pathLength="100"></path>
-    <path class="g-fill${fillCls}"${fillStyle} fill="none" stroke-linecap="round" d="M8,44 A32,32 0 0 1 72,44" pathLength="100" stroke-dasharray="${pct} 100"></path>
-    <text class="g-pct" x="40" y="43">${Math.round(pct)}%</text>
-  </svg>`;
+  const N = 34, cx = 40, cy = 44, rIn = 25, rOut = 34;
+  let litCount = 0;
+  for (let i = 0; i < N; i++) if ((i / (N - 1)) * 100 <= pct) litCount++;
+  const tip = litCount - 1;            // index of the leading (brightest) tick
+
+  let ticks = '';
+  for (let i = 0; i < N; i++) {
+    const frac = i / (N - 1);
+    const ang = Math.PI - frac * Math.PI;          // 180°→0° across the top
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const x1 = (cx + rIn * c).toFixed(2), y1 = (cy - rIn * s).toFixed(2);
+    const x2 = (cx + rOut * c).toFixed(2), y2 = (cy - rOut * s).toFixed(2);
+    if (i > tip) { ticks += `<line class="g-tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`; continue; }
+    const [r, g, b] = graphRgbAt(frac);
+    const lp = tip > 0 ? i / tip : 1;              // 0 at start → 1 at tip
+    const bf = G_TRAIL + (1 - G_TRAIL) * lp;       // brightness builds toward the tip
+    const cr = Math.round(r * bf), cg = Math.round(g * bf), cb = Math.round(b * bf);
+    const d = tip - i;                             // distance back from the tip
+    // stroke set inline (style) so it wins over the .g-tick CSS rule
+    let css = `stroke:rgb(${cr},${cg},${cb})`;
+    if (d < G_GLOW) {
+      const t = 1 - d / G_GLOW;                    // 1 at the tip → 0 a few ticks back
+      const wide = (1.5 + 4.5 * t).toFixed(1);
+      css += `;filter:drop-shadow(0 0 ${wide}px rgba(${r},${g},${b},${(0.9 * t).toFixed(2)})) drop-shadow(0 0 1.3px rgba(${r},${g},${b},${Math.min(1, t + 0.2).toFixed(2)}))`;
+    }
+    ticks += `<line class="g-tick on" style="${css}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+  }
+  return `<svg class="gauge" viewBox="0 0 80 48" preserveAspectRatio="xMidYMid meet">${ticks}<text class="g-pct" x="40" y="43">${Math.round(pct)}%</text></svg>`;
 }
 
 function usageMiniItem(labelHtml, pct, sub, color) {
   return `<div class="usage-mini-item">
     <div class="umi-main">
       ${gaugeSvg(pct, color)}
-      <div class="umi-label">${labelHtml}</div>
+      <div class="umi-text">
+        <div class="umi-label">${labelHtml}</div>
+        <div class="umi-sub">${sub || ''}</div>
+      </div>
     </div>
-    <div class="umi-sub">${sub || ''}</div>
   </div>`;
 }
 
@@ -521,12 +594,14 @@ async function refreshUsage() {
   if (!usageOpen) return;
   const s = sessions.get(activeId);
   const isClaude = !!(s && s.type === 'acp');
-  const [ctx, lim] = await Promise.all([
-    isClaude ? ipcRenderer.invoke('get-usage', { cwd: s.cwd || '' }) : Promise.resolve(null),
-    ipcRenderer.invoke('get-rate-limits'),
-  ]);
-  _lastUsage = { ctx, lim, isClaude };
-  renderUsage(_lastUsage);
+  try {
+    const [ctx, lim] = await Promise.all([
+      isClaude ? ipcRenderer.invoke('get-usage', { cwd: s.cwd || '' }) : Promise.resolve(null),
+      ipcRenderer.invoke('get-rate-limits'),
+    ]);
+    _lastUsage = { ctx, lim, isClaude };
+    renderUsage(_lastUsage);
+  } catch (_) { /* a failed usage fetch must not break the panel or reject unhandled */ }
 }
 
 function setUsageView(mini) {
@@ -534,20 +609,84 @@ function setUsageView(mini) {
   localStorage.setItem(LS.usageMini, mini ? '1' : '0');
   usageViewFull.classList.toggle('active', !mini);
   usageViewMini.classList.toggle('active', mini);
-  if (_lastUsage) renderUsage(_lastUsage);   // re-render from cache (no refetch)
-  else refreshUsage();
+  if (!_lastUsage) { refreshUsage(); return; }
+
+  // Smoothly grow/shrink between the (taller) bar view and the (shorter) dial view.
+  const body = usageBody;
+  if (body._usageAnimCleanup) body._usageAnimCleanup();   // cancel any in-flight slide
+
+  const startH = body.offsetHeight;
+  renderUsage(_lastUsage);                 // swap content (bar ⇄ dial), no refetch
+  const endH = body.scrollHeight;
+  if (!startH || startH === endH) return;  // nothing to animate
+
+  body.style.overflow = 'hidden';
+  body.style.height = startH + 'px';
+  void body.offsetHeight;                   // commit the start height before transitioning
+  body.style.transition = 'height 0.34s cubic-bezier(0.45,0.05,0.2,1)';
+  body.style.height = endH + 'px';
+
+  const done = () => {
+    body.style.transition = '';
+    body.style.height = '';
+    body.style.overflow = '';
+    body.removeEventListener('transitionend', onEnd);
+    clearTimeout(t);
+    body._usageAnimCleanup = null;
+  };
+  const onEnd = (e) => { if (!e || e.propertyName === 'height') done(); };
+  const t = setTimeout(done, 460);          // fallback if transitionend doesn't fire
+  body.addEventListener('transitionend', onEnd);
+  body._usageAnimCleanup = done;
 }
 usageViewFull.addEventListener('click', () => setUsageView(false));
 usageViewMini.addEventListener('click', () => setUsageView(true));
 usageViewFull.classList.toggle('active', !usageMini);
 usageViewMini.classList.toggle('active', usageMini);
 
-btnUsage.addEventListener('click', () => {
-  usageOpen = !usageOpen;
-  usagePanel.style.display = usageOpen ? '' : 'none';
-  btnUsage.classList.toggle('active', usageOpen);
-  if (usageOpen) refreshUsage();
-});
+// Open/close the usage panel with a height grow-in / shrink-out animation.
+function setUsageOpen(open) {
+  usageOpen = open;
+  btnUsage.classList.toggle('active', open);
+  document.getElementById('left-panel')?.classList.toggle('usage-open', open);  // sysperf bg → solid shade 7 while usage is open
+  const el = usagePanel;
+  if (el._growAnim) el._growAnim();   // cancel any in-flight grow/shrink
+
+  const finish = (after) => {
+    const done = () => {
+      el.style.transition = ''; el.style.height = ''; el.style.overflow = '';
+      el.removeEventListener('transitionend', onEnd); clearTimeout(t); el._growAnim = null;
+      if (after) after();
+    };
+    const onEnd = (e) => { if (!e || e.propertyName === 'height') done(); };
+    const t = setTimeout(done, 380);
+    el.addEventListener('transitionend', onEnd);
+    el._growAnim = done;
+  };
+
+  if (open) {
+    el.style.display = '';
+    if (!_lastUsage) { refreshUsage(); return; }   // first load: just show (no measured height yet)
+    renderUsage(_lastUsage);                        // populate so the target height is accurate
+    refreshUsage();                                 // refresh fresh data in the background
+    const end = el.scrollHeight;
+    el.style.overflow = 'hidden';
+    el.style.height = '0px';
+    void el.offsetHeight;                           // commit the start height
+    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
+    el.style.height = end + 'px';
+    finish();
+  } else {
+    el.style.overflow = 'hidden';
+    el.style.height = el.offsetHeight + 'px';
+    void el.offsetHeight;
+    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
+    el.style.height = '0px';
+    finish(() => { el.style.display = 'none'; });
+  }
+}
+
+btnUsage.addEventListener('click', () => setUsageOpen(!usageOpen));
 
 btnModel.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -601,6 +740,11 @@ const btnFigma    = document.getElementById('btn-figma');
 const figmaMenu   = document.getElementById('figma-menu');
 const composerChips = document.getElementById('composer-chips');
 let figmaChips = [];   // [{key,title,instruction}]
+let attachChips = [];  // [{kind:'file'|'folder', path}]
+
+// Chip glyphs for attached files / folders (mirror the toolbar button icons).
+const FILE_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" xmlns="http://www.w3.org/2000/svg"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773"/></svg>`;
+const FOLDER_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" xmlns="http://www.w3.org/2000/svg"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"/><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"/></svg>`;
 
 // Hover tooltip (positioned to the LEFT of the menu so it stays within
 // the HTML panel rather than over a native view on the right).
@@ -627,6 +771,61 @@ function showFigmaTip(item, text) {
 function hideFigmaTip() {
   if (figmaTipEl) figmaTipEl.classList.remove('show');
 }
+
+// Custom tooltips — native `title` tooltips can't be styled, so move the text to
+// a styled black tip on hover (title → data-tip suppresses the native one).
+(function initTooltips() {
+  const tip = document.createElement('div');
+  tip.id = 'cathode-tip';
+  document.body.appendChild(tip);
+  let cur = null;
+
+  function place(el) {
+    const r = el.getBoundingClientRect();
+    const tr = tip.getBoundingClientRect();
+    let left = r.left + (r.width - tr.width) / 2;
+    left = Math.max(6, Math.min(left, window.innerWidth - tr.width - 6));
+    let top = r.top - tr.height - 8;
+    if (top < 6) top = r.bottom + 8;            // flip below if no room above
+    // Keep the tip clear of the right panel's native browser view (it renders above HTML,
+    // so a tip drifting over it gets hidden). Shift left of the view when it would overlap.
+    const rp = document.getElementById('right-panel');
+    const tb = document.getElementById('tab-bar');
+    if (rp) {
+      const rpr = rp.getBoundingClientRect();
+      const nativeTop = tb ? tb.getBoundingClientRect().bottom : rpr.top;
+      if (top + tr.height > nativeTop && left + tr.width > rpr.left - 4) {
+        left = Math.max(6, rpr.left - tr.width - 6);
+      }
+    }
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top  = Math.round(top) + 'px';
+  }
+  function show(el) {
+    if (el.hasAttribute('title')) { el.dataset.tip = el.getAttribute('title'); el.removeAttribute('title'); }
+    const text = el.dataset.tip;
+    if (!text) { cur = null; return; }
+    cur = el;
+    tip.textContent = text;
+    tip.style.left = '-9999px'; tip.style.top = '-9999px';
+    tip.classList.add('show');
+    place(el);
+  }
+  function hide() { cur = null; tip.classList.remove('show'); }
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest ? e.target.closest('[title], [data-tip]') : null;
+    if (!el || el === cur) return;
+    show(el);
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (!cur) return;
+    if (e.relatedTarget && cur.contains(e.relatedTarget)) return;   // moving within the element
+    hide();
+  });
+  document.addEventListener('mousedown', hide, true);
+  window.addEventListener('scroll', hide, true);
+})();
 
 (function buildFigmaMenu() {
   const clipHint = document.createElement('div');
@@ -713,8 +912,85 @@ function renderFigmaChips() {
 
     composerChips.appendChild(chip);
   });
-  composerChips.classList.toggle('has-chips', figmaChips.length > 0);
+
+  attachChips.forEach((c, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'composer-chip attach-chip';
+    chip.title = c.path;
+
+    const glyph = document.createElement('span');
+    glyph.innerHTML = c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH;
+    chip.appendChild(glyph.firstChild);
+
+    const label = document.createElement('span');
+    label.className = 'chip-label';
+    label.textContent = baseName(c.path);
+    chip.appendChild(label);
+
+    const x = document.createElement('button');
+    x.className = 'chip-x';
+    x.title = 'Remove';
+    x.textContent = '✕';
+    x.addEventListener('click', () => { attachChips.splice(i, 1); renderFigmaChips(); });
+    chip.appendChild(x);
+
+    composerChips.appendChild(chip);
+  });
+
+  composerChips.classList.toggle('has-chips', figmaChips.length > 0 || attachChips.length > 0);
 }
+
+// Last path segment (handles both \ and / separators), for the chip label.
+function baseName(p) {
+  const parts = String(p).replace(/[\\/]+$/, '').split(/[\\/]/);
+  return parts[parts.length - 1] || p;
+}
+
+// Read-only copies of the composer chips (Figma + attach), shown inside the sent
+// user message in the chat — same look, minus the remove button.
+function buildChatChips(figma, attach) {
+  if ((!figma || !figma.length) && (!attach || !attach.length)) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'acp-msg-chips';
+  (figma || []).forEach(c => {
+    const chip = document.createElement('span');
+    chip.className = 'composer-chip';
+    const glyph = document.createElement('span');
+    glyph.innerHTML = FIGMA_GLYPH;
+    chip.appendChild(glyph.firstChild);
+    const label = document.createElement('span');
+    label.className = 'chip-label';
+    label.textContent = c.title;
+    chip.appendChild(label);
+    wrap.appendChild(chip);
+  });
+  (attach || []).forEach(c => {
+    const chip = document.createElement('span');
+    chip.className = 'composer-chip attach-chip';
+    chip.title = c.path;
+    const glyph = document.createElement('span');
+    glyph.innerHTML = c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH;
+    chip.appendChild(glyph.firstChild);
+    const label = document.createElement('span');
+    label.className = 'chip-label';
+    label.textContent = baseName(c.path);
+    chip.appendChild(label);
+    wrap.appendChild(chip);
+  });
+  return wrap;
+}
+
+function addAttachChips(paths, kind) {
+  let added = false;
+  paths.forEach(p => {
+    if (!p || attachChips.some(c => c.path === p)) return;   // skip blanks + dupes
+    attachChips.push({ kind, path: p });
+    added = true;
+  });
+  if (added) renderFigmaChips();
+  uiTextarea.focus();
+}
+function clearAttachChips() { attachChips = []; renderFigmaChips(); }
 
 function editChipUrl(c, chip) {
   const urlEl = chip.querySelector('.chip-url');
@@ -943,7 +1219,7 @@ const AVAILABLE_MODELS = [
 // `id: ''` means "tool default" (no flag / inherit settings).
 const MODEL_CATALOG = {
   claude: { flag: '--model', models: [
-    { id: '',       label: 'Default (settings)' },
+    { id: '',       label: 'Default' },
     { id: 'opus',   label: 'Opus' },
     { id: 'sonnet', label: 'Sonnet' },
     { id: 'haiku',  label: 'Haiku' },
@@ -1371,10 +1647,17 @@ function enhanceSelect(sel) {
     wrap.classList.add('open');
     // Position the fixed menu against the button; flip up if it would overflow below
     const r = btn.getBoundingClientRect();
-    menu.style.left  = r.left + 'px';
-    menu.style.width = r.width + 'px';
-    menu.style.top   = '-9999px';
-    const mh = menu.offsetHeight;
+    // Compact variant (e.g. inline property fields): the button is small, so size
+    // the menu to its options and right-align it to the button instead of matching width.
+    const compact = wrap.classList.contains('pp-ct');
+    if (compact) { menu.style.width = 'auto'; menu.style.minWidth = Math.max(r.width, 90) + 'px'; menu.style.maxWidth = '220px'; }
+    else { menu.style.minWidth = ''; menu.style.maxWidth = ''; menu.style.width = r.width + 'px'; }
+    menu.style.left = '-9999px';
+    menu.style.top  = '-9999px';
+    const mh = menu.offsetHeight, mw = menu.offsetWidth;
+    let left = compact ? (r.right - mw) : r.left;
+    left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
+    menu.style.left = left + 'px';
     const below = window.innerHeight - r.bottom - 8;
     menu.style.top = (mh <= below || r.top < mh + 8)
       ? (r.bottom + 4) + 'px'
@@ -1408,21 +1691,211 @@ function stripAnsi(str) {
     .replace(/[\x00-\x09\x0b-\x1f\x7f]/g, '');
 }
 
+// LED audio-equalizer drawn on a tiny canvas: an 8×4 grid of 4px squares
+// (2px gap on all sides), tinted bottom→top with the warm
+// gradient. Bars dance while the agent works; a static dim grid sits there
+// when idle ("Ready"). Pure canvas + rAF — no animation lib needed.
+const SPEC_STOPS  = [[0, '#FF2020'], [0.35, '#FF5720'], [0.7, '#FFE16B'], [1, '#FFF8DB']];   // equalizer
+const GRAPH_STOPS = [[0, '#FF5720'], [0.5, '#FFE16B'], [1, '#FCF2C8']];                       // usage graphs
+function _specHx(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+function _rgbAt(p, stops) {
+  p = Math.max(0, Math.min(1, p));
+  for (let i = 1; i < stops.length; i++) {
+    const [o1, c1] = stops[i - 1], [o2, c2] = stops[i];
+    if (p <= o2) {
+      const f = (o2 === o1) ? 0 : (p - o1) / (o2 - o1);
+      const a = _specHx(c1), b = _specHx(c2);
+      return [Math.round(a[0] + (b[0] - a[0]) * f), Math.round(a[1] + (b[1] - a[1]) * f), Math.round(a[2] + (b[2] - a[2]) * f)];
+    }
+  }
+  return _specHx(stops[stops.length - 1][1]);
+}
+function specRgbAt(p)  { return _rgbAt(p, SPEC_STOPS); }
+function specGradAt(p) { const c = specRgbAt(p); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+function graphRgbAt(p) { return _rgbAt(p, GRAPH_STOPS); }   // usage gauge/bar warm ramp
+function createEqualizer(canvas) {
+  const ctx = canvas.getContext('2d');
+  const COLS = 8, ROWS = 4, CELL = 4, GAPX = 2, GAPY = 2;
+  const W = COLS * CELL + (COLS - 1) * GAPX;   // 46
+  const H = ROWS * CELL + (ROWS - 1) * GAPY;   // 22
+  const rowColor = [];
+  for (let L = 0; L < ROWS; L++) rowColor[L] = specGradAt(L / (ROWS - 1));   // bottom→top gradient
+  let raf = null, t0 = 0, animating = false, dpr = 0;
+  function setup() {
+    const d = window.devicePixelRatio || 1;
+    if (canvas.width === Math.round(W * d) && d === dpr) return;
+    dpr = d; canvas.width = Math.round(W * d); canvas.height = Math.round(H * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  function render(heights) {
+    setup();
+    ctx.clearRect(0, 0, W, H);
+    for (let c = 0; c < COLS; c++) {
+      const h = heights ? heights[c] : 0;
+      for (let L = 0; L < ROWS; L++) {                    // L=0 bottom → ROWS-1 top
+        ctx.fillStyle = rowColor[L];                      // vertical gradient (per row)
+        ctx.globalAlpha = L < h ? 1 : 0.16;               // lit vs dim grid
+        ctx.fillRect(c * (CELL + GAPX), (ROWS - 1 - L) * (CELL + GAPY), CELL, CELL);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function frame(ts) {
+    if (!t0) t0 = ts;
+    const t = (ts - t0) / 1000;
+    const heights = [];
+    for (let c = 0; c < COLS; c++) {
+      const v = Math.abs(Math.sin(t * 2.1 + c * 0.6) * 0.6 + Math.sin(t * 3.7 + c * 1.3) * 0.3 + Math.sin(t * 1.3 + c * 2.1) * 0.25);
+      heights[c] = Math.max(1, Math.round(Math.min(1, v) * ROWS));
+    }
+    render(heights);
+    raf = requestAnimationFrame(frame);
+  }
+  // Redraw the static grid if the canvas becomes visible (or DPI changes) while idle.
+  try { new ResizeObserver(() => { if (canvas.clientWidth && !animating) render(null); }).observe(canvas); } catch (_) {}
+  render(null);
+  return {
+    start() { animating = true; if (raf) return; t0 = 0; raf = requestAnimationFrame(frame); },
+    stop()  { animating = false; if (raf) { cancelAnimationFrame(raf); raf = null; } render(null); },
+  };
+}
+
+// Status animation controller for the domino loader.
+// start(): run the cascade. stop(): freeze each bar where the cascade left it,
+// then release so the CSS transition eases them all up to standing (FLIP).
+function makeStatusAnim(el) {
+  const bars = () => Array.from(el.querySelectorAll('li'));
+  return {
+    start() {
+      bars().forEach(b => { b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; });
+      el.classList.add('running');
+    },
+    stop() {
+      const list = bars();
+      if (!list.length) { el.classList.remove('running'); return; }
+      // capture the live (animated) pose of each bar before stopping
+      const frozen = list.map(b => { const s = getComputedStyle(b); return [s.transform, s.opacity]; });
+      el.classList.remove('running');
+      // pin them at that pose with no transition…
+      list.forEach((b, i) => { b.style.transition = 'none'; b.style.transform = frozen[i][0]; b.style.opacity = frozen[i][1]; });
+      void el.offsetWidth;   // reflow to commit the pinned pose
+      // …then release to the CSS rest pose — the transition animates the stand-up
+      list.forEach(b => { b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; });
+    },
+  };
+}
+
+// ── Notification sounds ───────────────────────────────────────────
+const ALERT_ON_ICON  = `<svg viewBox="0 0 18 18" width="16" height="16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M13.0498 6.5C13.0498 4.2636 11.2364 2.4502 9 2.4502C6.7636 2.4502 4.9502 4.2636 4.9502 6.5V10.75C4.9502 11.2215 4.82844 11.6642 4.61621 12.0498H13.3838C13.1716 11.6642 13.0498 11.2215 13.0498 10.75V6.5ZM14.4502 10.75C14.4502 11.4684 15.0316 12.0498 15.75 12.0498C16.1366 12.0498 16.4502 12.3634 16.4502 12.75C16.4502 13.0884 16.2098 13.3704 15.8906 13.4355L15.75 13.4502H2.25C1.8634 13.4502 1.5498 13.1366 1.5498 12.75C1.5498 12.3634 1.8634 12.0498 2.25 12.0498C2.9684 12.0498 3.5498 11.4684 3.5498 10.75V6.5C3.5498 3.4904 5.9904 1.0498 9 1.0498C12.0096 1.0498 14.4502 3.4904 14.4502 6.5V10.75Z"/><path d="M9.89452 15.0337C10.0882 14.6992 10.516 14.5852 10.8506 14.7788C11.1851 14.9725 11.2991 15.4003 11.1055 15.7349C10.686 16.4596 9.90081 16.9497 8.99999 16.9497C8.09916 16.9497 7.314 16.4596 6.89452 15.7349C6.70089 15.4003 6.8149 14.9725 7.1494 14.7788C7.48396 14.5852 7.91177 14.6992 8.10546 15.0337C8.28499 15.3439 8.61906 15.5503 8.99999 15.5503C9.38091 15.5503 9.71499 15.3439 9.89452 15.0337Z"/></svg>`;
+const ALERT_OFF_ICON = `<svg viewBox="0 0 18 18" width="16" height="16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3.5498 10.75V6.5C3.5498 3.4904 5.9904 1.0498 9 1.0498C11.2584 1.0498 13.1946 2.42434 14.0215 4.37891C14.1718 4.73486 14.0053 5.14533 13.6494 5.2959C13.2934 5.4465 12.8831 5.27983 12.7324 4.92383C12.1169 3.46879 10.6762 2.4502 9 2.4502C6.7636 2.4502 4.9502 4.2636 4.9502 6.5V10.75C4.9502 11.2215 4.82844 11.6642 4.61621 12.0498H5.25C5.6366 12.0498 5.9502 12.3634 5.9502 12.75C5.9502 13.1366 5.6366 13.4502 5.25 13.4502H2.25C1.8634 13.4502 1.5498 13.1366 1.5498 12.75C1.5498 12.3634 1.8634 12.0498 2.25 12.0498C2.9684 12.0498 3.5498 11.4684 3.5498 10.75Z"/><path d="M13.0498 10.75V8.4922C13.0498 8.1056 13.3634 7.79201 13.75 7.79201C14.1366 7.79201 14.4502 8.1056 14.4502 8.4922V10.75C14.4502 11.4684 15.0316 12.0498 15.75 12.0498C16.1366 12.0498 16.4502 12.3634 16.4502 12.75C16.4502 13.1366 16.1366 13.4502 15.75 13.4502H9.49219C9.10559 13.4502 8.792 13.1366 8.79199 12.75C8.79199 12.3634 9.10559 12.0498 9.49219 12.0498H13.3838C13.1716 11.6642 13.0498 11.2215 13.0498 10.75Z"/><path d="M9.89453 15.0337C10.0882 14.6992 10.516 14.5852 10.8506 14.7788C11.1851 14.9725 11.2991 15.4003 11.1055 15.7349C10.686 16.4596 9.90083 16.9497 9 16.9497C8.09918 16.9497 7.31402 16.4596 6.89453 15.7349C6.70091 15.4003 6.81491 14.9725 7.14942 14.7788C7.48398 14.5852 7.91179 14.6992 8.10547 15.0337C8.285 15.3439 8.61908 15.5503 9 15.5503C9.38092 15.5503 9.715 15.3439 9.89453 15.0337Z"/><path d="M15.5049 1.50488C15.7782 1.23151 16.2217 1.23151 16.4951 1.50488C16.7685 1.77824 16.7685 2.22174 16.4951 2.49511L2.49511 16.4951C2.22174 16.7685 1.77824 16.7685 1.50488 16.4951C1.23151 16.2217 1.23151 15.7782 1.50488 15.5049L15.5049 1.50488Z"/></svg>`;
+
+// Distinct synthesized cue per event type, gated by a persisted master toggle.
+const Notif = (() => {
+  let on = localStorage.getItem('cathode-notif') === '1';
+  let ctx = null;
+  const ac = () => ctx || (ctx = new (window.AudioContext || window.webkitAudioContext)());
+  function blip(freq, start, dur, gain = 0.16, type = 'sine') {
+    const c = ac();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = freq;
+    o.connect(g); g.connect(c.destination);
+    const t = c.currentTime + start;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+  // Preload + reuse one element per file: a throwaway `new Audio()` can be GC'd
+  // mid-play, and re-fetching the file every time is wasteful. Reset + replay.
+  const _cache = {};
+  function audioFor(src) {
+    let a = _cache[src];
+    if (!a) { a = _cache[src] = new Audio(src); a.preload = 'auto'; }
+    return a;
+  }
+  function playFile(src, vol = 0.6) {
+    const a = audioFor(src);
+    a.volume = vol;
+    try { a.currentTime = 0; } catch (_) {}
+    a.play().catch(err => console.warn('[notif] sound failed:', src, err && err.message));
+  }
+  // Warm the cache up front so the first alert isn't delayed by a cold fetch.
+  ['sounds/error.wav', 'sounds/message.wav'].forEach(src => { try { audioFor(src); } catch (_) {} });
+  const sounds = {
+    done:    () => { blip(659.25, 0, 0.13); blip(987.77, 0.10, 0.22); },   // synth fallback (not wired)
+    message: () => playFile('sounds/message.wav'),                         // KEDR servo-bot data response
+    error:   () => playFile('sounds/error.wav'),                          // Slava Pogorelsky error tone
+    limit:   () => playFile('sounds/error.wav'),                          // same as error, per request
+  };
+  function setOn(v) { on = !!v; localStorage.setItem('cathode-notif', on ? '1' : '0'); syncNotifToggles(); }
+  return {
+    play(type) { if (!on) return; try { (sounds[type] || sounds.done)(); } catch (_) {} },
+    isOn: () => on,
+    toggle: () => setOn(!on),
+  };
+})();
+
+function syncNotifToggles() {
+  const on = Notif.isOn();
+  document.querySelectorAll('.notif-toggle').forEach(b => {
+    b.innerHTML = on ? ALERT_ON_ICON : ALERT_OFF_ICON;
+    b.classList.toggle('on', on);
+    b.title = on ? 'Notification sounds: on' : 'Notification sounds: off';
+  });
+}
+
+function createNotifToggle() {
+  const btn = document.createElement('button');
+  btn.className = 'notif-toggle' + (Notif.isOn() ? ' on' : '');
+  btn.innerHTML = Notif.isOn() ? ALERT_ON_ICON : ALERT_OFF_ICON;
+  btn.title = Notif.isOn() ? 'Notification sounds: on' : 'Notification sounds: off';
+  btn.addEventListener('click', (e) => { e.stopPropagation(); Notif.toggle(); });
+  return btn;
+}
+
 function acpSetStatus(s, state) {
-  const labels = { ready: 'Ready', thinking: 'Thinking…', connecting: 'Connecting…', installing: 'Installing adapter…', error: 'Error', closed: 'Session ended' };
+  const prev = s.status;
+  const labels = { ready: 'Ready', thinking: 'Working…', connecting: 'Connecting…', installing: 'Installing adapter…', error: 'Error', closed: 'Session ended' };
   s.status = state;
-  s.dotEl.className = 'acp-status-dot' + (state === 'thinking' ? ' active' : '');
   s.statusTextEl.textContent = labels[state] || state;
+  if (s.statusEl) s.statusEl.classList.toggle('working', state === 'thinking');
+  if (s.eq) { if (state === 'thinking') s.eq.start(); else s.eq.stop(); }
+  // Alerts: error (task-complete is covered by the per-message sound on finalize)
+  if (state === 'error' && prev !== 'error') Notif.play('error');
 }
 
 // Coalesced to one scroll per frame — streaming calls this per chunk, and an
 // unbatched scrollIntoView forces a full layout pass every call.
+// Fade the top/bottom edges only when content is actually scrolled past them — so the
+// banner resting at the very top (startup) is never faded.
+function updateMsgsFade(el) {
+  if (!el) return;
+  el.classList.toggle('fade-top', el.scrollTop > 6);
+  el.classList.toggle('fade-bot', el.scrollHeight - el.scrollTop - el.clientHeight > 6);
+  el._stick = el.scrollHeight - el.scrollTop - el.clientHeight < 80;   // near bottom → keep following
+}
+
 function acpScrollEnd(s) {
   if (s._scrollScheduled) return;
   s._scrollScheduled = true;
   requestAnimationFrame(() => {
     s._scrollScheduled = false;
-    s.msgsEl.lastElementChild?.scrollIntoView({ block: 'end' });
+    // Only follow new content when the user is at/near the bottom, so a message
+    // pinned to the middle isn't yanked away by the streaming reply.
+    if (s.msgsEl._stick !== false) s.msgsEl.lastElementChild?.scrollIntoView({ block: 'end' });
+    updateMsgsFade(s.msgsEl);
+  });
+}
+
+// New user message → pin its top near the middle of the container (room below for
+// the reply), and stop auto-following until the user returns to the bottom.
+function acpScrollUserToMiddle(s, el) {
+  s.msgsEl._stick = false;
+  requestAnimationFrame(() => {
+    const cTop = s.msgsEl.getBoundingClientRect().top;
+    const eTop = el.getBoundingClientRect().top;
+    const target = s.msgsEl.scrollTop + (eTop - cTop) - s.msgsEl.clientHeight * 0.45;
+    s.msgsEl.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
   });
 }
 
@@ -1438,10 +1911,11 @@ function renderAcpBanner(s, version, model, cwd) {
   const modelLine  = model || agentLabel;
   const logo = document.createElement('pre');
   logo.className = 'acp-banner-logo';
-  logo.textContent = [
-    ` ▐▛███▜▌   ${agentLabel} ${versionStr}`,
-    `▝▜█████▛▘  ${modelLine}`,
-    `  ▘▘ ▝▝    ${cwd}`,
+  // ASCII blocks → orange (.acp-logo-art); the version/model/path text → shade 0
+  logo.innerHTML = [
+    `<span class="acp-logo-art"> ▐▛███▜▌   </span>${escHtml(`${agentLabel} ${versionStr}`)}`,
+    `<span class="acp-logo-art">▝▜█████▛▘  </span>${escHtml(modelLine)}`,
+    `<span class="acp-logo-art">  ▘▘ ▝▝    </span>${escHtml(cwd)}`,
   ].join('\n');
   banner.appendChild(logo);
 
@@ -1458,12 +1932,73 @@ function acpRawLog(_s, _text) {
   // No-op: terminal view is now a real PTY (xterm); text log replaced.
 }
 
+// Figma timestamp format, e.g. "6/15/2026 6:23AM"
+function formatMsgTime(d) {
+  const date = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${date} ${h}:${String(d.getMinutes()).padStart(2, '0')}${ampm}`;
+}
+
 function acpFinalizeStream(s) {
   if (s.streamEl) {
-    s.streamEl.classList.remove('streaming');
+    const bubble = s.streamEl;
+    bubble.classList.remove('streaming');
+    const text = (s.streamTextEl ? s.streamTextEl.textContent : '').trim();
+    if (text) {
+      addReplyMeta(s, bubble, text);
+      const isLimit = /\blimit (reached|exceeded|hit)\b|\b(usage|rate|session|message|weekly|hourly) limit\b|reached your .{0,25}\blimit\b/i.test(text);
+      Notif.play(isLimit ? 'limit' : 'message');
+    }
     s.streamEl = null; s.streamTextEl = null;
     s.streamMsgId = null;
   }
+}
+
+// Timestamp row under a completed reply. The copy button is collapsed until the
+// bubble/row is hovered, then animates in and pushes the timestamp over. Clicking
+// anywhere on the bubble copies it too; the button flips to "COPIED" on copy.
+function addReplyMeta(s, bubble, text) {
+  let resetTimer = null;
+  function doCopy() {
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.innerHTML = 'COPIED';
+      copyBtn.classList.add('copied');
+      copyBtn.title = 'Copied';
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        copyBtn.innerHTML = COPY_ICON;
+        copyBtn.classList.remove('copied');
+        copyBtn.title = 'Copy message';
+      }, 1300);
+    }).catch(() => {});
+  }
+
+  const row = document.createElement('div');
+  row.className = 'acp-msg-time';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'acp-msg-copy';
+  copyBtn.title = 'Copy message';
+  copyBtn.innerHTML = COPY_ICON;
+  copyBtn.addEventListener('mousedown', e => e.preventDefault());   // keep text selection
+  copyBtn.addEventListener('click', e => { e.stopPropagation(); doCopy(); });
+
+  const timeText = document.createElement('span');
+  timeText.className = 'acp-msg-time-text';
+  timeText.textContent = formatMsgTime(new Date());
+
+  row.appendChild(copyBtn);
+  row.appendChild(timeText);
+  s.msgsEl.appendChild(row);
+
+  // Click anywhere on the message copies it — unless the user is selecting text.
+  bubble.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    doCopy();
+  });
 }
 
 const COPY_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12.25 5.75H13.75C14.85 5.75 15.75 6.65 15.75 7.75V13.75C15.75 14.85 14.85 15.75 13.75 15.75H7.75C6.65 15.75 5.75 14.85 5.75 13.75V12.25"></path><path d="M10.25 2.25H4.25C3.15 2.25 2.25 3.15 2.25 4.25V10.25C2.25 11.35 3.15 12.25 4.25 12.25H10.25C11.35 12.25 12.25 11.35 12.25 10.25V4.25C12.25 3.15 11.35 2.25 10.25 2.25Z"></path></svg>';
@@ -1489,18 +2024,72 @@ function attachCopyBtn(msgEl, getText) {
   msgEl.appendChild(btn);
 }
 
-function acpAddUserMsg(s, text) {
+// ── Image attachments (chat thumbnails + lightbox) ────────────────
+const CHAT_IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+function isChatImage(p) { return CHAT_IMG_EXT.test(p || ''); }
+function chatImgMime(p) {
+  const ext = (String(p).split('.').pop() || '').toLowerCase();
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'gif')  return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'svg')  return 'image/svg+xml';
+  if (ext === 'bmp')  return 'image/bmp';
+  return 'image/png';
+}
+// Load via fs → blob (robust for WSL UNC / drive paths); fall back to file URL.
+function loadChatImg(img, filePath) {
+  require('fs').promises.readFile(filePath)
+    .then(buf => { img.src = URL.createObjectURL(new Blob([buf], { type: chatImgMime(filePath) })); })
+    .catch(() => { try { img.src = require('url').pathToFileURL(filePath).href; } catch (_) {} });
+}
+function openImgLightbox(src, alt) {
+  const lb = document.getElementById('img-lightbox');
+  const im = document.getElementById('img-lightbox-img');
+  if (!lb || !im) return;
+  im.src = src; im.alt = alt || '';
+  lb.classList.add('open');
+}
+(function initImgLightbox() {
+  const lb = document.getElementById('img-lightbox');
+  if (!lb) return;
+  const close = () => { lb.classList.remove('open'); };
+  const closeBtn = document.getElementById('img-lightbox-close');
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lb.classList.contains('open')) close(); });
+})();
+function appendChatImages(el, images) {
+  if (!images || !images.length) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg-imgs';
+  images.forEach(p => {
+    const name = String(p).split(/[\\/]/).pop();
+    const thumb = document.createElement('img');
+    thumb.className = 'chat-img-thumb';
+    thumb.alt = name; thumb.title = name;
+    loadChatImg(thumb, p);
+    thumb.addEventListener('click', () => openImgLightbox(thumb.src, name));
+    wrap.appendChild(thumb);
+  });
+  el.appendChild(wrap);
+}
+
+function acpAddUserMsg(s, text, images = [], chips = null) {
   s._bannerCollecting = false;
   acpFinalizeStream(s);
   acpRawLog(s, `\n> ${text}\n\n`);
   const el = document.createElement('div');
   el.className = 'acp-msg user';
-  const t = document.createElement('div');
-  t.className = 'acp-msg-text';
-  t.textContent = text;
-  el.appendChild(t);
+  if (chips) { const w = buildChatChips(chips.figma, chips.attach); if (w) el.appendChild(w); }
+  if (text && text.trim()) {
+    const t = document.createElement('div');
+    t.className = 'acp-msg-text';
+    t.textContent = text;
+    el.appendChild(t);
+  }
+  appendChatImages(el, images);
   s.msgsEl.appendChild(el);
-  acpScrollEnd(s);
+  acpScrollUserToMiddle(s, el);
 }
 
 function acpAppendChunk(s, text, messageId) {
@@ -1513,7 +2102,6 @@ function acpAppendChunk(s, text, messageId) {
     const t = document.createElement('div');
     t.className = 'acp-msg-text';
     el.appendChild(t);
-    attachCopyBtn(el, () => t.textContent);
     s.msgsEl.appendChild(el);
     s.streamEl = el; s.streamTextEl = t;
     s.streamMsgId = messageId;
@@ -1880,6 +2468,56 @@ btnPanelToggle.addEventListener('click', () => {
 });
 
 // ── Settings dropdown ─────────────────────────────────────────────
+// ── Custom window controls (frameless titlebar) ──────────────────
+(function initWindowControls() {
+  const wc = document.getElementById('window-controls');
+  if (!wc) return;
+  document.getElementById('wc-minimize').addEventListener('click', () => ipcRenderer.send('window-minimize'));
+  document.getElementById('wc-maximize').addEventListener('click', () => ipcRenderer.send('window-maximize-toggle'));
+  document.getElementById('wc-close').addEventListener('click', () => ipcRenderer.send('window-close'));
+  ipcRenderer.on('window-maximized-state', (_, max) => wc.classList.toggle('maximized', !!max));
+})();
+
+// ── Views control bar — wires the LED toggles to their views ──────
+// Proxies the original controls (still in the DOM) so existing show/hide +
+// persistence logic stays intact. Unavailable views remove their toggle (TODO).
+(function initViewsBar() {
+  const bar = document.getElementById('views-toggles');
+  if (!bar) return;
+  const toggles = {};
+  bar.querySelectorAll('.vt-switch').forEach((sw) => { toggles[sw.dataset.view] = sw; });
+  const setOn = (view, on) => {
+    const sw = toggles[view]; if (!sw) return;
+    sw.classList.toggle('on', !!on);
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+  };
+  const isOn  = (v) => !!(toggles[v] && toggles[v].classList.contains('on'));
+  const proxy = (id) => { const b = document.getElementById(id); if (b) b.click(); };
+  const sysOn = () => { const b = document.getElementById('btn-sysperf-toggle'); return !!b && b.classList.contains('active'); };   // active class is set synchronously; panel display lags behind the grow/shrink animation
+  window.__setViewToggle = setOn;   // allow other code (e.g. session sync) to keep these in step
+
+  toggles.usage  && toggles.usage.addEventListener('click',  () => { proxy('btn-usage');           setOn('usage', usageOpen); });
+  toggles.system && toggles.system.addEventListener('click', () => { proxy('btn-sysperf-toggle');  setOn('system', sysOn()); });
+  toggles.devtools && toggles.devtools.addEventListener('click', () => proxy('btn-devtools'));
+  ipcRenderer.on('devtools-opened', () => setOn('devtools', true));
+  ipcRenderer.on('devtools-closed', () => setOn('devtools', false));
+  toggles.terminal && toggles.terminal.addEventListener('click', () => {
+    const wantTerm = !isOn('terminal');
+    const tab = document.querySelector('#session-view-toggle .svt-tab[data-view="' + (wantTerm ? 'term' : 'chat') + '"]');
+    if (tab) tab.click();
+    setOn('terminal', wantTerm);
+  });
+
+  // Reflect actual panel state once all panel inits have run.
+  setTimeout(() => {
+    if (!usageOpen) proxy('btn-usage');     // start the usage graph on
+    setOn('usage', usageOpen);
+    setOn('system', sysOn());
+    const dt = document.getElementById('btn-devtools');
+    setOn('devtools', !!dt && dt.classList.contains('active'));
+  }, 0);
+})();
+
 const gearBtn      = document.getElementById('btn-settings');
 const apiKeyModal  = document.getElementById('api-key-modal');
 const apiKeyInput  = document.getElementById('api-key-input');
@@ -2148,7 +2786,7 @@ function updateViewTabThumb() {
 // activateViewTab (and main.js right-panel-mode if it needs a native view).
 const TAB_ICONS = {
   project:   `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path opacity="0.4" d="M9.5 5.5C9.5 3.96 8.573 2.65005 7.25 2.06995V5.75H4.25V2.06995C2.927 2.65005 2 3.9599 2 5.5C2 7.0401 2.927 8.34995 4.25 8.93005V15.25C4.25 15.8 4.698 16.25 5.25 16.25H6.25C6.802 16.25 7.25 15.8 7.25 15.25V8.93005C8.573 8.34995 9.5 7.0401 9.5 5.5Z" fill="currentColor" stroke="none"/><path opacity="0.4" d="M15.25 9.25V15.25C15.25 15.8 14.802 16.25 14.25 16.25H13.25C12.698 16.25 12.25 15.8 12.25 15.25V9.25" fill="currentColor" stroke="none"/><path d="M9.5 5.5C9.5 3.96 8.573 2.65005 7.25 2.06995V5.75H4.25V2.06995C2.927 2.65005 2 3.9599 2 5.5C2 7.0401 2.927 8.34995 4.25 8.93005V15.25C4.25 15.8 4.698 16.25 5.25 16.25H6.25C6.802 16.25 7.25 15.8 7.25 15.25V8.93005C8.573 8.34995 9.5 7.0401 9.5 5.5Z"/><path d="M15.25 9.25V15.25C15.25 15.8 14.802 16.25 14.25 16.25H13.25C12.698 16.25 12.25 15.8 12.25 15.25V9.25"/><path d="M11.25 9.25H16.25"/><path d="M13.75 9.25V2.25"/><path d="M13.75 5.25L14.75 3.5L14.25 1.75H13.25L12.75 3.5L13.75 5.25Z" fill="currentColor"/></g></svg>`,
-  figma:     `<svg xmlns="http://www.w3.org/2000/svg" width="9" height="13" viewBox="0 0 200 300"><path d="M50 300c27.6 0 50-22.4 50-50v-50H50c-27.6 0-50 22.4-50 50s22.4 50 50 50z" fill="#0acf83"/><path d="M0 150c0-27.6 22.4-50 50-50h50v100H50c-27.6 0-50-22.4-50-50z" fill="#a259ff"/><path d="M0 50C0 22.4 22.4 0 50 0h50v100H50C22.4 100 0 77.6 0 50z" fill="#f24e1e"/><path d="M100 0h50c27.6 0 50 22.4 50 50s-22.4 50-50 50h-50V0z" fill="#ff7262"/><path d="M200 150c0 27.6-22.4 50-50 50s-50-22.4-50-50 22.4-50 50-50 50 22.4 50 50z" fill="#1abcfe"/></svg>`,
+  figma:     `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7.60001 14.4262V13.1137H6.28653C5.56228 13.1138 4.97418 13.7019 4.97403 14.4262C4.97403 15.1506 5.56219 15.7395 6.28653 15.7397V17.1401L6.00919 17.1254C4.64178 16.9862 3.57364 15.8301 3.57364 14.4262C3.57379 12.9287 4.78908 11.7135 6.28653 11.7133H9.0004V14.4262L8.98575 14.7035C8.84681 16.0712 7.69066 17.1401 6.28653 17.1401V15.7397C7.011 15.7397 7.60001 15.1507 7.60001 14.4262Z" fill="currentColor"/><path d="M3.57364 8.99986C3.57379 7.50241 4.78908 6.28712 6.28653 6.28697H9.0004V11.7137H6.28653V10.3133H7.60001V7.68736H6.28653C5.56228 7.68751 4.97418 8.27561 4.97403 8.99986C4.97403 9.72424 5.56219 10.3132 6.28653 10.3133V11.7137L6.00919 11.6991C4.64178 11.5599 3.57364 10.4038 3.57364 8.99986Z" fill="currentColor"/><path d="M3.57364 3.57353C3.57379 2.07608 4.78908 0.86079 6.28653 0.860641H9.0004V6.2874H6.28653V4.88701H7.60001V2.26103H6.28653C5.56228 2.26118 4.97418 2.84928 4.97403 3.57353C4.97403 4.29791 5.56219 4.88686 6.28653 4.88701V6.2874L6.00919 6.27275C4.64178 6.13356 3.57364 4.97747 3.57364 3.57353Z" fill="currentColor"/><path d="M11.7135 2.26076C12.4377 2.26087 13.0257 2.84904 13.026 3.57326C13.026 4.29766 12.4378 4.88662 11.7135 4.88673H8.74548V6.29658L11.7135 6.28712L11.9908 6.27248C13.3582 6.13332 14.4263 4.97722 14.4263 3.57326C14.4261 2.16945 13.3581 1.01315 11.9908 0.874039L11.7135 0.860367L8.74548 0.883499V2.27022L11.7135 2.26076Z" fill="currentColor"/><path d="M13.0264 8.99986C13.0262 8.27552 12.4373 7.68736 11.7129 7.68736C10.9887 7.68751 10.4006 8.27561 10.4004 8.99986C10.4004 9.72424 10.9886 10.3132 11.7129 10.3133V11.7137L11.4356 11.6991C10.0682 11.5599 9.00003 10.4038 9.00003 8.99986C9.00018 7.50241 10.2155 6.28712 11.7129 6.28697C13.2105 6.28697 14.4266 7.50232 14.4268 8.99986L14.4121 9.27721C14.2732 10.6449 13.117 11.7137 11.7129 11.7137V10.3133C12.4374 10.3133 13.0264 9.72433 13.0264 8.99986Z" fill="currentColor"/></svg>`,
   storybook: `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m9,15.051c.17,0,.339-.045.494-.134.643-.371,1.732-.847,3.141-.845.899.001,1.667.197,2.27.435.648.255,1.344-.24,1.344-.937V4.487c0-.354-.181-.68-.486-.86-.5393-.3183-1.4027-.7163-2.513-.8308"/><path d="m9,15.051c-.17,0-.339-.045-.494-.134-.643-.371-1.732-.847-3.141-.845-.899.001-1.667.197-2.27.435-.648.255-1.344-.237-1.344-.933V4.484c0-.354.181-.676.486-.856.637-.376,1.726-.863,3.14-.863,1.89,0,3.198.872,3.624,1.182"/><path d="m8.999,15.051c.6301-1.3222,1.9537-2.2143,3.6105-2.3971.3692-.0407.6405-.3676.6405-.739V2.3259c0-.4569-.4081-.8165-.8599-.7486-1.5127.2275-2.7746,1.0598-3.3911,2.3686v11.105Z"/></g></svg>`,
   url:       `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><circle cx="9" cy="9" r="7"/><path d="M9 2c0 0-2.5 3-2.5 7s2.5 7 2.5 7"/><path d="M9 2c0 0 2.5 3 2.5 7S9 16 9 16"/><line x1="2" y1="9" x2="16" y2="9"/><path d="M2.75 6h12.5"/><path d="M2.75 12h12.5"/></g></svg>`,
   code:      `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><rect x="1.75" y="2.75" width="14.5" height="12.5" rx="2"/><circle cx="4.25" cy="5.25" r=".75" fill="currentColor" stroke="none"/><circle cx="6.75" cy="5.25" r=".75" fill="currentColor" stroke="none"/><polyline points="10.75 12.25 13 10 10.75 7.75"/><polyline points="7.25 12.25 5 10 7.25 7.75"/></g></svg>`,
@@ -2181,17 +2819,16 @@ function equalizeTabWidths() {
 
   const appBar      = document.getElementById('app-bar');
   const settingsBtn = document.getElementById('btn-settings');
-  const devToolsBtn = document.getElementById('btn-devtools');
+  const rightTools  = document.getElementById('window-controls');
 
   // Reset to natural size for measurement
   container.style.maxWidth = '';
   tabs.forEach(t => { t.style.width = ''; });
 
   // Centered tab bar must not overlap the tools on either side.
-  // Left boundary = the settings button (now beside the logo); right boundary =
-  // the devtools button (now the first tool to the right of the tabs).
+  // Left boundary = the settings button; right boundary = the window controls.
   const center     = appBar.offsetWidth / 2;
-  const rightLimit = devToolsBtn.offsetLeft - 10;
+  const rightLimit = (rightTools ? rightTools.offsetLeft : appBar.offsetWidth) - 10;
   const leftLimit  = settingsBtn.offsetLeft + settingsBtn.offsetWidth + 10;
   const halfAvail  = Math.min(rightLimit - center, center - leftLimit);
   const maxWidth   = Math.max(80, 2 * halfAvail);
@@ -2327,6 +2964,27 @@ function activateViewTab(tabId, silent = false) {
   }
 }
 
+// Each tab icon's art sits differently inside its viewBox, so a fixed flex gap
+// yields inconsistent visual spacing. Measure each glyph's real bbox and pull
+// the label to a uniform 8px from the glyph (negative margins — no rescaling,
+// so stroke weights are untouched). Left margin aligns the glyphs' left edges too.
+function alignTabIconGaps() {
+  document.querySelectorAll('#right-panel-tabs .view-tab > svg').forEach(svg => {
+    svg.style.marginLeft = '';
+    svg.style.marginRight = '';
+    const vb = svg.viewBox && svg.viewBox.baseVal;
+    if (!vb || !vb.width) return;
+    let bbox;
+    try { bbox = svg.getBBox(); } catch (_) { return; }
+    if (!bbox || !bbox.width) return;
+    const scale    = 16 / vb.width;   // .view-tab svg renders at 16px
+    const leftPad  = (bbox.x - vb.x) * scale;
+    const rightPad = ((vb.x + vb.width) - (bbox.x + bbox.width)) * scale;
+    svg.style.marginLeft  = (-leftPad).toFixed(2)  + 'px';
+    svg.style.marginRight = (-rightPad).toFixed(2) + 'px';
+  });
+}
+
 function renderViewTabs() {
   const container = document.getElementById('right-panel-tabs');
   container.querySelectorAll('.view-tab').forEach(b => b.remove());
@@ -2334,12 +2992,11 @@ function renderViewTabs() {
     const btn = document.createElement('button');
     btn.className = 'view-tab' + (tab.id === activeViewTabId ? ' active' : '');
     btn.dataset.view = tab.id;
-    btn.title = tab.label;
-    btn.innerHTML = `${getTabIconHtml(tab)}<span class="view-tab-label">${escHtml(tab.label)}</span>`;
+    btn.innerHTML = `<span class="vt-blob"></span>${getTabIconHtml(tab)}<span class="view-tab-label">${escHtml(tab.label)}</span>`;
     btn.addEventListener('click', () => activateViewTab(tab.id));
     container.appendChild(btn);
   });
-  requestAnimationFrame(() => { equalizeTabWidths(); updateViewTabThumb(); });
+  requestAnimationFrame(() => { alignTabIconGaps(); equalizeTabWidths(); updateViewTabThumb(); });
 }
 
 renderViewTabs();
@@ -2809,16 +3466,7 @@ function clearPickMode() {
 // The context menu is native (it composites over the WebContentsView), so it
 // needs raster icons — rasterize each toolbar SVG to a PNG the menu can show.
 (function registerBrowserTools() {
-  const TOOLS = [
-    { id: 'btn-pick-box',    key: 'b', label: 'Box select',   accel: 'Alt+B' },
-    { id: 'btn-pick-lasso',  key: 'l', label: 'Lasso select', accel: 'Alt+L' },
-    { id: 'btn-pick-resize', key: 'r', label: 'Resize',       accel: 'Alt+R' },
-    { id: 'btn-pick-aidev',  key: 'e', label: 'Extract',      accel: 'Alt+E' },
-    { id: 'btn-pick-eyedropper', key: 'c', label: 'Eyedropper', accel: 'Alt+C' },
-    { id: 'btn-pick-a11y',   key: 'a', label: 'Accessibility', accel: 'Alt+A' },
-    { id: 'btn-screenshot',  key: 'i', label: 'Screenshot',   accel: 'Alt+I' },
-    { id: 'btn-draw',        key: 'm', label: 'Draw',         accel: 'Alt+M' },
-  ];
+  const TOOLS = PAGE_TOOLS.filter(t => t.menu).map(t => ({ id: t.id, key: t.key, label: t.label, accel: accelOf(t) }));
 
   function svgToPng(svgEl, px, color) {
     return new Promise((resolve) => {
@@ -2849,19 +3497,990 @@ function clearPickMode() {
 ipcRenderer.on('pick-cancelled', () => clearPickMode());
 ipcRenderer.on('pick-complete',  () => clearPickMode());
 
+// ── Box/Lasso element panel (overtakes the chat column) ──────────
+// Faithful port of the in-page popup drawers: filter chips, per-element CSS
+// drawers (expand/search/checkbox), inline value editing + color picker that
+// live-edit the actual page element (proxied via 'pick-panel-style').
+(function initPickPanel() {
+  const panel       = document.getElementById('pick-panel');
+  const titleEl     = document.getElementById('pick-panel-title');
+  const listEl      = document.getElementById('pick-panel-list');
+  const chipBar     = document.getElementById('pick-panel-chips');
+  const filterInput = document.getElementById('pick-panel-filter');
+  const textarea    = document.getElementById('pick-panel-textarea');
+  const sendBtn     = document.getElementById('pick-panel-send');
+  const cancelBtn   = document.getElementById('pick-panel-cancel-btn');
+  if (!panel) return;
+
+  let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
+  let activeChip = null;
+  let hovered = null;     // index of the drawer currently hovered
+
+  // Highlight on the page = every open drawer + the hovered one.
+  function highlightSet() {
+    const s = new Set();
+    rows.forEach((r, i) => { if (!r.removed && r.expanded) s.add(i); });
+    if (hovered != null && rows[hovered] && !rows[hovered].removed) s.add(hovered);
+    return [...s];
+  }
+  function pushHighlight() { ipcRenderer.send('pick-panel-update', { active: highlightSet() }); }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function activeIndices() { return rows.map((r, i) => (r.removed ? -1 : i)).filter(i => i >= 0); }
+  function applyStyle(i, prop, value) { ipcRenderer.send('pick-panel-style', { i, prop, value }); }
+
+  // ── one CSS property row ──────────────────────────────────────
+  // ── property metadata (Method 2 sections + Method 3 typed controls) ─
+  const SECTIONS = [
+    ['Layout',     ['display', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-self', 'gap', 'grid-template-columns', 'grid-template-rows']],
+    ['Sizing',     ['width', 'height', 'min-width', 'max-width', 'min-height', 'max-height']],
+    ['Spacing',    ['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left']],
+    ['Position',   ['position', 'top', 'right', 'bottom', 'left', 'z-index']],
+    ['Typography', ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align', 'text-transform', 'color']],
+    ['Appearance', ['background-color', 'background-image', 'background-size', 'border-radius', 'border-top-width', 'border-top-style', 'border-top-color', 'box-shadow', 'opacity', 'overflow', 'cursor', 'transform']],
+  ];
+  const SECTION_OF = {}; SECTIONS.forEach(([n, ps]) => ps.forEach(p => { SECTION_OF[p] = n; }));
+  const SECTION_ORDER = SECTIONS.map(s => s[0]).concat('Other');
+  const sectionOf = p => SECTION_OF[p] || 'Other';
+  const ENUMS = {
+    'display': ['block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'none', 'contents'],
+    'flex-direction': ['row', 'row-reverse', 'column', 'column-reverse'],
+    'flex-wrap': ['nowrap', 'wrap', 'wrap-reverse'],
+    'justify-content': ['flex-start', 'center', 'flex-end', 'space-between', 'space-around', 'space-evenly'],
+    'align-items': ['stretch', 'flex-start', 'center', 'flex-end', 'baseline'],
+    'align-self': ['auto', 'stretch', 'flex-start', 'center', 'flex-end', 'baseline'],
+    'position': ['static', 'relative', 'absolute', 'fixed', 'sticky'],
+    'font-weight': ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+    'text-align': ['left', 'center', 'right', 'justify', 'start', 'end'],
+    'text-transform': ['none', 'uppercase', 'lowercase', 'capitalize'],
+    'border-top-style': ['none', 'solid', 'dashed', 'dotted', 'double'],
+    'background-size': ['auto', 'cover', 'contain'],
+    'overflow': ['visible', 'hidden', 'scroll', 'auto', 'clip'],
+    'cursor': ['auto', 'default', 'pointer', 'text', 'move', 'grab', 'crosshair', 'not-allowed', 'wait', 'help'],
+  };
+  const COLOR_PROPS = new Set(['color', 'background-color', 'border-top-color']);
+  const UNITLESS = new Set(['opacity', 'z-index']);
+  const UNITS = ['px', '%', 'em', 'rem', 'vw', 'vh', 'auto'];
+  const LABELS = {
+    'background-color': 'Background', 'background-image': 'Bg image', 'background-size': 'Bg size',
+    'border-radius': 'Radius', 'border-top-width': 'Border width', 'border-top-style': 'Border style', 'border-top-color': 'Border color',
+    'font-family': 'Font', 'font-size': 'Size', 'font-weight': 'Weight', 'line-height': 'Line height', 'letter-spacing': 'Letter spacing',
+    'text-align': 'Align', 'text-transform': 'Transform', 'flex-direction': 'Direction', 'flex-wrap': 'Wrap',
+    'justify-content': 'Justify', 'align-items': 'Align items', 'align-self': 'Align self',
+    'grid-template-columns': 'Grid cols', 'grid-template-rows': 'Grid rows', 'z-index': 'Z-index', 'box-shadow': 'Shadow',
+  };
+  const labelFor = p => LABELS[p] || p.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  function parseLen(v) {
+    const m = /^(-?\d*\.?\d+)\s*(px|%|em|rem|vw|vh|vmin|vmax|pt|ch|fr|deg)?$/.exec(String(v).trim());
+    return m ? { num: m[1], unit: m[2] || '' } : null;
+  }
+  function controlType(prop, val) {
+    if (COLOR_PROPS.has(prop) || /(^|-)color$/.test(prop)) return 'color';
+    if (ENUMS[prop]) return 'enum';
+    if (parseLen(val)) return 'length';
+    return 'text';
+  }
+
+  // Drag-scrubber handle for numeric fields (drag left ↓ / right ↑).
+  const SLIDE_ICON = '<svg width="13" height="13" viewBox="0 0 18 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12.7549 5.50488C13.0283 5.23151 13.4718 5.23151 13.7451 5.50488L16.7451 8.50488C17.0185 8.77824 17.0185 9.22174 16.7451 9.49511L13.7451 12.4951C13.4718 12.7685 13.0283 12.7685 12.7549 12.4951C12.4815 12.2217 12.4815 11.7782 12.7549 11.5049L15.2598 8.99999L12.7549 6.49511C12.4815 6.22174 12.4815 5.77824 12.7549 5.50488Z"/><path d="M4.25489 5.50488C4.52826 5.23151 4.97176 5.23151 5.24513 5.50488C5.51849 5.77824 5.51849 6.22174 5.24513 6.49511L2.74024 8.99999L5.24513 11.5049C5.51849 11.7782 5.51849 12.2217 5.24513 12.4951C4.97176 12.7685 4.52826 12.7685 4.25489 12.4951L1.25489 9.49511C0.981524 9.22174 0.981524 8.77824 1.25489 8.50488L4.25489 5.50488Z"/><path d="M16.25 8.29979C16.6366 8.29979 16.9502 8.61339 16.9502 8.99998C16.9502 9.38658 16.6366 9.70018 16.25 9.70018H1.75C1.3634 9.70018 1.0498 9.38658 1.0498 8.99998C1.0498 8.61339 1.3634 8.29979 1.75 8.29979H16.25Z"/></svg>';
+
+  // Route a native <select> through the app's shared custom dropdown, compactly.
+  function compactSelect(sel, isUnit) {
+    enhanceSelect(sel);
+    const wrap = sel.closest('.ct-select');
+    if (wrap) { wrap.classList.add('pp-ct'); if (isUnit) wrap.classList.add('pp-ct-unit'); }
+  }
+
+  // Total selected properties across all (kept) elements → Send button label.
+  function updateSendCount() {
+    const n = rows.filter(r => !r.removed).reduce((a, r) => a + r.checked.size, 0);
+    sendBtn.textContent = n ? `Send (${n})` : 'Send';
+  }
+
+  // ── one property as a field card with a typed control ─────────
+  function buildField(row, i, p) {
+    const cur = row.mods[p.name] !== undefined ? row.mods[p.name] : p.value;
+    const field = el('div', 'pp-field');
+    field.dataset.name = p.name;
+    field.dataset.val  = cur;
+    if (row.checked.has(p.name)) field.classList.add('selected');
+    if (row.mods[p.name] !== undefined) field.classList.add('modified');
+
+    const sel = el('button', 'pp-field-sel'); sel.title = 'Include in message';
+    sel.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (row.checked.has(p.name)) { row.checked.delete(p.name); field.classList.remove('selected'); }
+      else { row.checked.add(p.name); field.classList.add('selected'); }
+      updateSendCount();
+    });
+    const label = el('span', 'pp-field-label', labelFor(p.name)); label.title = p.name;
+    const ctrl  = el('div', 'pp-field-ctrl');
+
+    function commit(v) {
+      row.mods[p.name] = v;
+      row.checked.add(p.name);
+      applyStyle(i, p.name, v);
+      field.dataset.val = v;
+      field.classList.add('selected', 'modified');
+      updateSendCount();
+    }
+
+    const type = controlType(p.name, cur);
+    if      (type === 'color')  ctrlColor(ctrl, field, cur, commit);
+    else if (type === 'enum')   ctrlEnum(ctrl, p.name, cur, commit);
+    else if (type === 'length') ctrlLength(ctrl, p.name, cur, commit);
+    else                        ctrlText(ctrl, cur, commit);
+
+    field.append(sel, label, ctrl);
+    return field;
+  }
+
+  function ctrlColor(ctrl, field, cur, commit) {
+    const sw = el('span', 'pp-swatch'); sw.style.background = (cur === 'none' || !cur) ? 'transparent' : cur;
+    const hex = el('input', 'pp-ctrl-input pp-color-hex'); hex.type = 'text'; hex.value = cur; hex.spellcheck = false;
+    ctrl.append(sw, hex);
+    sw.addEventListener('click', (e) => {
+      e.stopPropagation();
+      colorPicker.open(sw, field.dataset.val, (h) => { hex.value = h; sw.style.background = h; commit(h); });
+    });
+    hex.addEventListener('click', e => e.stopPropagation());
+    hex.addEventListener('keydown', e => e.stopPropagation());
+    hex.addEventListener('input', () => { sw.style.background = hex.value; commit(hex.value); });
+  }
+  function ctrlEnum(ctrl, prop, cur, commit) {
+    const sel = el('select', 'pp-select');
+    const opts = ENUMS[prop].slice();
+    if (cur && !opts.includes(cur)) opts.unshift(cur);
+    opts.forEach(o => { const op = el('option'); op.value = o; op.textContent = o; sel.appendChild(op); });
+    sel.value = cur;
+    sel.addEventListener('change', () => commit(sel.value));
+    ctrl.appendChild(sel);
+    compactSelect(sel, false);
+  }
+  function ctrlLength(ctrl, prop, cur, commit) {
+    const parsed = parseLen(cur);
+    const num = el('input', 'pp-ctrl-input pp-num'); num.type = 'text'; num.value = parsed ? parsed.num : cur;
+    // Drag-scrub handle: left ↓, right ↑ (Shift ±10, Alt ±0.1).
+    const scrub = el('span', 'pp-scrub'); scrub.innerHTML = SLIDE_ICON; scrub.title = 'Drag to adjust';
+    scrub.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const startX = e.clientX, startNum = parseFloat(num.value) || 0;
+      document.body.style.cursor = 'ew-resize';
+      function onMove(ev) {
+        const step = ev.shiftKey ? 10 : ev.altKey ? 0.1 : 1;
+        const v = startNum + Math.round((ev.clientX - startX) / 2) * step;
+        num.value = Math.round(v * 1000) / 1000;
+        apply();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup', onUp, true);
+        document.body.style.cursor = '';
+      }
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('mouseup', onUp, true);
+    });
+    ctrl.append(scrub, num);
+    let unitSel = null;
+    if (!UNITLESS.has(prop)) {
+      unitSel = el('select', 'pp-unit');
+      const units = ['', ...UNITS];                 // '' = unitless (e.g. line-height)
+      const u = parsed ? parsed.unit : '';
+      if (u && !units.includes(u)) units.push(u);
+      units.forEach(x => { const op = el('option'); op.value = x; op.textContent = x || '—'; unitSel.appendChild(op); });
+      unitSel.value = u;
+      ctrl.appendChild(unitSel);
+    }
+    const apply = () => {
+      const n = num.value.trim();
+      const u = unitSel ? unitSel.value : '';
+      commit(u === 'auto' ? 'auto' : (n + (u || '')));
+    };
+    num.addEventListener('click', e => e.stopPropagation());
+    num.addEventListener('input', apply);
+    num.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const n = parseFloat(num.value); if (isNaN(n)) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
+        num.value = Math.round((n + (e.key === 'ArrowUp' ? 1 : -1) * step) * 1000) / 1000;
+        apply();
+      }
+    });
+    if (unitSel) { unitSel.addEventListener('change', apply); compactSelect(unitSel, true); }
+  }
+  function ctrlText(ctrl, cur, commit) {
+    const inp = el('input', 'pp-ctrl-input pp-text'); inp.type = 'text'; inp.value = cur; inp.spellcheck = false;
+    inp.addEventListener('click', e => e.stopPropagation());
+    inp.addEventListener('keydown', e => e.stopPropagation());
+    inp.addEventListener('input', () => commit(inp.value));
+    ctrl.appendChild(inp);
+  }
+
+  // Build a drawer's fields lazily (on first expand) — avoids enhancing the
+  // dropdowns of every collapsed element up front.
+  let fieldBodies = [];   // [{ row, i, body, caret }]
+  function buildBody(row, i, body) {
+    if (body.dataset.built) return;
+    body.dataset.built = '1';
+    const props = row.item.cssProps || [];
+    if (!props.length) { body.appendChild(el('div', 'pp-no-css', 'no CSS properties')); return; }
+    const bySection = {};
+    props.forEach(p => { const s = sectionOf(p.name); (bySection[s] = bySection[s] || []).push(p); });
+    SECTION_ORDER.forEach(secName => {
+      const list = bySection[secName]; if (!list) return;
+      const sec = el('div', 'pp-section'); sec.dataset.section = secName;
+      sec.appendChild(el('div', 'pp-section-title', secName));
+      list.forEach(p => sec.appendChild(buildField(row, i, p)));
+      body.appendChild(sec);
+    });
+  }
+
+  // ── full drawer list ──────────────────────────────────────────
+  function render() {
+    listEl.innerHTML = '';
+    fieldBodies = [];
+    rows.forEach((row, i) => {
+      if (row.removed) return;
+      const drawer = el('div', 'pp-drawer');
+
+      const head  = el('div', 'pp-drawer-head');
+      const caret = el('span', 'pp-caret' + (row.expanded ? ' open' : ''), '▶');
+      const name  = el('span', 'pp-el-name', row.item.label);
+      name.title  = row.item.cssSelector || row.item.label;
+      const x     = el('button', 'pp-el-x', '✕'); x.title = 'Remove';
+      head.append(caret, name, x);
+      drawer.appendChild(head);
+
+      const body  = el('div', 'pp-drawer-body');
+      body.style.display = row.expanded ? '' : 'none';
+      if (row.expanded) buildBody(row, i, body);
+      drawer.appendChild(body);
+      fieldBodies.push({ row, i, body, caret });
+
+      head.addEventListener('click', (e) => {
+        if (e.target === x) return;
+        row.expanded = !row.expanded;
+        if (row.expanded) buildBody(row, i, body);
+        body.style.display = row.expanded ? '' : 'none';
+        caret.classList.toggle('open', row.expanded);
+        pushHighlight();
+      });
+      drawer.addEventListener('mouseenter', () => { hovered = i; pushHighlight(); });
+      drawer.addEventListener('mouseleave', () => { if (hovered === i) hovered = null; pushHighlight(); });
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        row.removed = true;
+        if (hovered === i) hovered = null;
+        if (!activeIndices().length) { cancel(); return; }
+        pushHighlight();
+        render();
+      });
+      listEl.appendChild(drawer);
+    });
+    applyFilter();
+    updateSendCount();
+  }
+
+  // ── filtering: chip category (AND) + single free-text box ─────
+  function applyFilter() {
+    const kw = activeChip;
+    const q  = filterInput.value.trim().toLowerCase();
+    if (kw || q) {   // build + expand every drawer so matches are visible/searchable
+      fieldBodies.forEach(fb => { fb.row.expanded = true; buildBody(fb.row, fb.i, fb.body); fb.body.style.display = ''; fb.caret.classList.add('open'); });
+    }
+    listEl.querySelectorAll('.pp-field').forEach(f => {
+      const okChip = !kw || f.dataset.name.includes(kw);
+      const okText = !q  || f.dataset.name.includes(q) || f.dataset.val.toLowerCase().includes(q);
+      f.style.display = (okChip && okText) ? '' : 'none';
+    });
+    listEl.querySelectorAll('.pp-section').forEach(sec => {
+      const any = [...sec.querySelectorAll('.pp-field')].some(f => f.style.display !== 'none');
+      sec.style.display = any ? '' : 'none';
+    });
+  }
+  chipBar.querySelectorAll('.pp-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const f = chip.dataset.filter;
+      if (activeChip === f) { activeChip = null; chip.classList.remove('active'); }
+      else {
+        chipBar.querySelectorAll('.pp-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active'); activeChip = f;
+      }
+      applyFilter();
+    });
+  });
+  filterInput.addEventListener('input', applyFilter);
+
+  // ── color picker (lazy iro, shared singleton) ─────────────────
+  const colorPicker = (function () {
+    let cpEl = null, cpIro = null, applyFn = null, swatchEl = null;
+    let syncing = false, mode = 'hex', inputs = null, built = false;
+
+    function ensureIro(cb) {
+      if (window.iro) { cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
+      s.onload = cb; document.head.appendChild(s);
+    }
+    function sync(color) {
+      if (!inputs) return;
+      syncing = true;
+      inputs.hex.value = color.hexString;
+      const rgb = color.rgb; inputs.r.value = rgb.r; inputs.g.value = rgb.g; inputs.b.value = rgb.b;
+      const hsl = color.hsl; inputs.h.value = Math.round(hsl.h); inputs.s.value = Math.round(hsl.s); inputs.l.value = Math.round(hsl.l);
+      syncing = false;
+    }
+    function setMode(m) {
+      mode = m;
+      cpEl.querySelectorAll('.pp-cp-panel').forEach(p => p.style.display = p.dataset.m === m ? '' : 'none');
+      cpEl.querySelectorAll('.pp-cp-mode').forEach(b => b.classList.toggle('active', b.dataset.m === m));
+    }
+    function build() {
+      built = true;
+      cpEl = el('div'); cpEl.id = 'pp-colorpicker';
+      cpEl.innerHTML =
+        '<div class="pp-cp-iro"></div>' +
+        '<div class="pp-cp-modes">' +
+          '<button class="pp-cp-mode active" data-m="hex">HEX</button>' +
+          '<button class="pp-cp-mode" data-m="rgb">RGB</button>' +
+          '<button class="pp-cp-mode" data-m="hsl">HSL</button>' +
+        '</div>' +
+        '<div class="pp-cp-panel" data-m="hex" style="margin-top:7px"><input class="pp-cp-hex" type="text"/></div>' +
+        '<div class="pp-cp-panel" data-m="rgb" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>R</span><input data-c="r" type="number" min="0" max="255"/><span>G</span><input data-c="g" type="number" min="0" max="255"/><span>B</span><input data-c="b" type="number" min="0" max="255"/></div></div>' +
+        '<div class="pp-cp-panel" data-m="hsl" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>H</span><input data-c="h" type="number" min="0" max="360"/><span>S</span><input data-c="s" type="number" min="0" max="100"/><span>L</span><input data-c="l" type="number" min="0" max="100"/></div></div>';
+      document.body.appendChild(cpEl);
+      cpEl.querySelectorAll('.pp-cp-mode').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); setMode(b.dataset.m); }));
+      inputs = {
+        hex: cpEl.querySelector('.pp-cp-hex'),
+        r: cpEl.querySelector('[data-c=r]'), g: cpEl.querySelector('[data-c=g]'), b: cpEl.querySelector('[data-c=b]'),
+        h: cpEl.querySelector('[data-c=h]'), s: cpEl.querySelector('[data-c=s]'), l: cpEl.querySelector('[data-c=l]'),
+      };
+      const wire = (inputEl, setter) => inputEl.addEventListener('input', () => {
+        if (!cpIro || syncing) return;
+        syncing = true; try { setter(inputEl.value); } catch (_) {} syncing = false;
+        sync(cpIro.color); push(cpIro.color.hexString);
+      });
+      wire(inputs.hex, v => { cpIro.color.hexString = v; });
+      wire(inputs.r, v => { const c = cpIro.color.rgb; c.r = +v; cpIro.color.rgb = c; });
+      wire(inputs.g, v => { const c = cpIro.color.rgb; c.g = +v; cpIro.color.rgb = c; });
+      wire(inputs.b, v => { const c = cpIro.color.rgb; c.b = +v; cpIro.color.rgb = c; });
+      wire(inputs.h, v => { const c = cpIro.color.hsl; c.h = +v; cpIro.color.hsl = c; });
+      wire(inputs.s, v => { const c = cpIro.color.hsl; c.s = +v; cpIro.color.hsl = c; });
+      wire(inputs.l, v => { const c = cpIro.color.hsl; c.l = +v; cpIro.color.hsl = c; });
+    }
+    function push(hex) {
+      if (swatchEl) swatchEl.style.background = hex;
+      if (applyFn) applyFn(hex);
+    }
+    function onOutside(e) {
+      if (cpEl && !cpEl.contains(e.target) && e.target !== swatchEl) hide();
+    }
+    function hide() {
+      if (cpEl) cpEl.style.display = 'none';
+      if (cpIro) { try { cpIro.off('color:change'); } catch (_) {} }
+      document.removeEventListener('mousedown', onOutside, true);
+    }
+    function open(swatch, value, fn) {
+      if (!built) build();
+      swatchEl = swatch; applyFn = fn;
+      const rect = swatch.getBoundingClientRect();
+      const pw = 248, ph = 320;
+      let left = rect.right + 10;
+      if (left + pw > window.innerWidth) left = Math.max(8, rect.left - pw - 10);
+      const top = Math.max(8, Math.min(rect.top, window.innerHeight - ph - 10));
+      cpEl.style.left = left + 'px'; cpEl.style.top = top + 'px'; cpEl.style.display = 'block';
+      setMode(mode);
+      setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
+
+      const attach = () => cpIro.on('color:change', (color) => { if (syncing) return; sync(color); push(color.hexString); });
+      if (cpIro) {
+        try { cpIro.off('color:change'); } catch (_) {}
+        try { cpIro.color.set(value || '#ffffff'); } catch (_) {}
+        attach(); sync(cpIro.color);
+        return;
+      }
+      ensureIro(() => {
+        const mount = cpEl.querySelector('.pp-cp-iro'); mount.innerHTML = '';
+        try {
+          cpIro = new iro.ColorPicker(mount, {
+            width: 200, color: value || '#ffffff',
+            layout: [{ component: iro.ui.Box }, { component: iro.ui.Slider, options: { sliderType: 'hue' } }],
+          });
+        } catch (_) { return; }
+        attach(); sync(cpIro.color);
+      });
+    }
+    return { open, hide };
+  })();
+
+  // ── open / close / send / cancel ──────────────────────────────
+  function open(items, tool) {
+    clearPickMode();
+    if (tool) titleEl.textContent = tool;
+    rows = items.map(item => ({ item, removed: false, expanded: false, checked: new Set(), mods: {} }));
+    activeChip = null;
+    hovered = null;
+    chipBar.querySelectorAll('.pp-chip').forEach(c => c.classList.remove('active'));
+    filterInput.value = '';
+    textarea.value = '';
+    render();
+    pushHighlight();         // nothing highlighted until hover/open
+    panel.hidden = false;
+    setTimeout(() => textarea.focus(), 0);
+  }
+  function close() {
+    colorPicker.hide();
+    panel.hidden = true;
+    hovered = null;
+    rows = []; listEl.innerHTML = ''; textarea.value = '';
+  }
+  function resolvedItems() {
+    return rows.filter(r => !r.removed).map(r => {
+      const it = r.item;
+      const selectedCSS = (it.cssProps || []).filter(p => r.checked.has(p.name)).map(p => {
+        const nv = r.mods[p.name];
+        return nv !== undefined ? `${p.name}: ${nv}  /* was: ${p.value} */` : `${p.name}: ${p.value}`;
+      });
+      return { label: it.label, cssSelector: it.cssSelector, reactComponent: it.reactComponent, tag: it.tag, debugSource: it.debugSource, selectedCSS };
+    });
+  }
+  function send() {
+    ipcRenderer.send('pick-panel-send', { instruction: textarea.value.trim(), items: resolvedItems() });
+    close();
+  }
+  function cancel() {
+    ipcRenderer.send('pick-panel-cancel');
+    close();
+  }
+
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
+  });
+
+  ipcRenderer.on('pick-panel-open', (_, { items, tool }) => open(items || [], tool));
+})();
+
+// ── Resize tool panel (overtakes the chat column) ────────────────
+// The handles stay live on the page; this panel shows the element, live W×H
+// (polled from main), an instructions box, and Reset / Cancel / Send.
+(function initResizePanel() {
+  const panel    = document.getElementById('resize-panel');
+  const titleEl  = document.getElementById('resize-panel-title');
+  const elEl     = document.getElementById('resize-panel-el');
+  const wEl       = document.getElementById('resize-w');
+  const hEl       = document.getElementById('resize-h');
+  const wSlider   = document.getElementById('resize-w-slider');
+  const hSlider   = document.getElementById('resize-h-slider');
+  const textarea  = document.getElementById('resize-textarea');
+  const resetBtn  = document.getElementById('resize-reset');
+  const cancelBtn = document.getElementById('resize-cancel');
+  const sendBtn   = document.getElementById('resize-send');
+  if (!panel) return;
+
+  let sliding = null;   // 'w' | 'h' while the user drags a slider (don't let polling fight it)
+
+  function setText(el, nv, ov) { const d = nv - ov; el.textContent = nv + (d ? `  (${d > 0 ? '+' : ''}${d})` : ''); }
+  function setDims(d) {
+    if (!d) return;
+    lastOrig = { oW: d.oW, oH: d.oH };
+    setText(wEl, d.nW, d.oW);
+    setText(hEl, d.nH, d.oH);
+    if (sliding !== 'w') { if (d.nW > +wSlider.max) wSlider.max = d.nW; wSlider.value = d.nW; }
+    if (sliding !== 'h') { if (d.nH > +hSlider.max) hSlider.max = d.nH; hSlider.value = d.nH; }
+  }
+  function open({ tool, label, oW, oH, vw, vh }) {
+    clearPickMode();
+    titleEl.textContent = tool || 'Resize';
+    elEl.textContent = label || '';
+    wSlider.max = Math.max(oW * 2, vw || 2000);
+    hSlider.max = Math.max(oH * 2, vh || 2000);
+    setDims({ oW, oH, nW: oW, nH: oH });
+    textarea.value = '';
+    panel.hidden = false;
+  }
+  function close() { panel.hidden = true; textarea.value = ''; sliding = null; }
+  function send()   { ipcRenderer.send('resize-panel-send', { instruction: textarea.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send('resize-panel-cancel'); close(); }
+
+  // Sliders → live-resize the page element; optimistic text update.
+  function wireSlider(slider, dim, valEl) {
+    slider.addEventListener('input', () => {
+      sliding = dim;
+      const v = +slider.value;
+      ipcRenderer.send('resize-panel-set', { dim, value: v });
+      const orig = dim === 'w' ? lastOrig.oW : lastOrig.oH;
+      setText(valEl, v, orig);
+    });
+    slider.addEventListener('change', () => { sliding = null; });
+    slider.addEventListener('mouseup', () => { sliding = null; });
+  }
+  let lastOrig = { oW: 0, oH: 0 };
+  wireSlider(wSlider, 'w', wEl);
+  wireSlider(hSlider, 'h', hEl);
+
+  resetBtn.addEventListener('click', () => ipcRenderer.send('resize-panel-reset'));
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
+  });
+
+  ipcRenderer.on('resize-panel-open', (_, data) => open(data || {}));
+  ipcRenderer.on('resize-panel-dims', (_, d) => { if (!panel.hidden) setDims(d); });
+})();
+
+// ── Extract tool panel (overtakes the chat column) ───────────────
+// Mirrors the old in-page Extract popup: targeted elements (hover-highlighted),
+// Media (with chat/download dest) + Styles & Content checkboxes, instructions.
+// The actual extraction runs in the page on send (window.__cathodePanel.extract).
+(function initExtractPanel() {
+  const panel    = document.getElementById('extract-panel');
+  if (!panel) return;
+  const titleEl   = document.getElementById('extract-panel-title');
+  const elsEl     = document.getElementById('extract-els');
+  const mediaEl   = document.getElementById('extract-media');
+  const dataEl    = document.getElementById('extract-data');
+  const instr     = document.getElementById('extract-instructions');
+  const sendBtn   = document.getElementById('extract-send');
+  const cancelBtn = document.getElementById('extract-cancel');
+  const segBtns   = panel.querySelectorAll('.ext-seg-btn');
+
+  const MEDIA = [
+    { key: 'images', label: 'Images' },
+    { key: 'svgs',   label: 'SVGs' },
+    { key: 'videos', label: 'Videos' },
+  ];
+  const DATA = [
+    { key: 'styles',     label: 'Element Styles',   analysis: "The selected element's key computed styles — use them to recreate something visually similar." },
+    { key: 'palette',    label: 'Color Palette',    analysis: 'List each unique color with its usage count, and flag near-duplicate or off-system values that should consolidate to a design token.' },
+    { key: 'typography', label: 'Typography',       analysis: 'Review the type styles and flag combinations that break a consistent type scale (odd sizes, weights, or line-heights).' },
+    { key: 'spacing',    label: 'Spacing & Layout', analysis: 'Review the spacing values and flag any that fall off a 4px/8px grid or look inconsistent.' },
+    { key: 'tokens',     label: 'Design Tokens',    analysis: 'These are the CSS custom properties (design tokens) in scope. Flag where the selection uses hardcoded values that should reference one of these.' },
+    { key: 'dom',        label: 'DOM Structure',    analysis: "The selected element's markup, for reference." },
+    { key: 'text',       label: 'Text Content',     analysis: 'Review the visible copy for clarity, consistency, and i18n readiness.' },
+    { key: 'forms',      label: 'Form Schema',      analysis: 'Review the form fields and flag any missing labels, name attributes, or validation.' },
+    { key: 'a11y',       label: 'Accessibility',    analysis: 'Review the accessibility info and flag interactive elements missing accessible names or with incorrect aria.' },
+  ];
+
+  const cbByKey = {};
+  function buildChecks(container, list) {
+    list.forEach(item => {
+      const row = document.createElement('label'); row.className = 'ext-row';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'ext-cb';
+      const sp = document.createElement('span'); sp.className = 'ext-label'; sp.textContent = item.label;
+      row.append(cb, sp);
+      container.appendChild(row);
+      cbByKey[item.key] = cb;
+    });
+  }
+  buildChecks(mediaEl, MEDIA);
+  buildChecks(dataEl, DATA);
+
+  let dest = 'chat';
+  segBtns.forEach(b => b.addEventListener('click', () => {
+    dest = b.dataset.dest;
+    segBtns.forEach(x => x.classList.toggle('active', x === b));
+  }));
+
+  function open({ tool, items }) {
+    clearPickMode();
+    titleEl.textContent = tool || 'Extract';
+    elsEl.innerHTML = '';
+    (items || []).forEach((it, i) => {
+      const row = document.createElement('div'); row.className = 'ext-el';
+      const n = document.createElement('span'); n.className = 'ext-el-name'; n.textContent = it.label;
+      n.title = it.cssSelector || it.label;
+      row.appendChild(n);
+      row.addEventListener('mouseenter', () => ipcRenderer.send('extract-panel-highlight', { active: [i] }));
+      row.addEventListener('mouseleave', () => ipcRenderer.send('extract-panel-highlight', { active: [] }));
+      elsEl.appendChild(row);
+    });
+    Object.values(cbByKey).forEach(cb => { cb.checked = false; });
+    dest = 'chat'; segBtns.forEach(x => x.classList.toggle('active', x.dataset.dest === 'chat'));
+    instr.value = '';
+    panel.hidden = false;
+  }
+  function close() { panel.hidden = true; instr.value = ''; }
+  function send() {
+    const sel = DATA.filter(d => cbByKey[d.key].checked).map(d => ({ key: d.key, label: d.label, analysis: d.analysis }));
+    const mediaTypes = MEDIA.filter(m => cbByKey[m.key].checked).map(m => m.key);
+    ipcRenderer.send('extract-panel-send', { sel, mediaTypes, mediaDest: dest, instruction: instr.value.trim() });
+    close();
+  }
+  function cancel() { ipcRenderer.send('extract-panel-cancel'); close(); }
+
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+  document.addEventListener('keydown', (e) => { if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); } });
+
+  ipcRenderer.on('extract-panel-open', (_, data) => open(data || {}));
+})();
+
+// ── Eyedropper tool panel (overtakes the chat column) ────────────
+// Loupe sampling stays on the page; this panel shows the targeted element, the
+// applicable color property, an old→new compare, and an inline iro picker that
+// live-edits the page element (window.__cathodeEyedropper).
+(function initEyedropperPanel() {
+  const panel     = document.getElementById('eyedropper-panel');
+  if (!panel) return;
+  const titleEl   = document.getElementById('ed-panel-title');
+  const linkEl    = document.getElementById('ed-el-link');
+  const propSel   = document.getElementById('ed-prop');
+  const oldSw     = document.getElementById('ed-old-sw');
+  const oldHex    = document.getElementById('ed-old-hex');
+  const iroMount  = document.getElementById('ed-iro');
+  const hexInput  = document.getElementById('ed-hex-input');
+  const instr     = document.getElementById('ed-instructions');
+  const sendBtn   = document.getElementById('ed-send');
+  const cancelBtn = document.getElementById('ed-cancel');
+
+  let picker = null, syncing = false, sel = null;
+
+  function ensureIro(cb) {
+    if (window.iro) { cb(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
+    s.onload = cb; s.onerror = cb; document.head.appendChild(s);
+  }
+  function buildPicker(initial) {
+    iroMount.innerHTML = '';
+    picker = new iro.ColorPicker(iroMount, {
+      width: 204, color: initial || '#ffffff',
+      layout: [{ component: iro.ui.Box }, { component: iro.ui.Slider, options: { sliderType: 'hue' } }],
+    });
+    picker.on('color:change', (color) => { if (syncing) return; onPick(color.hexString); });
+  }
+  function setPicker(hex) { if (!picker) return; syncing = true; try { picker.color.set(hex); } catch (_) {} syncing = false; }
+  function setOld(hex) { const h = (hex || '').toUpperCase(); oldSw.style.background = h; oldHex.textContent = h; }
+  // The picker itself shows the adjusted color; keep the hex field in sync.
+  function setNew(hex) { if (document.activeElement !== hexInput) hexInput.value = (hex || '').toUpperCase(); }
+  function onPick(hex) { setNew(hex); ipcRenderer.send('eyedropper-set-color', { hex }); }
+
+  function open(data) {
+    clearPickMode();
+    sel = data;
+    titleEl.textContent = data.tool || 'Eyedropper';
+    linkEl.textContent = data.label || data.selector || '';
+    linkEl.title = data.selector || '';
+    propSel.innerHTML = '';
+    (data.props || []).forEach(p => {
+      const o = document.createElement('option'); o.value = p.prop; o.textContent = p.label;
+      propSel.appendChild(o);
+    });
+    const ai = data.activeIdx >= 0 ? data.activeIdx : 0;
+    if (data.props && data.props[ai]) propSel.value = data.props[ai].prop;
+    propSel.disabled = (data.props || []).length <= 1;
+    const picked = (data.pickedHex || '#000000').toUpperCase();
+    setOld(picked); setNew(picked);
+    instr.value = '';
+    panel.hidden = false;
+    ensureIro(() => { if (!window.iro) return; if (!picker) buildPicker(picked); else setPicker(picked); setNew(picked); hexInput.value = picked; });
+  }
+  function close() { ipcRenderer.send('cp-clear-target-highlight'); panel.hidden = true; instr.value = ''; }
+  function send() { ipcRenderer.send('eyedropper-send', { instruction: instr.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send('eyedropper-cancel'); close(); }
+
+  propSel.addEventListener('change', async () => {
+    const r = await ipcRenderer.invoke('eyedropper-set-prop', { prop: propSel.value });
+    if (r && r.from) { setOld(r.from); setNew(r.from); setPicker(r.from); }
+  });
+  hexInput.addEventListener('input', () => {
+    const v = hexInput.value.trim();
+    if (!/^#?[0-9a-fA-F]{6}$/.test(v)) return;
+    const hex = v.startsWith('#') ? v : '#' + v;
+    setPicker(hex);   // suppresses iro change → apply manually
+    onPick(hex);
+  });
+  linkEl.addEventListener('mouseenter', () => { if (sel && sel.selector) ipcRenderer.send('cp-highlight-target', { selector: sel.selector }); });
+  linkEl.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr && document.activeElement !== hexInput) { e.preventDefault(); cancel(); }
+  });
+
+  ipcRenderer.on('eyedropper-panel-open', (_, data) => open(data || {}));
+})();
+
+// ── Accessibility checker panel (overtakes the chat column) ──────
+// Page markers stay live; this panel renders the results (grouped, checkbox to
+// include, expandable drawers). Contrast issues get live color editors that
+// edit the page element (a11y-set-color) and recompute the WCAG ratio locally.
+(function initA11yPanel() {
+  const panel     = document.getElementById('a11y-panel');
+  if (!panel) return;
+  const listEl    = document.getElementById('a11y-list');
+  const barCount  = document.getElementById('a11y-count');
+  const toggleAll = document.getElementById('a11y-toggle-all');
+  const sendBtn   = document.getElementById('a11y-send');
+  const cancelBtn = document.getElementById('a11y-cancel');
+
+  const ORDER  = ['contrast', 'alt', 'label', 'name'];
+  const COLORS = { contrast: '#f59e0b', alt: '#ef4444', label: '#ef4444', name: '#ef4444' };
+  function descFor(cat, need) {
+    if (cat === 'contrast') return `Text and background fall below the WCAG AA contrast minimum of ${need}:1. Adjust the colors below until it passes.`;
+    if (cat === 'alt')   return 'This image has no alt attribute, so screen readers cannot describe it. Add concise alt text — or empty alt if it is purely decorative.';
+    if (cat === 'label') return 'This control has no accessible name (no label, aria-label, or title), so assistive tech cannot tell users what it is for.';
+    if (cat === 'name')  return 'This button or link has no text or accessible name, so screen readers announce it with nothing to describe it.';
+    return '';
+  }
+  function placeholderFor(cat) {
+    if (cat === 'alt')      return 'What does this image show?';
+    if (cat === 'label')    return 'What is this control for?';
+    if (cat === 'name')     return 'What should this control say?';
+    if (cat === 'contrast') return 'Any notes on the color fix?';
+    return 'Instructions';
+  }
+  // WCAG contrast (local — avoids round-tripping to the page on every edit).
+  function hexToRgb(h) {
+    h = (h || '').replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return (h.length === 6 && !isNaN(n)) ? { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 } : null;
+  }
+  function relLum({ r, g, b }) {
+    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  }
+  function contrast(h1, h2) {
+    const a = hexToRgb(h1), b = hexToRgb(h2);
+    if (!a || !b) return null;
+    const L1 = relLum(a), L2 = relLum(b);
+    return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+  }
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  let issues = [], state = {}, url = '';
+
+  function updateCount() {
+    const n = issues.filter(i => state[i.idx].checked).length;
+    barCount.textContent = `${issues.length} issue${issues.length === 1 ? '' : 's'} found`;
+    sendBtn.textContent = n ? `Send ${n}` : 'Send';
+    sendBtn.disabled = n === 0;
+    toggleAll.textContent = n === issues.length && n > 0 ? 'Deselect all' : 'Select all';
+  }
+  function updateRatio(iss) {
+    const st = state[iss.idx];
+    if (!st.ratioEl) return;
+    const cr = contrast(st.text, st.bg);
+    if (cr == null) { st.ratioEl.textContent = ''; return; }
+    const pass = cr >= iss.need;
+    st.ratioEl.textContent = `${cr.toFixed(2)}:1 — ${pass ? 'Passes AA' : 'Fails AA'}`;
+    st.ratioEl.style.color = pass ? '#4ade80' : '#f59e0b';
+  }
+  function colorEditor(iss, which, initial) {
+    const row = el('div', 'a11y-color-row');
+    row.append(el('span', 'a11y-color-label', which === 'text' ? 'Text' : 'Background'));
+    const sw = el('label', 'a11y-color-sw'); sw.style.background = initial;
+    const pick = el('input', 'a11y-color-pick'); pick.type = 'color'; pick.value = initial.toLowerCase();
+    sw.appendChild(pick);
+    const hex = el('input', 'a11y-color-hex'); hex.type = 'text'; hex.value = initial; hex.spellcheck = false;
+    row.append(sw, hex);
+    function apply(v) {
+      sw.style.background = v;
+      state[iss.idx][which] = v.toUpperCase();
+      ipcRenderer.send('a11y-set-color', { idx: iss.idx, which, hex: v });
+      updateRatio(iss);
+    }
+    pick.addEventListener('click', e => e.stopPropagation());
+    pick.addEventListener('input', e => { e.stopPropagation(); hex.value = pick.value.toUpperCase(); apply(pick.value); });
+    hex.addEventListener('click', e => e.stopPropagation());
+    hex.addEventListener('input', e => {
+      e.stopPropagation();
+      let v = hex.value.trim();
+      if (/^#?[0-9a-fA-F]{6}$/.test(v)) { if (v[0] !== '#') v = '#' + v; pick.value = v.toLowerCase(); apply(v); }
+    });
+    return row;
+  }
+  function buildIssue(iss) {
+    const wrap = el('div', 'a11y-issue');
+    const head = el('div', 'a11y-head');
+    const cb = el('input', 'a11y-cb'); cb.type = 'checkbox'; cb.checked = state[iss.idx].checked;
+    cb.addEventListener('click', e => e.stopPropagation());
+    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; updateCount(); });
+    const num = el('span', 'a11y-num', String(iss.idx + 1)); num.style.background = COLORS[iss.cat];
+    const mid = el('div', 'a11y-mid');
+    const row1 = el('div', 'a11y-row1');
+    row1.append(el('span', 'a11y-detail', iss.detail || iss.label));
+    const badge = el('span', 'a11y-badge', iss.badge);
+    badge.style.color = COLORS[iss.cat]; badge.style.background = COLORS[iss.cat] + '1f'; badge.style.border = '1px solid ' + COLORS[iss.cat] + '4d';
+    row1.append(badge);
+    const selRow = el('div', 'a11y-sel', iss.selector); selRow.title = iss.selector;
+    mid.append(row1, selRow);
+    const chev = el('span', 'a11y-chev'); chev.innerHTML = '<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><polyline points="3,1.5 6.5,5 3,8.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    head.append(cb, num, mid, chev);
+
+    const body = el('div', 'a11y-body'); body.hidden = true;
+    body.append(el('div', 'a11y-desc', descFor(iss.cat, iss.need)));
+    if (iss.cat === 'contrast') {
+      body.append(colorEditor(iss, 'text', iss.fgHex), colorEditor(iss, 'bg', iss.bgHex));
+      const ratio = el('div', 'a11y-ratio'); state[iss.idx].ratioEl = ratio; body.append(ratio); updateRatio(iss);
+    }
+    const note = el('textarea', 'a11y-note'); note.rows = 2; note.placeholder = placeholderFor(iss.cat);
+    note.addEventListener('click', e => e.stopPropagation());
+    note.addEventListener('input', () => { state[iss.idx].instruction = note.value; });
+    body.append(note);
+
+    head.addEventListener('click', (e) => {
+      if (e.target === cb) return;
+      const open = body.hidden;
+      body.hidden = !open;
+      chev.classList.toggle('open', open);
+      if (open) ipcRenderer.send('a11y-flash', { idx: iss.idx });
+    });
+    wrap.append(head, body);
+    return wrap;
+  }
+
+  function render() {
+    listEl.innerHTML = '';
+    if (!issues.length) { listEl.appendChild(el('div', 'a11y-empty', 'No contrast or a11y issues found.')); return; }
+    const byCat = {};
+    issues.forEach(i => { (byCat[i.cat] = byCat[i.cat] || []).push(i); });
+    ORDER.forEach(cat => {
+      const list = byCat[cat]; if (!list) return;
+      listEl.appendChild(el('div', 'a11y-group-title', `${list[0].label} (${list.length})`));
+      list.forEach(iss => listEl.appendChild(buildIssue(iss)));
+    });
+  }
+
+  function open(data) {
+    clearPickMode();
+    issues = data.issues || [];
+    url = data.url || '';
+    state = {};
+    issues.forEach(i => { state[i.idx] = { checked: true, instruction: '', text: i.fgHex, bg: i.bgHex }; });
+    render();
+    updateCount();
+    panel.hidden = false;
+  }
+  function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; }
+  function send() {
+    const out = issues.filter(i => state[i.idx].checked).map(i => {
+      const st = state[i.idx];
+      const o = { category: i.label, selector: i.selector, detail: i.detail, instruction: (st.instruction || '').trim(), url };
+      if (i.cat === 'contrast') { o.fromText = i.fgHex; o.fromBg = i.bgHex; o.toText = (st.text || i.fgHex).toUpperCase(); o.toBg = (st.bg || i.bgHex).toUpperCase(); }
+      return o;
+    });
+    ipcRenderer.send('a11y-send', { issues: out });
+    close();
+  }
+  function cancel() { ipcRenderer.send('a11y-cancel'); close(); }
+
+  toggleAll.addEventListener('click', () => {
+    const allOn = issues.every(i => state[i.idx].checked);
+    const next = !allOn;
+    issues.forEach(i => { state[i.idx].checked = next; });
+    listEl.querySelectorAll('.a11y-cb').forEach(cb => { cb.checked = next; });
+    updateCount();
+  });
+  sendBtn.addEventListener('click', () => { if (!sendBtn.disabled) send(); });
+  cancelBtn.addEventListener('click', cancel);
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)) { e.preventDefault(); cancel(); }
+  });
+
+  ipcRenderer.on('a11y-panel-open', (_, data) => open(data || {}));
+})();
+
+// ── Screenshot tool panel (overtakes the chat column) ────────────
+// The region is captured + saved in main; this panel just previews the image
+// and takes an optional instruction before handing the file path to chat.
+(function initScreenshotPanel() {
+  const panel     = document.getElementById('screenshot-panel');
+  if (!panel) return;
+  const img       = document.getElementById('ss-preview-img');
+  const instr     = document.getElementById('ss-instructions');
+  const sendBtn   = document.getElementById('ss-send');
+  const cancelBtn = document.getElementById('ss-cancel');
+
+  function open(data) {
+    clearPickMode();
+    img.src = data.dataUrl || '';
+    instr.value = '';
+    panel.hidden = false;
+    setTimeout(() => instr.focus(), 0);
+  }
+  function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; }
+  function send() { ipcRenderer.send('screenshot-panel-send', { instruction: instr.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send('screenshot-panel-cancel'); close(); }
+
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
+  });
+
+  ipcRenderer.on('screenshot-panel-open', (_, data) => open(data || {}));
+})();
+
 // ── System performance graph (CPU / RAM / GPU) ───────────────────────
 // App-bar toggle: show/hide the graph (persisted, default on).
+// Generic height grow-in / shrink-out for a panel (same feel as the usage panel).
+function growPanel(el, open) {
+  if (el._growAnim) el._growAnim();   // cancel any in-flight grow/shrink
+  const finish = (after) => {
+    const done = () => {
+      el.style.transition = ''; el.style.height = ''; el.style.overflow = '';
+      el.removeEventListener('transitionend', onEnd); clearTimeout(t); el._growAnim = null;
+      if (after) after();
+    };
+    const onEnd = (e) => { if (!e || e.propertyName === 'height') done(); };
+    const t = setTimeout(done, 380);
+    el.addEventListener('transitionend', onEnd);
+    el._growAnim = done;
+  };
+  if (open) {
+    el.style.display = '';
+    const end = el.scrollHeight;
+    el.style.overflow = 'hidden';
+    el.style.height = '0px';
+    void el.offsetHeight;
+    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
+    el.style.height = end + 'px';
+    finish();
+  } else {
+    el.style.overflow = 'hidden';
+    el.style.height = el.offsetHeight + 'px';
+    void el.offsetHeight;
+    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
+    el.style.height = '0px';
+    finish(() => { el.style.display = 'none'; });
+  }
+}
+
 (function initSysperfToggle() {
   const btn = document.getElementById('btn-sysperf-toggle');
   const panel = document.getElementById('sysperf');
   if (!btn || !panel) return;
   let on = localStorage.getItem(LS.sysperf) !== '0';
-  const apply = () => { panel.style.display = on ? '' : 'none'; btn.classList.toggle('active', on); };
-  apply();
+  panel.style.display = on ? '' : 'none';   // initial state (no animation)
+  btn.classList.toggle('active', on);
   btn.addEventListener('click', () => {
     on = !on;
     localStorage.setItem(LS.sysperf, on ? '1' : '0');
-    apply();
+    btn.classList.toggle('active', on);
+    growPanel(panel, on);                   // animate grow-in / shrink-out on toggle
   });
 })();
 
@@ -2900,7 +4519,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     for (let i = 0; i < ROWS; i++) {
       html += '<div class="sysperf-proc" style="display:none">'
             + '<span class="sysperf-proc-name"></span>'
-            + '<div class="sysperf-bar"><div class="sysperf-fill" style="width:0%"></div></div>'
+            + '<div class="sysperf-bar"></div>'
             + '<span class="sysperf-proc-mem"></span></div>';
     }
     procsEl.innerHTML = html;
@@ -2918,10 +4537,11 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       const row = rows[i];
       if (i < procs.length) {
         const p = procs[i];
-        const name = row.children[0], fill = row.children[1].children[0], mem = row.children[2];
+        const name = row.children[0], bar = row.children[1], mem = row.children[2];
         row.style.display = '';
         name.textContent = p.name; name.title = p.name;
-        fill.style.width = Math.max(3, Math.round(100 * p.value / max)) + '%';
+        const ppct = Math.max(3, Math.round(100 * p.value / max));
+        bar.innerHTML = usageSegments(ppct, Math.max(20, Math.round((bar.clientWidth || 200) / 4)));
         mem.textContent = kind === 'cpu' ? Math.round(p.value) + '%' : fmtBytes(p.value);
       } else {
         row.style.display = 'none';
@@ -2970,13 +4590,14 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
 
 ipcRenderer.on('sysperf', (_, m) => {
   const set = (key, val) => {
-    const fill = document.getElementById(`sysperf-${key}-fill`);
-    const pct  = document.getElementById(`sysperf-${key}-pct`);
-    if (!fill || !pct) return;
-    if (val == null || isNaN(val)) { fill.style.width = '0%'; pct.textContent = '—'; return; }
+    const bar = document.getElementById(`sysperf-${key}-bar`);
+    const pct = document.getElementById(`sysperf-${key}-pct`);
+    if (!bar || !pct) return;
+    const n = Math.max(20, Math.round((bar.clientWidth || 200) / 4));   // ~2px segs + 2px gaps
+    if (val == null || isNaN(val)) { bar.innerHTML = usageSegments(0, n); pct.textContent = '—'; return; }
     const v = Math.max(0, Math.min(100, Math.round(val)));
-    fill.style.width = v + '%';
-    pct.textContent  = v + '%';
+    bar.innerHTML   = usageSegments(v, n);   // same segmented LED style as the usage bars
+    pct.textContent = v + '%';
   };
   set('cpu', m && m.cpu); set('ram', m && m.ram); set('gpu', m && m.gpu);
 });
@@ -3000,11 +4621,11 @@ function interruptActiveSession() {
 }
 
 // Returns true if there was an active session to receive the message.
-function routeToActiveSession(text, display = text) {
+function routeToActiveSession(text, display = text, images = [], chips = null) {
   const s = sessions.get(activeId);
   if (!s) return false;
   if (s.type === 'acp') {
-    acpAddUserMsg(s, display);
+    acpAddUserMsg(s, display, images, chips);
     acpSetStatus(s, 'thinking');
     ipcRenderer.send('acp-prompt', { id: activeId, text });
   } else {
@@ -3016,6 +4637,18 @@ function routeToActiveSession(text, display = text) {
 
 // Route pick/screenshot output to the active session
 ipcRenderer.on('pick-send-to-session', (_, message) => routeToActiveSession(message));
+
+// Passive update indicator: a dismissible toast (click → run the update flow)
+// plus a persistent dot on the settings gear.
+ipcRenderer.on('update-available', (_, { behind }) => {
+  const gear = document.getElementById('btn-settings');
+  if (gear) gear.classList.add('has-update');
+  const t = showToast(`↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`, { duration: 9000 });
+  if (t && t.el) {
+    t.el.style.cursor = 'pointer';
+    t.el.addEventListener('click', () => { ipcRenderer.send('app-check-updates'); t.dismiss(); });
+  }
+});
 
 // ── Console & Network tab ─────────────────────────────────────────
 (function initConsole() {
@@ -3256,7 +4889,44 @@ ipcRenderer.on('pick-send-to-session', (_, message) => routeToActiveSession(mess
 })();
 
 // Composite draw canvas over page screenshot in the renderer (has Canvas API)
-ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instructions }) => {
+// ── Draw tool panel (overtakes the chat column) ─────────────────
+// The page+annotation composite (built in the draw-composite handler below) is
+// previewed here; on Send the composite is saved + sent with the instruction.
+let openDrawPanel = null;
+(function initDrawPanel() {
+  const panel     = document.getElementById('draw-panel');
+  if (!panel) return;
+  const img       = document.getElementById('draw-preview-img');
+  const instr     = document.getElementById('draw-instructions');
+  const sendBtn   = document.getElementById('draw-send');
+  const cancelBtn = document.getElementById('draw-cancel');
+  let compositeDataUrl = '';
+
+  function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; compositeDataUrl = ''; }
+  function send() {
+    ipcRenderer.send('draw-composite-done', { compositeDataUrl, instructions: instr.value.trim() });
+    close();
+  }
+  function cancel() { close(); }   // nothing persisted until Send, so just dismiss
+
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
+  });
+
+  openDrawPanel = function(dataUrl) {
+    clearPickMode();
+    compositeDataUrl = dataUrl;
+    img.src = dataUrl;
+    instr.value = '';
+    panel.hidden = false;
+    setTimeout(() => instr.focus(), 0);
+  };
+})();
+
+ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl }) => {
   const offscreen = document.createElement('canvas');
   const img1 = new Image(), img2 = new Image();
   img1.src = 'data:image/png;base64,' + pageB64;
@@ -3270,7 +4940,8 @@ ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instruction
   const ctx = offscreen.getContext('2d');
   ctx.drawImage(img1, 0, 0);
   ctx.drawImage(img2, 0, 0);
-  ipcRenderer.send('draw-composite-done', { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
+  // Preview + instruction now live in the left-column panel.
+  if (openDrawPanel) openDrawPanel(offscreen.toDataURL('image/png'));
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────
@@ -3299,7 +4970,7 @@ document.addEventListener('keydown', e => {
 // before-input-event fires in the main process for whichever WebContentsView
 // currently has keyboard focus, then sends this IPC to the renderer. Tool
 // shortcuts are Alt+<letter>, so no input-focus guard is needed.
-const TOOL_BTN = { b: 'btn-pick-box', l: 'btn-pick-lasso', i: 'btn-screenshot', r: 'btn-pick-resize', s: 'btn-pick-component', m: 'btn-draw', e: 'btn-pick-aidev', c: 'btn-pick-eyedropper', a: 'btn-pick-a11y' };
+const TOOL_BTN = Object.fromEntries(PAGE_TOOLS.map(t => [t.key, t.id]));
 ipcRenderer.on('shortcut-action', (_, action) => {
   if (action.type === 'tab-switch') {
     const idx = tabsConfig.findIndex(t => t.id === activeViewTabId);
@@ -3824,7 +5495,14 @@ function buildAuditMenu() {
   openKeyboardShortcutsModal = ctl.open;
 })();
 
+// When the user drags the resize handle, the composer textarea height is pinned
+// to manualInputHeight (px) and auto-growing is suspended until they reset it.
+let manualInputHeight = null;
 function autoResize(el) {
+  if (el === uiTextarea && manualInputHeight != null) {
+    el.style.height = manualInputHeight + 'px';
+    return;
+  }
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 300) + 'px';
 }
@@ -4239,7 +5917,8 @@ uiTextarea.addEventListener('blur', () => { if (!spEditActive) setTimeout(hideSl
 function sendUiMessage() {
   const raw = uiTextarea.value;
   const figma = figmaChips.slice();
-  if (!raw.trim() && !figma.length) return;
+  const attach = attachChips.slice();
+  if (!raw.trim() && !figma.length && !attach.length) return;
 
   // A Framelink action can't run without its Figma URL — prompt for it instead of sending.
   const missing = figma.find(f => f.needsUrl && !f.url);
@@ -4251,7 +5930,8 @@ function sendUiMessage() {
     historyIdx = msgHistory.length;
   }
 
-  // Compose: Figma action instructions (with their URL) first, then the user's free text.
+  // Compose: Figma action instructions (with their URL) first, then the user's
+  // free text, then any attached file/folder paths.
   let body = raw;
   if (figma.length) {
     const instr = figma
@@ -4259,16 +5939,27 @@ function sendUiMessage() {
       .join('\n\n');
     body = instr + (raw.trim() ? '\n\n' + raw : '');
   }
-  // What the user sees in the chat (chip titles + their text)
-  const display = figma.length
+  // The agent gets every attached path in the sent text…
+  const attachText = attach.map(a => a.path).join('\n');
+  if (attach.length) body = (body.trim() ? body + '\n\n' : '') + attachText;
+
+  // …but in the chat, image attachments show as thumbnails (not their path).
+  const images       = attach.filter(a => a.kind === 'file' && isChatImage(a.path)).map(a => a.path);
+  const shownAttach  = attach.filter(a => !(a.kind === 'file' && isChatImage(a.path)));
+  const shownAttachText = shownAttach.map(a => a.path).join('\n');
+
+  // What the user sees in the chat (chip titles / non-image paths + their text)
+  let display = figma.length
     ? figma.map(f => `[Figma: ${f.title}]`).join(' ') + (raw.trim() ? '\n' + raw : '')
     : raw;
+  if (shownAttachText) display = (display.trim() ? display + '\n' : '') + shownAttachText;
 
   const text = (sbConfig && sbConfig.autoInject)
     ? sbContextText(sbConfig) + '\n\n' + body
     : body;
-  routeToActiveSession(text, display);
+  routeToActiveSession(text, display, images, { figma, attach });
   clearFigmaChips();
+  clearAttachChips();
   uiTextarea.value = '';
   uiTextarea.style.height = '';
   uiCharCount.textContent = '';
@@ -4292,18 +5983,58 @@ document.getElementById('btn-ui-code').addEventListener('click', () => {
   uiTextarea.focus();
 });
 
-// File attach — opens native file dialog, inserts paths at cursor
+// File attach — opens native file dialog, adds the paths as chips
 document.getElementById('btn-ui-attach').addEventListener('click', async () => {
   const paths = await ipcRenderer.invoke('show-file-dialog');
-  if (!paths || !paths.length) return;
-  const insert = paths.join('\n');
-  const pos    = uiTextarea.selectionStart;
-  const val    = uiTextarea.value;
-  uiTextarea.value = val.slice(0, pos) + insert + val.slice(pos);
-  uiTextarea.selectionStart = uiTextarea.selectionEnd = pos + insert.length;
-  autoResize(uiTextarea);
-  uiTextarea.focus();
+  if (paths && paths.length) addAttachChips(paths, 'file');
 });
+
+// Folder attach — opens native folder dialog, adds the path as a chip
+document.getElementById('btn-ui-attach-folder').addEventListener('click', async () => {
+  const dir = await ipcRenderer.invoke('show-folder-dialog');
+  if (dir) addAttachChips([dir], 'folder');
+});
+
+// Drag the corner handle to make the composer taller/shorter (up = taller).
+// Double-click resets to automatic content-based sizing.
+(function initInputResize() {
+  const handle = document.getElementById('btn-ui-resize');
+  const area   = document.getElementById('ui-input-area');
+  if (!handle || !area) return;
+  let startY = 0, startH = 0, dragging = false;
+
+  function onMove(e) {
+    if (!dragging) return;
+    const delta = startY - e.clientY;                       // up → positive → taller
+    const max   = Math.round(window.innerHeight * 0.7);
+    manualInputHeight = Math.max(72, Math.min(startH + delta, max));
+    uiTextarea.style.height = manualInputHeight + 'px';
+  }
+  function onUp() {
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    dragging = true;
+    startY = e.clientY;
+    startH = uiTextarea.getBoundingClientRect().height;
+    area.style.maxHeight = 'none';   // lift the 42% cap while manually sized
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  });
+  handle.addEventListener('dblclick', () => {
+    manualInputHeight = null;
+    area.style.maxHeight = '';
+    autoResize(uiTextarea);
+  });
+})();
 
 let updateComponentPickerBtn = null; // set by component picker IIFE
 
@@ -4394,6 +6125,150 @@ document.getElementById('sb-url').addEventListener('keydown', e => {
   e.stopPropagation();
 });
 
+// ── Storybook component picker panel (left column) ───────────────
+// Ported from the old separate component-picker window. The renderer already
+// has the target + Storybook URL, so it drives the panel directly: fetch
+// index.json, list/search/preview components, and route the insert message to
+// chat. The on-page "selected location" highlight still goes through main.
+let openComponentPanel = null;
+(function initComponentPanel() {
+  const panel        = document.getElementById('component-panel');
+  if (!panel) return;
+  const locLink      = document.getElementById('comp-loc-link');
+  const searchIn     = document.getElementById('comp-search');
+  const listEl       = document.getElementById('comp-list');
+  const instr        = document.getElementById('comp-instructions');
+  const insertBtn    = document.getElementById('comp-insert');
+  const cancelBtn    = document.getElementById('comp-cancel');
+
+  let sbUrl = '', allStories = [], target = null, selected = null, openDrawer = null;
+
+  function nodeGet(url) {
+    return new Promise((resolve, reject) => {
+      const mod = url.startsWith('https') ? require('https') : require('http');
+      mod.get(url, res => { let raw = ''; res.on('data', c => raw += c); res.on('end', () => { try { resolve(JSON.parse(raw)); } catch (e) { reject(e); } }); }).on('error', reject);
+    });
+  }
+  function targetSig(t) { return '<' + t.tag + (t.id ? '#' + t.id : '') + ((t.classes && t.classes[0]) ? '.' + t.classes[0] : '') + '>'; }
+
+  function chooseStory(story, drawerEl) {
+    selected = story;
+    listEl.querySelectorAll('.comp-item').forEach(r => r.classList.remove('selected'));
+    drawerEl.classList.add('selected');
+    insertBtn.disabled = false;
+  }
+  function collapseOpen() {
+    if (!openDrawer) return;
+    openDrawer.el.classList.remove('open');
+    const c = openDrawer.el.querySelector('.comp-caret'); if (c) c.classList.remove('open');
+    openDrawer.body.innerHTML = '';   // free the iframe
+    openDrawer.body.hidden = true;
+    openDrawer = null;
+  }
+  function expand(story, drawerEl, body, caret) {
+    collapseOpen();   // accordion — one preview at a time
+    body.hidden = false;
+    body.innerHTML = '';
+    const cap = document.createElement('div'); cap.className = 'comp-preview-cap'; cap.textContent = story.title + '  /  ' + story.name;
+    const frame = document.createElement('iframe'); frame.className = 'comp-preview-frame';
+    const load = document.createElement('div'); load.className = 'comp-preview-loading'; load.textContent = 'Loading preview…';
+    frame.addEventListener('load', () => { load.style.display = 'none'; });
+    frame.src = `${sbUrl}/iframe.html?id=${story.id}&viewMode=story`;
+    body.append(cap, frame, load);
+    drawerEl.classList.add('open');
+    if (caret) caret.classList.add('open');
+    openDrawer = { el: drawerEl, body };
+  }
+  function renderList(query) {
+    openDrawer = null;
+    const q = (query || '').toLowerCase();
+    const filtered = q ? allStories.filter(s => s.title.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)) : allStories;
+    if (!filtered.length) { listEl.innerHTML = '<div class="comp-loading">No components match.</div>'; return; }
+    listEl.innerHTML = '';
+    filtered.slice(0, 200).forEach(story => {
+      const drawer = document.createElement('div');
+      drawer.className = 'comp-item' + (selected && selected.id === story.id ? ' selected' : '');
+      const head = document.createElement('div'); head.className = 'comp-item-head';
+      const caret = document.createElement('span'); caret.className = 'comp-caret'; caret.textContent = '▶';
+      const main = document.createElement('div'); main.className = 'comp-item-main';
+      const t = document.createElement('span'); t.className = 'comp-item-title'; t.textContent = story.title;
+      const n = document.createElement('span'); n.className = 'comp-item-name'; n.textContent = story.name;
+      main.append(t, n);
+      head.append(caret, main);
+      const body = document.createElement('div'); body.className = 'comp-item-body'; body.hidden = true;
+      drawer.append(head, body);
+      head.addEventListener('click', () => {
+        chooseStory(story, drawer);
+        if (drawer.classList.contains('open')) collapseOpen();
+        else expand(story, drawer, body, caret);
+      });
+      listEl.appendChild(drawer);
+    });
+  }
+
+  searchIn.addEventListener('input', () => renderList(searchIn.value));
+  searchIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = listEl.querySelector('.comp-item-head'); if (first) first.click(); } });
+  locLink.addEventListener('mouseenter', () => { if (target && target.selector) ipcRenderer.send('cp-highlight-target', { selector: target.selector }); });
+  locLink.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
+
+  async function doInsert() {
+    if (!selected) return;
+    const instructions = instr.value.trim();
+    const storyUrl = sbUrl + '/?path=/story/' + selected.id;
+    let argsLine = '';
+    try {
+      const detail = await nodeGet(sbUrl + '/stories/' + selected.id + '.json');
+      if (detail.args && Object.keys(detail.args).length) argsLine = '\nDefault args: ' + JSON.stringify(detail.args);
+    } catch (_) {}
+    const t = target;
+    const targetDesc = t
+      ? '\nTarget element: ' + targetSig(t) + (t.text ? ` ("${t.text.slice(0, 60)}")` : '') + (t.selector ? '\nSelector: ' + t.selector : '')
+      : '';
+    const msg = [
+      `[Component Reference] Use the Storybook component "${selected.title} / ${selected.name}" as a reference for this change.`,
+      'Story: ' + storyUrl, argsLine, targetDesc,
+      instructions ? '\nInstructions: ' + instructions : '',
+    ].filter(Boolean).join('\n');
+    routeToActiveSession(msg);
+    close();
+  }
+  function close() {
+    ipcRenderer.send('cp-clear-target-highlight');
+    collapseOpen();
+    panel.hidden = true;
+    listEl.innerHTML = ''; instr.value = ''; searchIn.value = '';
+    selected = null; allStories = []; target = null;
+  }
+
+  insertBtn.addEventListener('click', doInsert);
+  cancelBtn.addEventListener('click', close);
+  instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doInsert(); } });
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr && document.activeElement !== searchIn) { e.preventDefault(); close(); }
+  });
+
+  openComponentPanel = async function(tgt, url) {
+    clearPickMode();
+    sbUrl = (url || '').replace(/\/$/, '');
+    target = tgt; selected = null; openDrawer = null;
+    insertBtn.disabled = true;
+    instr.value = ''; searchIn.value = '';
+    const sig = targetSig(tgt);
+    locLink.textContent = sig + (tgt.text ? ` — "${tgt.text.slice(0, 40)}${tgt.text.length > 40 ? '…' : ''}"` : '');
+    locLink.title = sig + (tgt.selector ? '  ·  ' + tgt.selector : '');
+    listEl.innerHTML = '<div class="comp-loading">Loading components…</div>';
+    panel.hidden = false;
+    try {
+      const data = await nodeGet(sbUrl + '/index.json');
+      allStories = Object.values(data.entries || {}).filter(e => e.type === 'story');
+      renderList('');
+      setTimeout(() => searchIn.focus(), 50);
+    } catch (_) {
+      listEl.innerHTML = `<div class="comp-loading comp-error">Failed to load components from ${sbUrl}</div>`;
+    }
+  };
+})();
+
 // ── Component picker ─────────────────────────────────────────────
 (function initComponentPicker() {
   const btn = document.getElementById('btn-pick-component');
@@ -4430,7 +6305,7 @@ document.getElementById('sb-url').addEventListener('keydown', e => {
 
   ipcRenderer.on('pick-component-result', (_, target) => {
     pickActive = false;
-    ipcRenderer.send('open-component-picker', { target, sbUrl: sbConfig.value });
+    if (openComponentPanel && sbConfig) openComponentPanel(target, sbConfig.value);
   });
 })();
 
@@ -4469,15 +6344,7 @@ let openOnboarding = null;
       { n: 'Storybook', d: 'Pick a design-system component to insert at a targeted location on the page.', sel: '.view-tab[data-view="storybook"]' },
       { n: 'Usage', d: 'Context-window fill and your 5-hour / weekly Claude limits as live gauges.', sel: '#btn-usage' },
     ]},
-    { title: 'Toolbar tools', tools: [
-      { n: 'Box select', d: 'Draw a box to select page elements and send them to chat (Alt+B).', sel: '#btn-pick-box' },
-      { n: 'Lasso select', d: 'Freehand-select page elements (Alt+L).', sel: '#btn-pick-lasso' },
-      { n: 'Resize', d: 'Resize an element directly on the page (Alt+R).', sel: '#btn-pick-resize' },
-      { n: 'Eyedropper', d: 'Sample any color with a magnifier loupe, then edit it live or send it to chat (Alt+C).', sel: '#btn-pick-eyedropper' },
-      { n: 'Accessibility', d: 'Scan the page for WCAG contrast failures and a11y issues, then send them to chat to fix (Alt+A).', sel: '#btn-pick-a11y' },
-      { n: 'Screenshot', d: 'Capture a region of the page for the agent (Alt+I).', sel: '#btn-screenshot' },
-      { n: 'Draw', d: 'Annotate the page with a marker, then hand it over (Alt+M).', sel: '#btn-draw' },
-    ]},
+    { title: 'Toolbar tools', tools: PAGE_TOOLS.filter(t => t.desc).map(t => ({ n: t.label, d: t.desc + ' (' + accelOf(t) + ').', sel: '#' + t.id })) },
     { title: 'Panel controls', tools: [
       { n: 'Audit', d: 'Run a code audit — pick an audit type from the dropdown.', sel: '#btn-audit', icon: AUDIT_ICON },
       { n: 'Chat / Terminal', d: 'Toggle a Claude session between chat view and the raw terminal.', sel: '#session-view-toggle' },

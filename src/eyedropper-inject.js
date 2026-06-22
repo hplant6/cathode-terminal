@@ -45,6 +45,21 @@ function getEyedropperScript(snapshotDataUrl) {
       resolve(val);
     }
 
+    // Panel mode: resolve once on selection (handles stay), then teardown later.
+    function resolveOnce(v) { if (resolved) return; resolved = true; resolve(v); }
+    function edTeardown() {
+      document.removeEventListener('keydown', onKey, true);
+      ['__ed_ov','__ed_loupe','__ed_pop','__ed_hl__','__ed_cp__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+      window.__cathodeEyedropper = null;
+    }
+    function edLabel(el) {
+      var t = el.tagName.toLowerCase();
+      var id = el.id ? '#' + el.id : '';
+      var cls = (typeof el.className === 'string' && el.className.trim())
+        ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+      return t + id + cls;
+    }
+
     // Reusable: drag an element by a handle, skipping mousedowns on skipSel.
     function makeDraggable(el, handle, skipSel) {
       if (!handle) return;
@@ -251,8 +266,41 @@ function getEyedropperScript(snapshotDataUrl) {
       props.forEach(function(d){ var rgb = hexToRgb(d.origHex); var dd = rgb ? dist(rgb, sample) : 1e9; if (dd < bestD) { bestD = dd; best = d; } });
       active = best; active.activate();
       prop = active.prop;
-      fromHex = active.origHex; curHex = fromHex;
-      buildCard(el);
+      // Show the EXACT sampled pixel, not the matched property's computed color
+      // (anti-aliased edges / gradients / images won't equal any one property).
+      fromHex = pickedHex; curHex = pickedHex;
+
+      // Hand off to the left-column panel; keep refs live for live editing.
+      if (ov) ov.remove();
+      if (loupe) loupe.remove();
+      window.__cathodeEyedropper = {
+        setProp: function(p) {
+          if (active) active.restore();
+          var nd = null;
+          for (var i = 0; i < props.length; i++) { if (props[i].prop === p) { nd = props[i]; break; } }
+          if (!nd) return null;
+          active = nd; active.activate();
+          fromHex = active.origHex; curHex = fromHex;
+          return { from: fromHex };
+        },
+        setColor: function(hex) { curHex = (hex || '').toUpperCase(); if (active) active.apply(hex); },
+        result: function(instruction) {
+          return {
+            selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(),
+            property: active ? active.prop : prop, fromColor: fromHex, toColor: curHex.toUpperCase(),
+            changed: curHex.toUpperCase() !== fromHex.toUpperCase(), pickedColor: pickedHex,
+            instruction: instruction || '',
+          };
+        },
+        cancel: function() { if (active) active.restore(); edTeardown(); },
+        clear: function() { edTeardown(); },
+      };
+      resolveOnce({
+        selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: edLabel(selEl),
+        pickedHex: pickedHex,
+        props: props.map(function(d) { return { prop: d.prop, label: d.label, origHex: d.origHex }; }),
+        activeIdx: props.indexOf(active),
+      });
     }
 
     function applyColor(hex) { if (active) active.apply(hex); }
@@ -548,14 +596,10 @@ function getEyedropperScript(snapshotDataUrl) {
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────
+    // Selection hands off to the left-column panel, which owns cancel/send;
+    // here we only allow Escape to back out during the hover (sampling) phase.
     function onKey(e) {
-      if (e.key === 'Escape') {
-        if (closePickerFn && closePickerFn()) return;   // close the picker first
-        if (phase === 'selected') revert();
-        done(null);
-      } else if (e.key === 'Enter' && phase === 'selected' && document.activeElement !== instr) {
-        e.preventDefault(); send();
-      }
+      if (e.key === 'Escape' && phase === 'hover') { resolveOnce(null); edTeardown(); }
     }
     document.addEventListener('keydown', onKey, true);
   });

@@ -1,3 +1,5 @@
+const SHARED = require('./inject-shared');
+
 function getPopupScript(elements, mouseUpX, mouseUpY) {
   const elementsJSON = JSON.stringify(elements);
 
@@ -38,7 +40,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
     function build() {
       const rows = items.map((item, i) => \`
         <div class="el-row">
-          <span class="el-name">\${escHtml(item.label)}</span>
+          <span class="el-name">\${esc(item.label)}</span>
           <button class="el-x" data-i="\${i}" tabindex="-1">✕</button>
         </div>
       \`).join('');
@@ -229,9 +231,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
       }
     }
 
-    function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
+${SHARED.escHelper}
 
     build();
 

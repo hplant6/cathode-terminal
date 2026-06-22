@@ -18,30 +18,16 @@ const http = require('http');
 const STORYBOOK_CURSOR_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'src', 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
 const STORYBOOK_CURSOR_CSS = `url("data:image/svg+xml;base64,${STORYBOOK_CURSOR_B64}") 9 9, crosshair`;
 const { execFile, spawn } = require('child_process');
+// Platform abstraction layer: all WSL/cmd.exe/PowerShell/registry branching is
+// behind this so main.js stays platform-agnostic (Windows uses WSL; macOS/Linux
+// run agents/tools natively). See src/platform/index.js.
+const platform = require('./src/platform');
 
-// Async WSL exec helpers — sync variants freeze the main thread (and every
+// Async *nix exec helpers — sync variants freeze the main thread (and every
 // native-view repaint) for seconds; anything UI-adjacent must use these.
-function wslExecFile(args, timeout = 6000) {
-  return new Promise(resolve => {
-    execFile('wsl.exe', args, { encoding: 'utf8', timeout }, (err, stdout) => {
-      resolve(err ? null : stdout);
-    });
-  });
-}
-function wslExecInput(args, input, timeout = 5000) {
-  return new Promise(resolve => {
-    let done = false;
-    const finish = ok => { if (!done) { done = true; resolve(ok); } };
-    try {
-      const p = spawn('wsl.exe', args);
-      p.on('close', code => finish(code === 0));
-      p.on('error', () => finish(false));
-      setTimeout(() => { try { p.kill(); } catch (_) {} finish(false); }, timeout);
-      p.stdin.write(input);
-      p.stdin.end();
-    } catch (_) { finish(false); }
-  });
-}
+// (Thin wrappers over the platform adapter so existing call sites are unchanged.)
+function wslExecFile(args, timeout = 6000) { return platform.nixExecFile(args, timeout); }
+function wslExecInput(args, input, timeout = 5000) { return platform.nixExecInput(args, input, timeout); }
 
 // ── HiDPI: read saved scale factor and apply BEFORE app.whenReady() ──
 // Chromium's --force-device-scale-factor must be set before the process
@@ -104,7 +90,7 @@ let rightPanelMode = 'project';
 const customViews  = new Map(); // url → WebContentsView
 
 const TOOLBAR_HEIGHT    = 46;
-const TABBAR_HEIGHT     = 38;
+const TABBAR_HEIGHT     = 46;   /* browser chrome bar height (matches #tab-bar in styles.css) */
 const POPUP_BAR_HEIGHT  = 36;
 
 // Safe send to the main renderer — async handlers can outlive the window.
@@ -134,7 +120,7 @@ let splitFraction = 0.4;
 // tabOnly = true  → only tab-switching (safe for utility/popup views)
 // Tool shortcuts are Alt+<letter> so they can never collide with typing
 // (in the composer or inside the browsed page) — no focus tracking needed.
-const TOOL_KEYS = new Set(['b', 'l', 'i', 'r', 's', 'm', 'e', 'c', 'a']);
+const TOOL_KEYS = new Set(require('./src/tools').TOOLS.map(t => t.key));
 
 // Toolbar tools mirrored into the browser context menu. The renderer registers
 // them (label, accelerator, key, rasterized icon) once the toolbar is built.
@@ -283,35 +269,12 @@ function ramPercent() {
   return total > 0 ? Math.round(100 * (total - os.freemem()) / total) : 0;
 }
 
-let _gpuPct = null;            // null → unavailable
-let _gpuProc = null;
-function startGpuSampler() {
-  if (process.platform !== 'win32' || _gpuProc) return;
-  // Sum the 3D-engine utilization across all GPU adapters (≈ Task Manager's
-  // "3D" reading). Streams one rounded number every 2s; 'NA' on failure.
-  const script =
-    "while($true){try{" +
-    "$s=(Get-Counter '\\GPU Engine(*engtype_3D)\\Utilization Percentage' -ErrorAction Stop).CounterSamples;" +
-    "$sum=($s|Measure-Object -Property CookedValue -Sum).Sum;" +
-    "Write-Output ([math]::Round($sum))}catch{Write-Output 'NA'};" +
-    "Start-Sleep -Milliseconds 2000}";
-  try {
-    _gpuProc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true });
-    _gpuProc.stdout.on('data', (d) => {
-      const line = d.toString().trim().split(/\r?\n/).pop().trim();
-      _gpuPct = (line === 'NA' || line === '') ? null : Math.max(0, Math.min(100, parseInt(line, 10) || 0));
-    });
-    _gpuProc.on('error', () => { _gpuPct = null; _gpuProc = null; });
-    _gpuProc.on('close', () => { _gpuProc = null; });
-  } catch (_) { _gpuProc = null; }
-}
-
 let _sysPerfTimer = null;
 function startSysPerf() {
   if (_sysPerfTimer) return;
-  startGpuSampler();
+  platform.startGpuSampler();
   _sysPerfTimer = setInterval(() => {
-    uiSend('sysperf', { cpu: cpuPercent(), ram: ramPercent(), gpu: _gpuPct });
+    uiSend('sysperf', { cpu: cpuPercent(), ram: ramPercent(), gpu: platform.gpuPercent() });
   }, 2000);
 }
 
@@ -320,31 +283,7 @@ function startSysPerf() {
 // renderer polls only while a process-breakdown view is open).
 //   by='cpu' → instantaneous % from perf counters, normalized by logical cores.
 //   else     → working-set bytes via Get-Process.
-ipcMain.handle('top-procs', async (_, by) => {
-  if (process.platform !== 'win32') return { ok: false };
-  const cpu = by === 'cpu';
-  const cmd = cpu
-    ? "$n=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors;" +
-      "(Get-Counter '\\Process(*)\\% Processor Time').CounterSamples | " +
-      "Where-Object { $_.InstanceName -ne '_total' -and $_.InstanceName -ne 'idle' } | " +
-      "Group-Object { $_.InstanceName -replace '#\\d+$','' } | " +
-      "ForEach-Object { [pscustomobject]@{ n=$_.Name; v=[math]::Round((($_.Group | Measure-Object CookedValue -Sum).Sum)/$n,1) } } | " +
-      "Sort-Object v -Descending | Select-Object -First 6 | ConvertTo-Json -Compress"
-    : "Get-Process | Group-Object ProcessName | ForEach-Object { [pscustomobject]@{ n=$_.Name; " +
-      "v=(($_.Group | Measure-Object WorkingSet64 -Sum).Sum) } } | " +
-      "Sort-Object v -Descending | Select-Object -First 6 | ConvertTo-Json -Compress";
-  return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd],
-      { windowsHide: true, maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
-        if (err || !stdout) { resolve({ ok: false }); return; }
-        try {
-          let data = JSON.parse(stdout.trim());
-          if (!Array.isArray(data)) data = [data];
-          resolve({ ok: true, by: cpu ? 'cpu' : 'ram', procs: data.map(d => ({ name: d.n, value: d.v })) });
-        } catch (_) { resolve({ ok: false }); }
-      });
-  });
-});
+ipcMain.handle('top-procs', (_, by) => platform.topProcs(by));
 
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
@@ -355,13 +294,17 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1a1a1a',
     icon: path.join(__dirname, 'icon.png'),   // window/taskbar icon (dev + packaged)
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#252525', symbolColor: '#888888', height: 46 },
+    titleBarStyle: 'hidden',   // custom HTML window controls (see #window-controls)
     // nodeIntegration required: renderer uses ipcRenderer and node-pty directly
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // Keep the custom maximize/restore icon in sync with the real window state.
+  const sendMaxState = () => uiSend('window-maximized-state', mainWindow.isMaximized());
+  mainWindow.on('maximize', sendMaxState);
+  mainWindow.on('unmaximize', sendMaxState);
 
   browserView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false },
@@ -591,31 +534,12 @@ function repositionRightPanelView() {
     return;
   }
   const [winW, winH] = mainWindow.getContentSize();
-  const fraction = splitFraction;
-  const availW   = winW - devToolsWidth;
-  const rightX   = Math.round(availW * fraction) + 6;
-  const rightW   = availW - rightX;
-  if (figmaView) {
-    figmaView.setBounds(
-      rightPanelMode === 'figma'
-        ? { x: rightX, y: TOOLBAR_HEIGHT, width: rightW, height: winH - TOOLBAR_HEIGHT }
-        : offscreen
-    );
-  }
-  if (storybookView) {
-    storybookView.setBounds(
-      rightPanelMode === 'storybook'
-        ? { x: rightX, y: TOOLBAR_HEIGHT, width: rightW, height: winH - TOOLBAR_HEIGHT }
-        : offscreen
-    );
-  }
-  for (const [url, view] of customViews) {
-    view.setBounds(
-      rightPanelMode === 'url:' + url
-        ? { x: rightX, y: TOOLBAR_HEIGHT, width: rightW, height: winH - TOOLBAR_HEIGHT }
-        : offscreen
-    );
-  }
+  const availW = winW - devToolsWidth;
+  const rightX = Math.round(availW * splitFraction) + 6;
+  const onBounds = { x: rightX, y: TOOLBAR_HEIGHT, width: availW - rightX, height: winH - TOOLBAR_HEIGHT };
+  if (figmaView)     figmaView.setBounds(rightPanelMode === 'figma'         ? onBounds : offscreen);
+  if (storybookView) storybookView.setBounds(rightPanelMode === 'storybook' ? onBounds : offscreen);
+  for (const [url, view] of customViews) view.setBounds(rightPanelMode === 'url:' + url ? onBounds : offscreen);
 }
 
 function repositionDevToolsView() {
@@ -890,9 +814,10 @@ function repositionBrowserView(overrideFraction) {
   const fraction = overrideFraction ?? splitFraction;
   const availW  = winW - devToolsWidth;
   const leftW   = Math.round(availW * fraction);
-  const rightX  = leftW + 6;
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
-  const panelW = availW - rightX, panelH = winH - topOffset;
+  const PAD     = 10;   // frame inset (right/bottom) — matches #right-panel padding (left flush)
+  const rightX  = leftW + 6;
+  const panelW = (availW - (leftW + 6)) - PAD, panelH = (winH - topOffset) - PAD;
 
   if (deviceEmulation) {
     // Device emulation: viewport centered horizontally, top-anchored (like
@@ -918,52 +843,25 @@ function repositionBrowserView(overrideFraction) {
 // The directory sessions launch in (and where agent-memory files live).
 // Empty/unset → the user's home, which makes the memory files *global*.
 let currentProjectDir = '';
-function homeDir() { return process.env.USERPROFILE || process.env.HOME || process.cwd(); }
+function homeDir() { return platform.homeDir(); }
 function sessionCwd() { return currentProjectDir || homeDir(); }
 ipcMain.on('set-project-dir', (_, { dir }) => { currentProjectDir = dir || ''; });
 
-// ── Agent runtime environment (WSL vs Windows) ────────────────────
-// Most tools (claude/aider/llm) run in WSL. But Gemini/Codex may be installed
-// via *Windows* npm — running their `/mnt/c/.../npm` shim under WSL fails
-// ("exec: node: not found"). Detect once per binary and run it where it
-// actually lives: a real WSL install, else the Windows install via cmd.exe.
+// ── Agent runtime environment (WSL vs Windows vs native) ──────────
+// Most tools (claude/aider/llm) run in WSL on Windows. Gemini/Codex may be
+// installed via *Windows* npm instead, so we detect where each binary lives.
+// On macOS/Linux there is no split — agents run natively. resolveAgentEnv,
+// agentVersion (Windows cmd.exe versions) and agentCwd live in the platform
+// adapter; aliased here so existing call sites read unchanged.
 const DUAL_ENV_BINS = new Set(['gemini', 'codex']);
-const _agentEnvCache = new Map();   // bin → 'wsl' | 'win' | null
-async function resolveAgentEnv(bin) {
-  if (_agentEnvCache.has(bin)) return _agentEnvCache.get(bin);
-  let env = null;
-  const wslPath = ((await wslExecFile(['bash', '-lic', `command -v ${bin} 2>/dev/null`], 6000)) || '').trim();
-  if (wslPath && !wslPath.startsWith('/mnt/')) {
-    env = 'wsl';                    // a real WSL install (not a /mnt/c interop shim)
-  } else {
-    const onWindows = await new Promise(res => {
-      try { const p = spawn('where.exe', [bin], { stdio: 'ignore' }); p.on('close', c => res(c === 0)); p.on('error', () => res(false)); }
-      catch (_) { res(false); }
-    });
-    env = onWindows ? 'win' : (wslPath ? 'wsl' : null);
-  }
-  _agentEnvCache.set(bin, env);
-  return env;
-}
-function winVersion(bin) {
-  return new Promise(res => {
-    let out = '';
-    try {
-      const p = spawn('cmd.exe', ['/c', bin, '--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
-      p.stdout.on('data', d => out += d);
-      p.on('close', () => res(out.trim().split('\n').filter(Boolean).pop() || ''));
-      p.on('error', () => res(''));
-      setTimeout(() => { try { p.kill(); } catch (_) {} res(out.trim()); }, 6000);
-    } catch (_) { res(''); }
-  });
-}
-// cmd.exe can't use a \\wsl.localhost UNC dir as cwd — fall back to the Windows home.
-function winCwd() {
-  const c = sessionCwd();
-  return (c && !c.startsWith('\\\\')) ? c : homeDir();
-}
+const resolveAgentEnv = platform.resolveAgentEnv;
+const winVersion = platform.agentVersion;
+function winCwd() { return platform.agentCwd(sessionCwd(), homeDir()); }
 
 // ── PTY sessions ──────────────────────────────────────────────────
+function safeKill(proc) { try { proc && proc.kill(); } catch (_) {} }
+function killPty(id)    { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; }
+
 async function spawnPty(id, command = 'claude') {
   ptyCommands[id] = command;
   try {
@@ -973,34 +871,34 @@ async function spawnPty(id, command = 'claude') {
     let proc;
     if (env === 'win') {
       // Windows-installed agent (e.g. Gemini/Codex via Windows npm) → run on Windows.
-      proc = pty.spawn('cmd.exe', ['/c', command], {
+      const { file, args } = platform.cmdFileArgs(['/c', command]);
+      proc = pty.spawn(file, args, {
         name: 'xterm-256color', cols: 80, rows: 24,
         cwd: winCwd(), env: process.env,
       });
     } else {
-      // Prepend pip/pipx user-install dir inside WSL so tools like aider are found
+      // Prepend pip/pipx user-install dir so tools like aider are found
       const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH"; ${command}`;
-      proc = pty.spawn('wsl.exe', ['bash', '-lic', wrappedCmd], {
+      const { file, args } = platform.nixFileArgs(['bash', '-lic', wrappedCmd]);
+      proc = pty.spawn(file, args, {
         name: 'xterm-256color', cols: 80, rows: 24,
         cwd: sessionCwd(),
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
       });
     }
     proc.onData(data => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('pty-output', { id, data });
+      uiSend('pty-output', { id, data });
     });
     proc.onExit(() => {
       // Guard: a restart may have already replaced this id with a new proc —
       // a stale exit must not clobber the new entry (or print into its term).
       if (ptyProcesses[id] !== proc) return;
-      if (mainWindow && !mainWindow.isDestroyed())
-        mainWindow.webContents.send('pty-output', { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
+      uiSend('pty-output', { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
       delete ptyProcesses[id];
     });
     ptyProcesses[id] = proc;
   } catch (err) {
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('pty-output', { id, data: `\r\n\x1b[31m[Error starting session: ${err.message}]\x1b[0m\r\n` });
+    uiSend('pty-output', { id, data: `\r\n\x1b[31m[Error starting session: ${err.message}]\x1b[0m\r\n` });
   }
 }
 
@@ -1009,10 +907,10 @@ ipcMain.on('pty-input',   (_, { id, data })       => { if (ptyProcesses[id]) pty
 ipcMain.on('pty-resize',  (_, { id, cols, rows })  => { if (ptyProcesses[id]) ptyProcesses[id].resize(cols, rows); });
 ipcMain.on('pty-spawn',   (_, { id, command })     => spawnPty(id, command));
 ipcMain.on('pty-kill',    (_, { id })              => {
-  if (ptyProcesses[id]) { try { ptyProcesses[id].kill(); } catch (_) {} delete ptyProcesses[id]; }
+  killPty(id);
 });
 ipcMain.on('pty-restart', (_, { id, command })     => {
-  if (ptyProcesses[id]) { try { ptyProcesses[id].kill(); } catch (_) {} delete ptyProcesses[id]; }
+  killPty(id);
   spawnPty(id, command || ptyCommands[id] || 'claude');
 });
 ipcMain.on('set-active-pty', (_, { id }) => { activePtyId = id; });
@@ -1021,45 +919,37 @@ ipcMain.handle('check-model', (_, { command }) => {
   return new Promise(resolve => {
     try {
       const safe = command.replace(/[^a-zA-Z0-9\-_.]/g, '');
-      const p = spawn('wsl.exe', ['bash', '-lic', `command -v ${safe} >/dev/null 2>&1`]);
+      const p = platform.nixSpawn(['bash', '-lic', `command -v ${safe} >/dev/null 2>&1`]);
       p.on('close', code => resolve(code === 0));
       p.on('error', () => resolve(false));
-      setTimeout(() => { try { p.kill(); } catch (_) {} resolve(false); }, 4000);
+      setTimeout(() => { safeKill(p); resolve(false); }, 4000);
     } catch (_) { resolve(false); }
   });
 });
 
 // ── Onboarding: detection + streaming install runner ──────────────
-ipcMain.handle('check-wsl', () => new Promise(resolve => {
-  try {
-    const p = spawn('wsl.exe', ['-e', 'echo', 'cathode-ok']);
-    let out = '';
-    p.stdout.on('data', d => out += d.toString());
-    p.on('close', () => resolve(/cathode-ok/.test(out)));
-    p.on('error', () => resolve(false));
-    setTimeout(() => { try { p.kill(); } catch (_) {} resolve(false); }, 6000);
-  } catch (_) { resolve(false); }
-}));
+// check-wsl → "is the *nix environment reachable?" (always true on macOS/Linux)
+ipcMain.handle('check-wsl', () => platform.checkNixEnv());
 
 ipcMain.handle('check-claude-auth', () => new Promise(resolve => {
   try {
-    const p = spawn('wsl.exe', ['bash', '-lic', 'test -f ~/.claude/.credentials.json && echo yes']);
+    const p = platform.nixSpawn(['bash', '-lic', 'test -f ~/.claude/.credentials.json && echo yes']);
     let out = '';
     p.stdout.on('data', d => out += d.toString());
     p.on('close', () => resolve(/yes/.test(out)));
     p.on('error', () => resolve(false));
-    setTimeout(() => { try { p.kill(); } catch (_) {} resolve(false); }, 5000);
+    setTimeout(() => { safeKill(p); resolve(false); }, 5000);
   } catch (_) { resolve(false); }
 }));
 
 let onboardingProc = null;
 ipcMain.on('onboarding-run', (_, { id, command }) => {
   const send = uiSend;
-  try { if (onboardingProc) onboardingProc.kill(); } catch (_) {}
+  safeKill(onboardingProc);
   try {
     // Keep a local ref: the killed proc's async 'close' must not null out a
     // replacement that was assigned in the meantime (orphaning its kill handle).
-    const proc = spawn('wsl.exe', ['bash', '-lic', command]);
+    const proc = platform.nixSpawn(['bash', '-lic', command]);
     onboardingProc = proc;
     proc.stdout.on('data', d => send('onboarding-output', { id, data: d.toString() }));
     proc.stderr.on('data', d => send('onboarding-output', { id, data: d.toString() }));
@@ -1077,13 +967,13 @@ ipcMain.on('onboarding-run', (_, { id, command }) => {
     send('onboarding-done', { id, code: 1 });
   }
 });
-ipcMain.on('onboarding-cancel', () => { try { if (onboardingProc) onboardingProc.kill(); } catch (_) {} onboardingProc = null; });
+ipcMain.on('onboarding-cancel', () => { safeKill(onboardingProc); onboardingProc = null; });
 
 // ── Profile installer (streams output back to the modal) ──────────
 ipcMain.on('profile-install', (_, { installId, command }) => {
   const send = uiSend;
   try {
-    const proc = spawn('wsl.exe', ['bash', '-lc', command], {
+    const proc = platform.nixSpawn(['bash', '-lc', command], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     proc.stdout.on('data', d => send('profile-install-progress', { installId, text: d.toString() }));
@@ -1118,9 +1008,9 @@ function acpAdapterInstalledVersion() {
     let done = false;
     const finish = v => { if (!done) { done = true; resolve(v); } };
     try {
-      // Run through `cmd.exe /c npm` — Node refuses to spawn a `.cmd` file
-      // directly (throws EINVAL), so never spawn `npm.cmd` itself.
-      const p = spawn('cmd.exe', ['/c', 'npm', 'ls', '-g', ACP_ADAPTER_PKG, '--json', '--depth=0'],
+      // On Windows, run through `cmd.exe /c npm` — Node refuses to spawn a
+      // `.cmd` file directly (throws EINVAL). On POSIX, npm runs natively.
+      const p = platform.cmdSpawn(['/c', 'npm', 'ls', '-g', ACP_ADAPTER_PKG, '--json', '--depth=0'],
         { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
       p.stdout.on('data', d => out += d);
       p.on('close', () => {
@@ -1128,7 +1018,7 @@ function acpAdapterInstalledVersion() {
         catch (_) { finish(null); }
       });
       p.on('error', () => finish(null));
-      setTimeout(() => { try { p.kill(); } catch (_) {} finish(null); }, 15000);
+      setTimeout(() => { safeKill(p); finish(null); }, 15000);
     } catch (_) { finish(null); }   // any spawn failure → treat as "not verified"
   });
 }
@@ -1153,8 +1043,8 @@ async function ensureClaudeAdapter(id) {
   if (!needInstall) return true;
   uiSend('acp-installing', { id });
   const ok = await new Promise(resolve => {
-    // `cmd.exe /c npm` — never spawn `npm.cmd` directly (Node throws EINVAL).
-    const inst = spawn('cmd.exe', ['/c', 'npm', 'install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
+    // Windows: `cmd.exe /c npm` — never spawn `npm.cmd` directly (EINVAL). POSIX: npm native.
+    const inst = platform.cmdSpawn(['/c', 'npm', 'install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
       { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     inst.stdout.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
     inst.stderr.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
@@ -1170,7 +1060,7 @@ async function launchClaudeAcp(modelOverride) {
   // Point the adapter at WSL's ~/.claude (same OAuth credentials). Probes run
   // async + parallel — sync versions froze the UI for ~14s on every spawn.
   const [cfgOut, verOut, setOut] = await Promise.all([
-    wslExecFile(['bash', '-lc', 'wslpath -w ~/.claude'], 5000),
+    wslExecFile(platform.claudeConfigDirArgs(), 5000),
     wslExecFile(['bash', '-lc', 'claude --version 2>/dev/null'], 6000),
     wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/settings.json 2>/dev/null'], 3000),
   ]);
@@ -1179,7 +1069,7 @@ async function launchClaudeAcp(modelOverride) {
   let model = '';
   try { model = JSON.parse(setOut).model || ''; } catch (_) {}
   if (modelOverride) model = modelOverride;
-  const proc = spawn('cmd.exe', ['/c', 'claude-agent-acp'], {
+  const proc = platform.cmdSpawn(['/c', 'claude-agent-acp'], {
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
@@ -1200,10 +1090,10 @@ async function launchAcpAgent(bin, acpArgs, agentKey) {
   let proc, version = '';
   if (env === 'win') {
     version = await winVersion(bin);
-    proc = spawn('cmd.exe', ['/c', bin, ...acpArgs], { stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true });
+    proc = platform.cmdSpawn(['/c', bin, ...acpArgs], { stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true });
   } else {
     version = ((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').trim().split('\n').filter(Boolean).pop() || '';
-    proc = spawn('wsl.exe', ['bash', '-lic', `${bin} ${acpArgs.join(' ')}`], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
+    proc = platform.nixSpawn(['bash', '-lic', `${bin} ${acpArgs.join(' ')}`], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
   }
   return { proc, version, model: '' };
 }
@@ -1240,14 +1130,12 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     if (connected || errorSent) return; // normal exit after use — already handled via conn.closed
     const detail = stderrBuf.trim().split('\n').slice(-3).join(' | ') || `exit ${code ?? signal}`;
     console.error('[acp] early exit:', detail);
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-error', { id, message: `Adapter exited before connecting: ${detail}` });
+    uiSend('acp-error', { id, message: `Adapter exited before connecting: ${detail}` });
   });
 
   proc.on('error', err => {
     console.error('[acp] proc error:', err);
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-error', { id, message: err.message });
+    uiSend('acp-error', { id, message: err.message });
   });
 
   const send = uiSend;
@@ -1306,7 +1194,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     console.error('[acp] connect timeout');
     errorSent = true;
     send('acp-error', { id, message: timeoutErr.message });
-    try { proc.kill(); } catch (_) {}
+    safeKill(proc);
   }, CONNECT_TIMEOUT);
 
   try {
@@ -1332,15 +1220,14 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     console.error('[acp] init error:', err);
     errorSent = true;
     send('acp-error', { id, message: err.message });
-    try { proc.kill(); } catch (_) {}
+    safeKill(proc);
   }
 }
 
 ipcMain.on('acp-spawn', (_, { id, model, agent }) => {
   spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
     console.error('[acp] spawn error:', err);
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-error', { id, message: err.message });
+    uiSend('acp-error', { id, message: err.message });
   });
 });
 
@@ -1349,12 +1236,10 @@ ipcMain.on('acp-prompt', async (_, { id, text }) => {
   if (!s) return;
   try {
     await s.conn.prompt({ sessionId: s.sessionId, prompt: [{ type: 'text', text }] });
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-done', { id });
+    uiSend('acp-done', { id });
   } catch (err) {
     console.error('[acp] prompt error:', err);
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('acp-error', { id, message: err.message });
+    uiSend('acp-error', { id, message: err.message });
   }
 });
 
@@ -1367,7 +1252,7 @@ ipcMain.on('acp-cancel', async (_, { id }) => {
 ipcMain.on('acp-kill', (_, { id }) => {
   const s = acpSessions.get(id);
   if (!s) return;
-  try { s.proc.kill(); } catch (_) {}
+  safeKill(s.proc);
   acpSessions.delete(id);
 });
 
@@ -1378,7 +1263,7 @@ let claudeChatBuf     = '';     // incomplete JSON line buffer
 
 function spawnClaudeChat(text) {
   if (claudeChatProc) {
-    try { claudeChatProc.kill(); } catch (_) {}
+    safeKill(claudeChatProc);
     claudeChatProc = null;
   }
   claudeChatBuf = '';
@@ -1386,13 +1271,13 @@ function spawnClaudeChat(text) {
   // Write the message to a temp file so we don't need to shell-escape it.
   const msgFile = path.join(os.tmpdir(), 'cathode-claude-msg.txt');
   fs.writeFileSync(msgFile, text, 'utf8');
-  // Convert Windows temp path to WSL path (e.g. C:\Users\... → /mnt/c/Users/...)
-  const wslPath = msgFile.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
+  // Convert the temp path to one the *nix env can read (WSL: C:\… → /mnt/c/…).
+  const wslPath = platform.toNixPath(msgFile);
 
   const sessionArg = claudeChatSession ? `--resume ${claudeChatSession}` : '';
   const cmd = `claude --output-format stream-json ${sessionArg} -p "$(cat '${wslPath}')"`;
 
-  claudeChatProc = spawn('wsl.exe', ['bash', '-lic', cmd], {
+  claudeChatProc = platform.nixSpawn(['bash', '-lic', cmd], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -1408,8 +1293,7 @@ function spawnClaudeChat(text) {
         if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
           claudeChatSession = event.session_id;
         }
-        if (mainWindow && !mainWindow.isDestroyed())
-          mainWindow.webContents.send('claude-chat-event', event);
+        uiSend('claude-chat-event', event);
       } catch (_) { /* non-JSON startup lines (e.g. bash profile output) — ignore */ }
     }
   });
@@ -1418,26 +1302,24 @@ function spawnClaudeChat(text) {
 
   claudeChatProc.on('exit', (code) => {
     claudeChatProc = null;
-    if (mainWindow && !mainWindow.isDestroyed())
-      mainWindow.webContents.send('claude-chat-done', { code: code ?? 0 });
+    uiSend('claude-chat-done', { code: code ?? 0 });
   });
 }
 
 ipcMain.on('claude-chat-send',   (_, { text }) => spawnClaudeChat(text));
 ipcMain.on('claude-chat-cancel', () => {
   if (claudeChatProc) {
-    try { claudeChatProc.kill(); } catch (_) {}
+    safeKill(claudeChatProc);
     claudeChatProc = null;
   }
-  if (mainWindow && !mainWindow.isDestroyed())
-    mainWindow.webContents.send('claude-chat-done', { code: -1, cancelled: true });
+  uiSend('claude-chat-done', { code: -1, cancelled: true });
 });
 
 // ── IPC: usage (parsed from Claude local transcripts) ─────────────
 let _claudeConfigDirPromise = null;   // cached async resolution (was sync — blocked the UI)
 function claudeConfigDir() {
   if (!_claudeConfigDirPromise) {
-    _claudeConfigDirPromise = wslExecFile(['bash', '-lc', 'wslpath -w ~/.claude'], 5000)
+    _claudeConfigDirPromise = wslExecFile(platform.claudeConfigDirArgs(), 5000)
       .then(out => (out || '').trim() || null);
   }
   return _claudeConfigDirPromise;
@@ -1525,6 +1407,17 @@ function accumulateUsageLine(c, line) {
   if (ctx > 0) c.lastCtx = ctx;  // most recent turn's input context ≈ current fill
 }
 
+// Serialize usage reads. `computeUsage` advances a shared cache offset and reads
+// the transcript incrementally; two concurrent calls (panel poll + post-reply
+// refresh firing together) would read overlapping byte ranges and double-count
+// tokens/cost. Chain them so each runs strictly after the previous settles.
+let _usageLock = Promise.resolve();
+function computeUsageSerial(file) {
+  const run = _usageLock.then(() => computeUsage(file));
+  _usageLock = run.then(() => {}, () => {});   // keep the chain alive past failures
+  return run;
+}
+
 async function computeUsage(file) {
   const st = await fsp.stat(file);
   // New/changed file (or it shrank — shouldn't happen, but be safe): reset.
@@ -1570,7 +1463,7 @@ ipcMain.handle('get-usage', async (_, { cwd } = {}) => {
       if (located) file = located;
     }
     if (!file) return { ok: false, reason: 'no-transcript' };
-    return { ok: true, ...(await computeUsage(file)) };
+    return { ok: true, ...(await computeUsageSerial(file)) };
   } catch (e) {
     return { ok: false, reason: e.message };
   }
@@ -1593,6 +1486,7 @@ function httpsGetJson(host, reqPath, headers) {
       let b = '';
       res.on('data', d => b += d);
       res.on('end', () => resolve({ status: res.statusCode, body: b }));
+      res.on('error', reject);   // mid-stream response error → reject now, don't wait for timeout
     });
     req.on('error', reject);
     req.setTimeout(8000, () => { req.destroy(new Error('timeout')); });
@@ -1752,7 +1646,8 @@ function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 // otherwise be frozen mid-repaint.
 function wslRun(cmdString, timeout = 25000) {
   return new Promise(resolve => {
-    execFile('wsl.exe', ['bash', '-lic', cmdString],
+    const { file, args } = platform.nixFileArgs(['bash', '-lic', cmdString]);
+    execFile(file, args,
       { encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) resolve({ ok: false, out: ((stdout || '') + (stderr || '')) || err.message });
@@ -1941,18 +1836,17 @@ ipcMain.handle('code-read', async (_, { rel }) => {
 // ── Changes / Diff tab: git working-tree diff ─────────────────────
 // Run git where the project actually lives: WSL git for \\wsl.localhost\…
 // UNC paths, Windows git (git -C) for C:\… paths.
-function gitBase() {
-  const dir = sessionCwd();
-  const m = /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)\\(.*)$/i.exec(dir);
-  if (m) return { bin: 'wsl.exe', prefix: ['-d', m[1], 'git', '-C', '/' + m[2].replace(/\\/g, '/')] };
-  return { bin: 'git', prefix: ['-C', dir] };
-}
-function gitExec(args, { maxBuffer = 8 << 20 } = {}) {
-  const { bin, prefix } = gitBase();
+function gitBase(dir = sessionCwd()) { return platform.gitBase(dir); }
+function gitExec(args, { maxBuffer = 8 << 20, timeout = 15000, dir } = {}) {
+  const { bin, prefix } = gitBase(dir);
   return new Promise((resolve) => {
-    execFile(bin, [...prefix, ...args], { windowsHide: true, maxBuffer, encoding: 'utf8' }, (err, stdout, stderr) => {
-      resolve({ failed: !!err, code: err ? err.code : 0, stdout: stdout || '', stderr: stderr || '' });
-    });
+    // `timeout` guards against a hung git (credential prompt, slow \\wsl UNC,
+    // slow wsl.exe spin-up) so diff calls can never hang the Changes tab.
+    execFile(bin, [...prefix, ...args],
+      { windowsHide: true, maxBuffer, encoding: 'utf8', timeout, killSignal: 'SIGKILL' },
+      (err, stdout, stderr) => {
+        resolve({ failed: !!err, code: err ? err.code : 0, stdout: stdout || '', stderr: stderr || '' });
+      });
   });
 }
 function looksBinary(s) { return s.indexOf('\u0000') !== -1; }
@@ -2034,54 +1928,95 @@ ipcMain.on('set-api-key', (_, key) => {
   try { fs.writeFileSync(getApiKeyFile(), key, 'utf8'); } catch (_) {}
 });
 
+// ── In-app update: git-pull the app's own checkout and relaunch ───
+// For people running from a source checkout (the dev model). Uses --ff-only so
+// it refuses to clobber a dirty/diverged tree (correct behaviour for someone
+// actively editing the app — they update via their own git workflow).
+async function checkForAppUpdate() {
+  const dir = app.getAppPath();
+  const info = (message, detail, type = 'info') =>
+    dialog.showMessageBox(mainWindow, { type, message, detail: detail || '', buttons: ['OK'] });
+
+  const inside = await gitExec(['rev-parse', '--is-inside-work-tree'], { dir, timeout: 8000 });
+  if (inside.failed) {
+    return info('In-app update unavailable',
+      inside.code === 'ENOENT'
+        ? 'Git was not found on PATH.'
+        : 'This build is not running from a git checkout, so update it the way you installed it.');
+  }
+  const fetched = await gitExec(['fetch', '--quiet'], { dir, timeout: 30000 });
+  if (fetched.failed) {
+    return info('Could not check for updates', (fetched.stderr || 'git fetch failed').trim().slice(0, 300), 'warning');
+  }
+  const counts = await gitExec(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], { dir });
+  let behind = 0;
+  if (!counts.failed) behind = +(counts.stdout.trim().split(/\s+/)[1]) || 0;
+  if (behind === 0) return info('You’re up to date', 'No new updates are available.');
+
+  const status = await gitExec(['status', '--porcelain'], { dir });
+  const dirty = !status.failed && status.stdout.trim().length > 0;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    message: `${behind} update${behind === 1 ? '' : 's'} available`,
+    detail: (dirty ? 'Heads up: you have uncommitted changes, which may block a fast-forward update.\n\n' : '')
+      + 'Pull the latest and restart the app?',
+    buttons: ['Update & Restart', 'Later'], defaultId: 0, cancelId: 1,
+  });
+  if (response !== 0) return;
+
+  const pull = await gitExec(['pull', '--ff-only'], { dir, timeout: 60000 });
+  if (pull.failed) {
+    return info('Update failed',
+      (pull.stderr || pull.stdout || 'git pull --ff-only failed').trim().slice(0, 400)
+      + '\n\nResolve it manually (e.g. commit or stash local changes), then try again.', 'error');
+  }
+  const changed = await gitExec(['diff', '--name-only', 'HEAD@{1}', 'HEAD'], { dir });
+  if (!changed.failed && /(^|\n)(package\.json|package-lock\.json)\b/.test(changed.stdout)) {
+    return info('Updated — dependencies changed',
+      'Run `npm install` in the app folder, then restart the app manually.');
+  }
+  await dialog.showMessageBox(mainWindow, {
+    type: 'info', message: 'Updated', detail: 'The app will now restart to apply the update.', buttons: ['Restart'],
+  });
+  app.relaunch();
+  app.exit(0);
+}
+
+// Quiet check a few seconds after launch — surfaces "N available" without a
+// dialog (renderer shows a dismissible toast + a dot on the gear).
+async function startupUpdateCheck() {
+  try {
+    const dir = app.getAppPath();
+    if ((await gitExec(['rev-parse', '--is-inside-work-tree'], { dir, timeout: 8000 })).failed) return;
+    if ((await gitExec(['fetch', '--quiet'], { dir, timeout: 30000 })).failed) return;
+    const counts = await gitExec(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], { dir });
+    if (counts.failed) return;
+    const behind = +(counts.stdout.trim().split(/\s+/)[1]) || 0;
+    if (behind > 0) uiSend('update-available', { behind });
+  } catch (_) { /* never let a background check throw */ }
+}
+// Let the toast / gear trigger the full (dialog-driven) update flow.
+ipcMain.on('app-check-updates', () => { checkForAppUpdate().catch(() => {}); });
+
 ipcMain.on('show-settings-menu', (_, pos) => {
-  const { Menu } = require('electron');
+  const act = id => () => uiSend('settings-action', id);
   const menu = Menu.buildFromTemplate([
-    {
-      label: 'Get Started (Setup & Tools)',
-      click: () => mainWindow.webContents.send('settings-action', 'get-started'),
-    },
+    { label: 'Get Started (Setup & Tools)', click: act('get-started') },
     { type: 'separator' },
-    {
-      label: 'Authentication',
-      click: () => mainWindow.webContents.send('settings-action', 'auth'),
-    },
-    {
-      label: 'Manage LLMs',
-      click: () => mainWindow.webContents.send('settings-action', 'manage-llms'),
-    },
-    {
-      label: 'Theme',
-      submenu: [
-        { label: 'Minimal', click: () => mainWindow.webContents.send('settings-action', 'theme-minimal') },
-        { label: 'Winamp',  click: () => mainWindow.webContents.send('settings-action', 'theme-winamp')  },
-      ],
-    },
-    {
-      label: 'Audit Prompts',
-      click: () => mainWindow.webContents.send('settings-action', 'audit-prompts'),
-    },
-    {
-      label: 'Edit Tabs',
-      click: () => mainWindow.webContents.send('settings-action', 'edit-tabs'),
-    },
-    {
-      label: 'MCP Tool Tokens',
-      click: () => mainWindow.webContents.send('settings-action', 'mcp-tools'),
-    },
-    {
-      label: 'Keyboard Shortcuts',
-      click: () => mainWindow.webContents.send('settings-action', 'keyboard-shortcuts'),
-    },
-    {
-      label: 'Renderer DevTools',
-      click: () => mainWindow.webContents.openDevTools({ mode: 'detach' }),
-    },
+    { label: 'Authentication',     click: act('auth') },
+    { label: 'Manage LLMs',        click: act('manage-llms') },
+    { label: 'Theme', submenu: [
+      { label: 'Minimal', click: act('theme-minimal') },
+      { label: 'Winamp',  click: act('theme-winamp') },
+    ] },
+    { label: 'Audit Prompts',      click: act('audit-prompts') },
+    { label: 'Edit Tabs',          click: act('edit-tabs') },
+    { label: 'MCP Tool Tokens',    click: act('mcp-tools') },
+    { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
+    { label: 'Renderer DevTools',  click: () => mainWindow.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },
-    {
-      label: 'New Window',
-      click: () => mainWindow.webContents.send('settings-action', 'new-window'),
-    },
+    { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
+    { label: 'New Window',         click: act('new-window') },
   ]);
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
@@ -2146,6 +2081,15 @@ ipcMain.on('show-tabs-context-menu', (_, pos) => {
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
 
+// ── Custom window controls (frameless titlebar) ──────────────────
+ipcMain.on('window-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); });
+ipcMain.on('window-maximize-toggle', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w) return;
+  if (w.isMaximized()) w.unmaximize(); else w.maximize();
+});
+ipcMain.on('window-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
+
 ipcMain.on('new-window', () => {
   // Launch a separate app instance. An in-process BrowserWindow would share
   // the mainWindow-bound globals (browserView, ptyProcesses, IPC routing) and
@@ -2181,7 +2125,10 @@ ipcMain.on('pick-start', async (_, mode) => {
 
     const { cx, cy, mouseUpX, mouseUpY, bounds, mode: pickedMode, wholePage } = picked;
 
-    // Phase 2: element detection + popup in one script (shares live DOM refs for hover highlight)
+    // Box/Lasso and Extract all use the left-column panel (panelMode draws a
+    // persistent highlight and returns immediately, keeping live DOM refs alive).
+    const usePanel = (mode === 'box' || mode === 'lasso' || mode === 'aidev');
+
     const result = await view.webContents.executeJavaScript(
       getCombinedScript({
         isClick: pickedMode === 'click',
@@ -2190,8 +2137,32 @@ ipcMain.on('pick-start', async (_, mode) => {
         mouseUpY: mouseUpY ?? cy,
         aiDevMode: mode === 'aidev',
         wholePage: wholePage === true,
+        panelMode: usePanel,
       })
     );
+
+    if (usePanel) {
+      if (!result || !result.items || !result.items.length) {
+        uiSend('pick-cancelled');
+        await clearPanelHighlight(view);
+        return;
+      }
+      if (mode === 'aidev') {
+        pendingExtract = { view, items: result.items };
+        uiSend('extract-panel-open', { tool: 'Extract', items: result.items });
+        return;   // finalized via extract-panel-send / -cancel
+      }
+      // CSS source refs now (project view only — source maps only meaningful for local dev)
+      let cssRefs = [];
+      if (view === browserView) {
+        await ensureCDP();
+        cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
+      }
+      pendingPanelPick = { view, items: result.items, cssRefs };
+      const toolLabel = mode === 'lasso' ? 'Lasso Select' : 'Box Select';
+      uiSend('pick-panel-open', { items: result.items, tool: toolLabel });   // full items incl. cssProps/debugSource
+      return;   // panel stays open; result is finalized via pick-panel-send/-cancel
+    }
 
     uiSend('pick-cancelled'); // clear active button state
 
@@ -2223,6 +2194,88 @@ ipcMain.on('pick-start', async (_, mode) => {
   }
 });
 
+// ── IPC: box/lasso left-column panel ──────────────────────────────
+// While the panel is open in the renderer, the page keeps a persistent
+// highlight (window.__cathodePanel) around the selected elements. These
+// handlers drive removal/clearing and finalize the message on send.
+let pendingPanelPick = null;   // { view, items, cssRefs }
+async function clearPanelHighlight(view) {
+  const wc = (view || (pendingPanelPick && pendingPanelPick.view) || {}).webContents;
+  if (!wc || wc.isDestroyed()) return;
+  try { await wc.executeJavaScript('window.__cathodePanel && window.__cathodePanel.clear()'); } catch (_) {}
+}
+ipcMain.on('pick-panel-update', async (_, { active }) => {
+  const p = pendingPanelPick;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
+});
+// Live style edit from a drawer → apply to the actual page element.
+ipcMain.on('pick-panel-style', async (_, { i, prop, value }) => {
+  const p = pendingPanelPick;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  const v = (value === null || value === undefined) ? 'null' : JSON.stringify(String(value));
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.style(${Number(i)}, ${JSON.stringify(String(prop))}, ${v})`); } catch (_) {}
+});
+// Finalize: the renderer sends the resolved items (with selectedCSS already built).
+ipcMain.on('pick-panel-send', async (_, { instruction = '', items = [] } = {}) => {
+  const p = pendingPanelPick;
+  pendingPanelPick = null;
+  if (!p) { uiSend('pick-cancelled'); return; }
+  await clearPanelHighlight(p.view);
+  uiSend('pick-cancelled');
+  if (!items.length && !instruction.trim()) return;
+  const message = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction });
+  uiSend('pick-send-to-session', message);
+});
+ipcMain.on('pick-panel-cancel', async () => {
+  const p = pendingPanelPick;
+  pendingPanelPick = null;
+  if (p) await clearPanelHighlight(p.view);
+  uiSend('pick-cancelled');
+});
+
+// ── Extract tool panel ────────────────────────────────────────────
+let pendingExtract = null;   // { view, items }
+ipcMain.on('extract-panel-highlight', async (_, { active }) => {
+  const p = pendingExtract;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
+});
+ipcMain.on('extract-panel-send', async (_, { sel = [], mediaTypes = [], mediaDest = 'chat', instruction = '' } = {}) => {
+  const p = pendingExtract;
+  pendingExtract = null;
+  if (!p) { uiSend('pick-cancelled'); return; }
+  const view = p.view;
+  let res = null;
+  const keys = sel.map(s => s.key);
+  try {
+    res = await view.webContents.executeJavaScript(
+      `window.__cathodePanel && window.__cathodePanel.extract(${JSON.stringify(keys)}, ${JSON.stringify(mediaTypes)}, ${JSON.stringify(mediaDest)})`);
+  } catch (e) { console.error('Extract error:', e); }
+  await clearPanelHighlight(view);
+  uiSend('pick-cancelled');
+  if (!res) return;
+  const extracts = (res.extracts || []).map(e => {
+    const meta = sel.find(s => s.key === e.key) || {};
+    return { key: e.key, label: meta.label || e.key, analysis: meta.analysis || '', data: e.data };
+  });
+  const media = res.media || null;
+  let mediaSummary = null;
+  if (media && media.dest === 'download' && media.assets && media.assets.length) {
+    mediaSummary = await downloadMediaAssets(media.assets, view.webContents.session);
+  }
+  if (!extracts.length && !media && !instruction.trim()) return;
+  const pageUrl = view.webContents.getURL();
+  const message = formatSourceMessage({ items: p.items, cssRefs: [], instruction, extracts, media, mediaSummary, pageUrl });
+  uiSend('pick-send-to-session', message);
+});
+ipcMain.on('extract-panel-cancel', async () => {
+  const p = pendingExtract;
+  pendingExtract = null;
+  if (p) await clearPanelHighlight(p.view);
+  uiSend('pick-cancelled');
+});
+
 // ── IPC: screenshot ───────────────────────────────────────────────
 ipcMain.on('pick-screenshot', async () => {
   const view = getActivePickView();
@@ -2245,24 +2298,33 @@ ipcMain.on('pick-screenshot', async () => {
     const pngBuffer = image.toPNG();
     fs.writeFileSync(filepath, pngBuffer);
 
-    // Phase 4: show popup in browser with thumbnail preview
-    const thumbB64 = pngBuffer.toString('base64');
-    const popupResult = await view.webContents.executeJavaScript(
-      getScreenshotPopupScript(thumbB64, mouseUpX, mouseUpY)
-    );
-
-    uiSend('pick-cancelled');
-
-    if (!popupResult) return;
-    const { instruction } = popupResult;
-
-    // Phase 5: write to PTY — Claude Code can read the file
-    const msg = `[Screenshot: ${filepath}]${instruction ? '\n\n' + instruction : ''}`;
-    uiSend('pick-send-to-session', msg);
+    // Phase 4: hand off to the left-column panel (preview + instruction).
+    pendingScreenshot = { filepath };
+    uiSend('screenshot-panel-open', {
+      tool: 'Screenshot',
+      dataUrl: 'data:image/png;base64,' + pngBuffer.toString('base64'),
+      filepath,
+    });
   } catch (err) {
     console.error('Screenshot error:', err);
     uiSend('pick-cancelled');
   }
+});
+
+let pendingScreenshot = null;   // { filepath }
+ipcMain.on('screenshot-panel-send', (_, { instruction = '' } = {}) => {
+  const p = pendingScreenshot;
+  pendingScreenshot = null;
+  uiSend('pick-cancelled');
+  if (!p) return;
+  const instr = (instruction || '').trim();
+  uiSend('pick-send-to-session', `[Screenshot: ${p.filepath}]${instr ? '\n\n' + instr : ''}`);
+});
+ipcMain.on('screenshot-panel-cancel', () => {
+  const p = pendingScreenshot;
+  pendingScreenshot = null;
+  uiSend('pick-cancelled');
+  if (p) { try { fs.unlinkSync(p.filepath); } catch (_) {} }   // discard the orphaned capture
 });
 
 // ── IPC: draw tool ────────────────────────────────────────────────
@@ -2274,10 +2336,10 @@ ipcMain.on('pick-draw', async () => {
     uiSend('pick-cancelled');
     if (!result) return;
 
-    const { canvasDataUrl, instructions } = result;
+    const { canvasDataUrl } = result;
     const pageImage = await view.webContents.capturePage();
     const pageB64   = pageImage.toPNG().toString('base64');
-    uiSend('draw-composite', { pageB64, canvasDataUrl, instructions });
+    uiSend('draw-composite', { pageB64, canvasDataUrl });   // panel adds the instruction
   } catch (err) {
     console.error('Draw tool error:', err);
     uiSend('pick-cancelled');
@@ -2314,103 +2376,208 @@ ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions }) => {
   uiSend('pick-send-to-session', msg);
 });
 
-// ── IPC: element resize ───────────────────────────────────────────
+// ── IPC: element resize (left-column panel) ───────────────────────
+// The on-page handles stay live in the page; instructions/dimensions/Send-Cancel
+// live in the left column. window.__cathodeResize drives live dims + teardown.
+let pendingResize  = null;   // { view }
+let resizePollTimer = null;
+function stopResizePoll() { if (resizePollTimer) { clearInterval(resizePollTimer); resizePollTimer = null; } }
+function startResizePoll() {
+  stopResizePoll();
+  resizePollTimer = setInterval(async () => {
+    const p = pendingResize;
+    if (!p || !p.view || p.view.webContents.isDestroyed()) { stopResizePoll(); return; }
+    try {
+      const d = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.dims()');
+      if (d) uiSend('resize-panel-dims', d);
+    } catch (_) {}
+  }, 150);
+}
+async function clearResize(view, reset) {
+  const wc = (view || (pendingResize && pendingResize.view) || {}).webContents;
+  if (!wc || wc.isDestroyed()) return;
+  const js = reset
+    ? 'window.__cathodeResize && (window.__cathodeResize.reset(), window.__cathodeResize.clear())'
+    : 'window.__cathodeResize && window.__cathodeResize.clear()';
+  try { await wc.executeJavaScript(js); } catch (_) {}
+}
+
 ipcMain.on('pick-resize', async () => {
   const view = getActivePickView();
   if (!view) { uiSend('pick-cancelled'); return; }
   try {
-    const result = await view.webContents.executeJavaScript(getResizeScript());
-    uiSend('pick-cancelled');
-    if (!result) return;
-
-    const { selector, tag, snippet, oW, oH, nW, nH, instructions } = result;
-    const lines = [
-      '───── Resize Request ─────',
-      snippet,
-      '',
-      'Selector: ' + selector,
-    ];
-    if (nW !== oW) lines.push('  width:  ' + oW + 'px  →  ' + nW + 'px');
-    if (nH !== oH) lines.push('  height: ' + oH + 'px  →  ' + nH + 'px');
-    if (instructions) { lines.push('', 'Additional instructions: ' + instructions); }
-    lines.push('', 'Update the CSS so this element matches these dimensions.');
-
-    uiSend('pick-send-to-session', lines.join('\n'));
+    const sel = await view.webContents.executeJavaScript(getResizeScript());
+    if (!sel) { uiSend('pick-cancelled'); return; }   // cancelled before selecting
+    pendingResize = { view };
+    uiSend('resize-panel-open', { tool: 'Resize', label: sel.label, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
+    startResizePoll();
   } catch (err) {
     console.error('Resize error:', err);
     uiSend('pick-cancelled');
   }
 });
 
-// ── IPC: eyedropper ───────────────────────────────────────────────
+ipcMain.on('resize-panel-reset', async () => {
+  const p = pendingResize;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.reset()'); } catch (_) {}
+});
+ipcMain.on('resize-panel-set', async (_, { dim, value }) => {
+  const p = pendingResize;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodeResize && window.__cathodeResize.set(${JSON.stringify(String(dim))}, ${Number(value)})`); } catch (_) {}
+});
+ipcMain.on('resize-panel-send', async (_, { instruction = '' } = {}) => {
+  const p = pendingResize;
+  pendingResize = null; stopResizePoll();
+  if (!p) { uiSend('pick-cancelled'); return; }
+  let res = null;
+  try { res = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.result()'); } catch (_) {}
+  await clearResize(p.view, false);   // keep the resize applied on the page
+  uiSend('pick-cancelled');
+  if (!res) return;
+  const { selector, snippet, oW, oH, nW, nH } = res;
+  const instr = (instruction || '').trim();
+  if (Math.abs(nW - oW) < 2 && Math.abs(nH - oH) < 2 && !instr) return;   // nothing to send
+  const lines = ['───── Resize Request ─────', snippet, '', 'Selector: ' + selector];
+  if (nW !== oW) lines.push('  width:  ' + oW + 'px  →  ' + nW + 'px');
+  if (nH !== oH) lines.push('  height: ' + oH + 'px  →  ' + nH + 'px');
+  if (instr) lines.push('', 'Additional instructions: ' + instr);
+  lines.push('', 'Update the CSS so this element matches these dimensions.');
+  uiSend('pick-send-to-session', lines.join('\n'));
+});
+ipcMain.on('resize-panel-cancel', async () => {
+  const p = pendingResize;
+  pendingResize = null; stopResizePoll();
+  if (p) await clearResize(p.view, true);   // revert the on-page resize
+  uiSend('pick-cancelled');
+});
+
+// ── IPC: eyedropper (left-column panel) ───────────────────────────
+// Phase 1 (loupe sampling) stays on the page; on click the script resolves with
+// the element + applicable color properties and keeps refs live. The panel then
+// drives property switching / live color edits via window.__cathodeEyedropper.
+let pendingEyedropper = null;   // { view }
+function edExec(js) {
+  const p = pendingEyedropper;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return Promise.resolve(null);
+  return p.view.webContents.executeJavaScript(js).catch(() => null);
+}
+
 ipcMain.on('pick-eyedropper', async () => {
   const view = getActivePickView();
   if (!view) { uiSend('pick-cancelled'); return; }
   try {
     // Snapshot the rendered viewport so the loupe can sample exact pixels.
     const image = await view.webContents.capturePage();
-    const result = await view.webContents.executeJavaScript(getEyedropperScript(image.toDataURL()));
-    uiSend('pick-cancelled');
-    if (!result) return;
-
-    const { selector, property, fromColor, toColor, changed, pickedColor, instruction } = result;
-    let msg;
-    if (changed) {
-      const lines = [
-        '───── Color Change Request ─────',
-        'Selector: ' + selector,
-        '  ' + property + ': ' + fromColor + '  →  ' + toColor,
-      ];
-      if (instruction) lines.push('', 'Additional instructions: ' + instruction);
-      const what = property === 'box-shadow' ? "box-shadow's color" : property;
-      lines.push('', "Update the CSS so this element's " + what + ' is ' + toColor + '.');
-      msg = lines.join('\n');
-    } else {
-      const lines = [
-        '───── Color ─────',
-        'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.',
-      ];
-      if (instruction) lines.push('', instruction);
-      msg = lines.join('\n');
-    }
-    uiSend('pick-send-to-session', msg);
+    const sel = await view.webContents.executeJavaScript(getEyedropperScript(image.toDataURL()));
+    if (!sel) { uiSend('pick-cancelled'); return; }   // cancelled during hover
+    pendingEyedropper = { view };
+    uiSend('eyedropper-panel-open', { tool: 'Eyedropper', ...sel });
   } catch (err) {
     console.error('Eyedropper error:', err);
     uiSend('pick-cancelled');
   }
 });
 
+ipcMain.handle('eyedropper-set-prop', (_, { prop }) =>
+  edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setProp(${JSON.stringify(String(prop))})`));
+ipcMain.on('eyedropper-set-color', (_, { hex }) => {
+  edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setColor(${JSON.stringify(String(hex))})`);
+});
+ipcMain.on('eyedropper-send', async (_, { instruction = '' } = {}) => {
+  if (!pendingEyedropper) { uiSend('pick-cancelled'); return; }
+  const res = await edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.result(${JSON.stringify(String(instruction))})`);
+  await edExec('window.__cathodeEyedropper && window.__cathodeEyedropper.clear()');   // keep the edit applied
+  pendingEyedropper = null;
+  uiSend('pick-cancelled');
+  if (!res) return;
+  const { selector, property, fromColor, toColor, changed, pickedColor, instruction: instr } = res;
+  let msg;
+  if (changed) {
+    const lines = [
+      '───── Color Change Request ─────',
+      'Selector: ' + selector,
+      '  ' + property + ': ' + fromColor + '  →  ' + toColor,
+    ];
+    if (instr) lines.push('', 'Additional instructions: ' + instr);
+    const what = property === 'box-shadow' ? "box-shadow's color" : property;
+    lines.push('', "Update the CSS so this element's " + what + ' is ' + toColor + '.');
+    msg = lines.join('\n');
+  } else {
+    const lines = [
+      '───── Color ─────',
+      'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.',
+    ];
+    if (instr) lines.push('', instr);
+    msg = lines.join('\n');
+  }
+  uiSend('pick-send-to-session', msg);
+});
+ipcMain.on('eyedropper-cancel', async () => {
+  if (pendingEyedropper) await edExec('window.__cathodeEyedropper && window.__cathodeEyedropper.cancel()');
+  pendingEyedropper = null;
+  uiSend('pick-cancelled');
+});
+
 // ── IPC: accessibility / contrast checker ─────────────────────────
+// ── IPC: accessibility checker (left-column panel) ────────────────
+// The scan + page markers stay on the page; the results list (drawers, live
+// color editing, notes) lives in the column via window.__cathodeA11y.
+let pendingA11y = null;   // { view }
+function a11yExec(js) {
+  const p = pendingA11y;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return Promise.resolve(null);
+  return p.view.webContents.executeJavaScript(js).catch(() => null);
+}
 ipcMain.on('pick-a11y', async () => {
   const view = getActivePickView();
   if (!view) { uiSend('pick-cancelled'); return; }
   try {
     const result = await view.webContents.executeJavaScript(getA11yScript());
     uiSend('pick-cancelled');
-    if (!result || !result.issues || !result.issues.length) return;
-
-    const groups = {};
-    for (const it of result.issues) (groups[it.category] = groups[it.category] || []).push(it);
-    const lines = ['───── Accessibility Audit ─────', `${result.total} issue${result.total === 1 ? '' : 's'} to fix on ${result.url}`];
-    for (const cat of Object.keys(groups)) {
-      lines.push('', `${cat.toUpperCase()} (${groups[cat].length})`);
-      for (const it of groups[cat]) {
-        lines.push(`• ${it.selector}${it.detail ? ' — ' + it.detail : ''}`);
-        if (it.toText) {
-          const parts = [];
-          if (it.toText !== it.fromText) parts.push(`text ${it.fromText} → ${it.toText}`);
-          if (it.toBg   !== it.fromBg)   parts.push(`background ${it.fromBg} → ${it.toBg}`);
-          if (parts.length) lines.push(`    suggested: ${parts.join(', ')}`);
-        }
-        if (it.instruction) lines.push(`    note: ${it.instruction}`);
-      }
-    }
-    lines.push('', 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.');
-    uiSend('pick-send-to-session', lines.join('\n'));
+    if (!result) return;
+    pendingA11y = { view };
+    uiSend('a11y-panel-open', { tool: 'Accessibility', url: result.url, total: result.total, issues: result.issues });
   } catch (err) {
     console.error('A11y check error:', err);
     uiSend('pick-cancelled');
   }
+});
+ipcMain.on('a11y-set-color', (_, { idx, which, hex }) => {
+  a11yExec(`window.__cathodeA11y && window.__cathodeA11y.setColor(${Number(idx)}, ${JSON.stringify(String(which))}, ${JSON.stringify(String(hex))})`);
+});
+ipcMain.on('a11y-flash', (_, { idx }) => {
+  a11yExec(`window.__cathodeA11y && window.__cathodeA11y.flash(${Number(idx)})`);
+});
+ipcMain.on('a11y-send', async (_, { issues = [] } = {}) => {
+  if (!pendingA11y) { return; }
+  await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
+  pendingA11y = null;
+  if (!issues.length) return;
+  const groups = {};
+  for (const it of issues) (groups[it.category] = groups[it.category] || []).push(it);
+  const url = issues[0] && issues[0].url;
+  const lines = ['───── Accessibility Audit ─────', `${issues.length} issue${issues.length === 1 ? '' : 's'} to fix${url ? ' on ' + url : ''}`];
+  for (const cat of Object.keys(groups)) {
+    lines.push('', `${cat.toUpperCase()} (${groups[cat].length})`);
+    for (const it of groups[cat]) {
+      lines.push(`• ${it.selector}${it.detail ? ' — ' + it.detail : ''}`);
+      if (it.toText) {
+        const parts = [];
+        if (it.toText !== it.fromText) parts.push(`text ${it.fromText} → ${it.toText}`);
+        if (it.toBg   !== it.fromBg)   parts.push(`background ${it.fromBg} → ${it.toBg}`);
+        if (parts.length) lines.push(`    suggested: ${parts.join(', ')}`);
+      }
+      if (it.instruction) lines.push(`    note: ${it.instruction}`);
+    }
+  }
+  lines.push('', 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.');
+  uiSend('pick-send-to-session', lines.join('\n'));
+});
+ipcMain.on('a11y-cancel', async () => {
+  if (pendingA11y) await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
+  pendingA11y = null;
 });
 
 // ── Component picker window ───────────────────────────────────────
@@ -2766,18 +2933,7 @@ function shortPath(url) {
 // reports the FORCED value — it can never detect that the user changed their
 // real display scaling. Read the true scale from the Windows registry
 // (AppliedDPI, e.g. 96=100%, 120=125%) to break that latch.
-function readRealScale() {
-  return new Promise(resolve => {
-    execFile('reg.exe',
-      ['query', 'HKCU\\Control Panel\\Desktop\\WindowMetrics', '/v', 'AppliedDPI'],
-      { encoding: 'utf8', timeout: 3000 },
-      (err, out) => {
-        if (err) return resolve(null);
-        const m = (out || '').match(/AppliedDPI\s+REG_DWORD\s+0x([0-9a-f]+)/i);
-        resolve(m ? parseInt(m[1], 16) / 96 : null);
-      });
-  });
-}
+function readRealScale() { return platform.readRealScale(); }
 
 function relaunchWithScale(scale) {
   saveScale(scale);
@@ -2808,11 +2964,12 @@ app.whenReady().then(async () => {
 
   createWindow();
   startSysPerf();
+  setTimeout(() => startupUpdateCheck(), 4000);   // quiet, non-blocking
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
 app.on('window-all-closed', () => {
-  Object.values(ptyProcesses).forEach(p => { try { p.kill(); } catch (_) {} });
-  if (_gpuProc) { try { _gpuProc.kill(); } catch (_) {} }
+  Object.values(ptyProcesses).forEach(p => { safeKill(p); });
+  platform.stopGpuSampler();
   if (process.platform !== 'darwin') app.quit();
 });

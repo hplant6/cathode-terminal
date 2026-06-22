@@ -110,6 +110,312 @@ function cathodeCombinedPage(OPTS) {
     item.cssProps = getElementCSS(item.el);
   }
 
+    // ── Inspect/Extract: the APP reads the live page and hands the agent
+    // structured data — no parallel/agent-owned browser involved. Each entry
+    // runs in the real page over the user's selection. ─────────────────────
+    function _xRoots() { return items.map(it => it.el).filter(Boolean); }
+    function _xNodes(cap) {
+      const seen = new Set();
+      for (const r of _xRoots()) {
+        seen.add(r);
+        for (const k of r.querySelectorAll('*')) { if (seen.size >= cap) break; seen.add(k); }
+        if (seen.size >= cap) break;
+      }
+      return [...seen];
+    }
+    function _xHex(c) {
+      const m = c && c.match(/rgba?\(([^)]+)\)/);
+      if (!m) return (c || '').trim();
+      const p = m[1].split(',').map(s => parseFloat(s));
+      if (p.length < 3) return c;
+      if (p.length === 4 && p[3] === 0) return 'transparent';
+      const h = n => ('0' + Math.round(n).toString(16)).slice(-2);
+      const hex = '#' + h(p[0]) + h(p[1]) + h(p[2]);
+      return (p.length === 4 && p[3] < 1) ? hex + ' (' + p[3] + 'a)' : hex;
+    }
+    const EXTRACTORS = {
+      // "Extract the styling of this button so we can make something similar"
+      styles() {
+        return items.filter(it => it.el).map(it => {
+          const cs = getComputedStyle(it.el);
+          const props = {};
+          for (const name of CSS_PROPS) {
+            const v = (cs.getPropertyValue(name) || '').trim();
+            if (!v || v === 'rgba(0, 0, 0, 0)') continue;
+            if (/^(padding|margin)/.test(name) && v === '0px') continue;
+            props[name] = v;
+          }
+          return { selector: it.cssSelector || it.label, props };
+        });
+      },
+      palette() {
+        const PROPS = ['color','background-color','border-top-color','border-right-color','border-bottom-color','border-left-color','outline-color','text-decoration-color','fill','stroke'];
+        const counts = {};
+        const bump = hex => { if (hex && hex !== 'transparent' && hex !== 'none') counts[hex] = (counts[hex] || 0) + 1; };
+        for (const el of _xNodes(4000)) {
+          const cs = getComputedStyle(el);
+          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v) bump(_xHex(v)); }
+          for (const p of ['box-shadow','background-image']) {
+            (cs.getPropertyValue(p).match(/rgba?\([^)]+\)/g) || []).forEach(c => bump(_xHex(c)));
+          }
+        }
+        return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([hex,count]) => ({ hex, count }));
+      },
+      typography() {
+        const combos = {};
+        for (const el of _xNodes(4000)) {
+          if (!el.textContent || !el.textContent.trim()) continue;
+          const cs = getComputedStyle(el);
+          const key = [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.letterSpacing, cs.textTransform, cs.fontFamily].join('|');
+          combos[key] = (combos[key] || 0) + 1;
+        }
+        return Object.entries(combos).sort((a,b) => b[1]-a[1]).slice(0, 40).map(([k,count]) => {
+          const [size,lineHeight,weight,letterSpacing,textTransform,family] = k.split('|');
+          return { size, lineHeight, weight, letterSpacing, textTransform, family, count };
+        });
+      },
+      spacing() {
+        const PROPS = ['margin-top','margin-right','margin-bottom','margin-left','padding-top','padding-right','padding-bottom','padding-left','gap','row-gap','column-gap'];
+        const vals = {};
+        for (const el of _xNodes(4000)) {
+          const cs = getComputedStyle(el);
+          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v && v !== '0px' && v !== 'normal') vals[v] = (vals[v] || 0) + 1; }
+        }
+        return Object.entries(vals).sort((a,b) => parseFloat(a[0]) - parseFloat(b[0])).map(([value,count]) => ({ value, count }));
+      },
+      tokens() {
+        const names = new Set();
+        try {
+          for (const sheet of document.styleSheets) {
+            let rules; try { rules = sheet.cssRules; } catch (_) { continue; }
+            for (const rule of rules) {
+              if (rule.style) for (const prop of rule.style) if (prop.startsWith('--')) names.add(prop);
+              if (names.size >= 400) break;
+            }
+            if (names.size >= 400) break;
+          }
+        } catch (_) {}
+        const rootCS = getComputedStyle(document.documentElement);
+        const out = [];
+        for (const name of names) { const v = rootCS.getPropertyValue(name).trim(); if (v) out.push({ name, value: v }); }
+        return out.sort((a,b) => a.name.localeCompare(b.name));
+      },
+      dom() {
+        const el = _xRoots()[0];
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('[id^="__cathode"]').forEach(n => n.remove());
+        let html = clone.outerHTML || '';
+        if (html.length > 6000) html = html.slice(0, 6000) + '\n…(truncated)';
+        return html;
+      },
+      text() {
+        const out = [];
+        for (const root of _xRoots()) {
+          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walk.nextNode())) {
+            const t = n.textContent.trim();
+            if (!t) continue;
+            const parent = n.parentElement;
+            if (!parent) continue;
+            const cs = getComputedStyle(parent);
+            if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+            out.push({ tag: parent.tagName.toLowerCase(), text: t.slice(0, 200) });
+            if (out.length >= 200) return out;
+          }
+        }
+        return out;
+      },
+      forms() {
+        const fields = [];
+        for (const root of _xRoots()) {
+          const list = root.matches && root.matches('input,select,textarea') ? [root] : [];
+          root.querySelectorAll('input,select,textarea').forEach(e => list.push(e));
+          for (const f of list) {
+            const labelled = !!(f.labels && f.labels.length) || !!f.getAttribute('aria-label') || !!f.getAttribute('aria-labelledby');
+            fields.push({
+              tag: f.tagName.toLowerCase(), type: f.type || '', name: f.name || '', id: f.id || '',
+              required: !!f.required, disabled: !!f.disabled,
+              placeholder: f.placeholder || '', pattern: f.getAttribute('pattern') || '', hasLabel: labelled,
+            });
+            if (fields.length >= 100) return fields;
+          }
+        }
+        return fields;
+      },
+      a11y() {
+        const out = [];
+        const INTERACTIVE = new Set(['a','button','input','select','textarea']);
+        for (const el of _xNodes(2000)) {
+          const tag = el.tagName.toLowerCase();
+          const role = el.getAttribute('role');
+          const tabindex = el.getAttribute('tabindex');
+          const aria = {};
+          for (const at of el.attributes) if (at.name.startsWith('aria-')) aria[at.name] = at.value;
+          const interactive = INTERACTIVE.has(tag) || role === 'button' || role === 'link' || tabindex === '0';
+          if (!interactive && !role && Object.keys(aria).length === 0 && tabindex === null) continue;
+          const name = el.getAttribute('aria-label')
+            || (el.labels && el.labels.length ? el.labels[0].textContent.trim() : '')
+            || (interactive ? (el.textContent || '').trim().slice(0, 40) : '');
+          out.push({ tag, role: role || '', name, tabindex: tabindex, aria, missingName: interactive && !name });
+          if (out.length >= 150) break;
+        }
+        return out;
+      },
+    };
+
+    // ── Media collection (images / videos / svgs) ────────────────────
+    function _xName(url, fallbackBase, ext) {
+      try {
+        const u = new URL(url, location.href);
+        let base = (u.pathname.split('/').pop() || '').split('?')[0];
+        if (base && /\.[a-z0-9]{2,5}$/i.test(base)) return base;
+        if (base) return base + ext;
+      } catch (_) {}
+      return fallbackBase + '-' + Math.random().toString(36).slice(2, 7) + ext;
+    }
+    function collectMedia(types) {
+      const assets = [];
+      const seen = new Set();
+      const add = a => { const k = a.inline || a.url; if (k && !seen.has(k)) { seen.add(k); assets.push(a); } };
+      for (const root of _xRoots()) {
+        if (types.includes('images')) {
+          const list = root.matches && root.matches('img') ? [root] : [];
+          root.querySelectorAll('img').forEach(i => list.push(i));
+          for (const img of list) {
+            const url = img.currentSrc || img.src;
+            if (url) add({ kind: 'image', url, name: _xName(url, 'image', '.png'),
+              alt: img.getAttribute('alt'), hasAlt: img.hasAttribute('alt'),
+              w: img.naturalWidth, h: img.naturalHeight,
+              loading: img.loading || 'eager', broken: !!(img.complete && img.naturalWidth === 0) });
+            if (assets.length >= 120) return assets;
+          }
+          for (const el of _xNodes(2000)) {
+            const m = (getComputedStyle(el).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
+            if (m && !m[1].startsWith('data:')) add({ kind: 'image', url: m[1], name: _xName(m[1], 'bg', '.png'), source: 'css-background' });
+          }
+        }
+        if (types.includes('svgs')) {
+          const list = root.matches && root.matches('svg') ? [root] : [];
+          root.querySelectorAll('svg').forEach(s => list.push(s));
+          list.forEach(s => add({ kind: 'svg', inline: s.outerHTML, name: 'icon-' + (assets.length + 1) + '.svg',
+            viewBox: s.getAttribute('viewBox') || '', title: (s.querySelector('title') && s.querySelector('title').textContent) || (s.getAttribute('aria-label') || '') }));
+          root.querySelectorAll('img[src$=".svg"]').forEach(i => { if (i.src) add({ kind: 'svg', url: i.src, name: _xName(i.src, 'icon', '.svg') }); });
+        }
+        if (types.includes('videos')) {
+          const list = root.matches && root.matches('video') ? [root] : [];
+          root.querySelectorAll('video').forEach(v => list.push(v));
+          for (const v of list) {
+            const src = v.currentSrc || v.src || (v.querySelector('source') && v.querySelector('source').src);
+            if (src) add({ kind: 'video', url: src, name: _xName(src, 'video', '.mp4') });
+            if (v.poster) add({ kind: 'image', url: v.poster, name: _xName(v.poster, 'poster', '.jpg'), source: 'video-poster' });
+          }
+        }
+      }
+      return assets;
+    }
+    // Only blob: URLs must be resolved in-page (main can't fetch them); http(s)
+    // and data: are downloaded main-side (no CORS, carries the page session).
+    async function resolveBlobAssets(assets) {
+      for (const a of assets) {
+        if (a.url && a.url.startsWith('blob:')) {
+          try {
+            const blob = await (await fetch(a.url)).blob();
+            a.mime = blob.type || '';
+            a.b64 = await new Promise(r => { const fr = new FileReader(); fr.onloadend = () => r((fr.result || '').toString().split(',')[1] || ''); fr.readAsDataURL(blob); });
+            delete a.url;
+          } catch (e) { a.fetchError = String((e && e.message) || e); }
+        }
+      }
+    }
+
+  // ── Panel mode ──────────────────────────────────────────────────
+  // Instead of rendering the in-page popup, draw a PERSISTENT outline around
+  // every selected element and keep the live refs alive on window so the
+  // left-column panel (HTML side) can drive removal / clearing. Resolve
+  // immediately with the serialized items the panel + formatter need.
+  if (OPTS.panelMode) {
+    // Tear down a previous panel session (removes its scroll/resize listeners).
+    if (window.__cathodePanel) { try { window.__cathodePanel.clear(); } catch (e) {} }
+    const prev = document.getElementById('__cathode_panel_hl__');
+    if (prev) prev.remove();
+    const phost = document.createElement('div');
+    phost.id = '__cathode_panel_hl__';
+    phost.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:' + Z.OVERLAY + ';';
+    document.documentElement.appendChild(phost);
+    const psel = document.getElementById('__cathode_selection__');
+    if (psel) psel.remove();   // per-element outlines replace the drag rectangle
+
+    function pBox(item) {
+      const r = item.el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return null;
+      const b = document.createElement('div');
+      b.style.cssText = [
+        'position:fixed','box-sizing:border-box','pointer-events:none','border-radius:2px',
+        'left:' + r.left + 'px','top:' + r.top + 'px','width:' + r.width + 'px','height:' + r.height + 'px',
+        'border:2px solid #22d3ee','background:rgba(34,211,238,0.10)',
+      ].join(';');
+      const tg = document.createElement('div');
+      tg.textContent = item.label;
+      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:#22d3ee;color:#06141a;font:700 10px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
+      b.appendChild(tg);
+      return b;
+    }
+    function pDraw(active) {
+      phost.innerHTML = '';
+      items.forEach((item, i) => {
+        if (active && active.indexOf(i) === -1) return;
+        const b = pBox(item);
+        if (b) phost.appendChild(b);
+      });
+    }
+    const pReflow = () => pDraw(window.__cathodePanel ? window.__cathodePanel.active : null);
+    window.addEventListener('scroll', pReflow, true);
+    window.addEventListener('resize', pReflow, true);
+    window.__cathodePanel = {
+      active: [],   // nothing highlighted until the panel hovers/opens a drawer
+      set(idx) { this.active = idx; pDraw(idx); },
+      // Live-edit a selected element's inline style from the left-column panel.
+      // value null/undefined → remove the override. Reflow so outlines track.
+      style(i, prop, value) {
+        const el = items[i] && items[i].el;
+        if (!el) return;
+        if (value === null || value === undefined) el.style.removeProperty(prop);
+        else el.style.setProperty(prop, value);
+        pDraw(this.active);
+      },
+      // Extract tool: run the chosen extractors / collect media over the live
+      // selection (uses the helpers hoisted into this function's scope).
+      async extract(keys, mediaTypes, mediaDest) {
+        const extracts = [];
+        (keys || []).forEach((key) => {
+          let data = null;
+          try { data = EXTRACTORS[key] ? EXTRACTORS[key]() : null; }
+          catch (e) { data = { error: String((e && e.message) || e) }; }
+          extracts.push({ key, data });
+        });
+        let media = null;
+        if (mediaTypes && mediaTypes.length) {
+          const assets = collectMedia(mediaTypes);
+          if (mediaDest === 'download') await resolveBlobAssets(assets);
+          media = { dest: mediaDest || 'chat', types: mediaTypes, assets };
+        }
+        return { extracts, media };
+      },
+      clear() {
+        try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
+        const h = document.getElementById('__cathode_panel_hl__'); if (h) h.remove();
+        window.__cathodePanel = null;
+      },
+    };
+    pDraw([]);
+
+    const serial = items.map(({ label, cssSelector, reactComponent, tag, debugSource, cssProps }) =>
+      ({ label, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [] }));
+    return Promise.resolve({ panel: true, items: serial });
+  }
+
   // ── Hover highlight ─────────────────────────────────────────────
   const hl = document.createElement('div');
   hl.id = '__cathode_row_hl__';
@@ -370,226 +676,6 @@ function cathodeCombinedPage(OPTS) {
         attachIroListener();
         syncCpInputs(cpIro.color);
       });
-    }
-
-    // ── Inspect/Extract: the APP reads the live page and hands the agent
-    // structured data — no parallel/agent-owned browser involved. Each entry
-    // runs in the real page over the user's selection. ─────────────────────
-    function _xRoots() { return items.map(it => it.el).filter(Boolean); }
-    function _xNodes(cap) {
-      const seen = new Set();
-      for (const r of _xRoots()) {
-        seen.add(r);
-        for (const k of r.querySelectorAll('*')) { if (seen.size >= cap) break; seen.add(k); }
-        if (seen.size >= cap) break;
-      }
-      return [...seen];
-    }
-    function _xHex(c) {
-      const m = c && c.match(/rgba?\(([^)]+)\)/);
-      if (!m) return (c || '').trim();
-      const p = m[1].split(',').map(s => parseFloat(s));
-      if (p.length < 3) return c;
-      if (p.length === 4 && p[3] === 0) return 'transparent';
-      const h = n => ('0' + Math.round(n).toString(16)).slice(-2);
-      const hex = '#' + h(p[0]) + h(p[1]) + h(p[2]);
-      return (p.length === 4 && p[3] < 1) ? hex + ' (' + p[3] + 'a)' : hex;
-    }
-    const EXTRACTORS = {
-      // "Extract the styling of this button so we can make something similar"
-      styles() {
-        return items.filter(it => it.el).map(it => {
-          const cs = getComputedStyle(it.el);
-          const props = {};
-          for (const name of CSS_PROPS) {
-            const v = (cs.getPropertyValue(name) || '').trim();
-            if (!v || v === 'rgba(0, 0, 0, 0)') continue;
-            if (/^(padding|margin)/.test(name) && v === '0px') continue;
-            props[name] = v;
-          }
-          return { selector: it.cssSelector || it.label, props };
-        });
-      },
-      palette() {
-        const PROPS = ['color','background-color','border-top-color','border-right-color','border-bottom-color','border-left-color','outline-color','text-decoration-color','fill','stroke'];
-        const counts = {};
-        const bump = hex => { if (hex && hex !== 'transparent' && hex !== 'none') counts[hex] = (counts[hex] || 0) + 1; };
-        for (const el of _xNodes(4000)) {
-          const cs = getComputedStyle(el);
-          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v) bump(_xHex(v)); }
-          for (const p of ['box-shadow','background-image']) {
-            (cs.getPropertyValue(p).match(/rgba?\([^)]+\)/g) || []).forEach(c => bump(_xHex(c)));
-          }
-        }
-        return Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([hex,count]) => ({ hex, count }));
-      },
-      typography() {
-        const combos = {};
-        for (const el of _xNodes(4000)) {
-          if (!el.textContent || !el.textContent.trim()) continue;
-          const cs = getComputedStyle(el);
-          const key = [cs.fontSize, cs.lineHeight, cs.fontWeight, cs.letterSpacing, cs.textTransform, cs.fontFamily].join('|');
-          combos[key] = (combos[key] || 0) + 1;
-        }
-        return Object.entries(combos).sort((a,b) => b[1]-a[1]).slice(0, 40).map(([k,count]) => {
-          const [size,lineHeight,weight,letterSpacing,textTransform,family] = k.split('|');
-          return { size, lineHeight, weight, letterSpacing, textTransform, family, count };
-        });
-      },
-      spacing() {
-        const PROPS = ['margin-top','margin-right','margin-bottom','margin-left','padding-top','padding-right','padding-bottom','padding-left','gap','row-gap','column-gap'];
-        const vals = {};
-        for (const el of _xNodes(4000)) {
-          const cs = getComputedStyle(el);
-          for (const p of PROPS) { const v = (cs.getPropertyValue(p) || '').trim(); if (v && v !== '0px' && v !== 'normal') vals[v] = (vals[v] || 0) + 1; }
-        }
-        return Object.entries(vals).sort((a,b) => parseFloat(a[0]) - parseFloat(b[0])).map(([value,count]) => ({ value, count }));
-      },
-      tokens() {
-        const names = new Set();
-        try {
-          for (const sheet of document.styleSheets) {
-            let rules; try { rules = sheet.cssRules; } catch (_) { continue; }
-            for (const rule of rules) {
-              if (rule.style) for (const prop of rule.style) if (prop.startsWith('--')) names.add(prop);
-              if (names.size >= 400) break;
-            }
-            if (names.size >= 400) break;
-          }
-        } catch (_) {}
-        const rootCS = getComputedStyle(document.documentElement);
-        const out = [];
-        for (const name of names) { const v = rootCS.getPropertyValue(name).trim(); if (v) out.push({ name, value: v }); }
-        return out.sort((a,b) => a.name.localeCompare(b.name));
-      },
-      dom() {
-        const el = _xRoots()[0];
-        if (!el) return '';
-        const clone = el.cloneNode(true);
-        clone.querySelectorAll('[id^="__cathode"]').forEach(n => n.remove());
-        let html = clone.outerHTML || '';
-        if (html.length > 6000) html = html.slice(0, 6000) + '\n…(truncated)';
-        return html;
-      },
-      text() {
-        const out = [];
-        for (const root of _xRoots()) {
-          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-          let n;
-          while ((n = walk.nextNode())) {
-            const t = n.textContent.trim();
-            if (!t) continue;
-            const parent = n.parentElement;
-            if (!parent) continue;
-            const cs = getComputedStyle(parent);
-            if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-            out.push({ tag: parent.tagName.toLowerCase(), text: t.slice(0, 200) });
-            if (out.length >= 200) return out;
-          }
-        }
-        return out;
-      },
-      forms() {
-        const fields = [];
-        for (const root of _xRoots()) {
-          const list = root.matches && root.matches('input,select,textarea') ? [root] : [];
-          root.querySelectorAll('input,select,textarea').forEach(e => list.push(e));
-          for (const f of list) {
-            const labelled = !!(f.labels && f.labels.length) || !!f.getAttribute('aria-label') || !!f.getAttribute('aria-labelledby');
-            fields.push({
-              tag: f.tagName.toLowerCase(), type: f.type || '', name: f.name || '', id: f.id || '',
-              required: !!f.required, disabled: !!f.disabled,
-              placeholder: f.placeholder || '', pattern: f.getAttribute('pattern') || '', hasLabel: labelled,
-            });
-            if (fields.length >= 100) return fields;
-          }
-        }
-        return fields;
-      },
-      a11y() {
-        const out = [];
-        const INTERACTIVE = new Set(['a','button','input','select','textarea']);
-        for (const el of _xNodes(2000)) {
-          const tag = el.tagName.toLowerCase();
-          const role = el.getAttribute('role');
-          const tabindex = el.getAttribute('tabindex');
-          const aria = {};
-          for (const at of el.attributes) if (at.name.startsWith('aria-')) aria[at.name] = at.value;
-          const interactive = INTERACTIVE.has(tag) || role === 'button' || role === 'link' || tabindex === '0';
-          if (!interactive && !role && Object.keys(aria).length === 0 && tabindex === null) continue;
-          const name = el.getAttribute('aria-label')
-            || (el.labels && el.labels.length ? el.labels[0].textContent.trim() : '')
-            || (interactive ? (el.textContent || '').trim().slice(0, 40) : '');
-          out.push({ tag, role: role || '', name, tabindex: tabindex, aria, missingName: interactive && !name });
-          if (out.length >= 150) break;
-        }
-        return out;
-      },
-    };
-
-    // ── Media collection (images / videos / svgs) ────────────────────
-    function _xName(url, fallbackBase, ext) {
-      try {
-        const u = new URL(url, location.href);
-        let base = (u.pathname.split('/').pop() || '').split('?')[0];
-        if (base && /\.[a-z0-9]{2,5}$/i.test(base)) return base;
-        if (base) return base + ext;
-      } catch (_) {}
-      return fallbackBase + '-' + Math.random().toString(36).slice(2, 7) + ext;
-    }
-    function collectMedia(types) {
-      const assets = [];
-      const seen = new Set();
-      const add = a => { const k = a.inline || a.url; if (k && !seen.has(k)) { seen.add(k); assets.push(a); } };
-      for (const root of _xRoots()) {
-        if (types.includes('images')) {
-          const list = root.matches && root.matches('img') ? [root] : [];
-          root.querySelectorAll('img').forEach(i => list.push(i));
-          for (const img of list) {
-            const url = img.currentSrc || img.src;
-            if (url) add({ kind: 'image', url, name: _xName(url, 'image', '.png'),
-              alt: img.getAttribute('alt'), hasAlt: img.hasAttribute('alt'),
-              w: img.naturalWidth, h: img.naturalHeight,
-              loading: img.loading || 'eager', broken: !!(img.complete && img.naturalWidth === 0) });
-            if (assets.length >= 120) return assets;
-          }
-          for (const el of _xNodes(2000)) {
-            const m = (getComputedStyle(el).backgroundImage || '').match(/url\(["']?([^"')]+)["']?\)/);
-            if (m && !m[1].startsWith('data:')) add({ kind: 'image', url: m[1], name: _xName(m[1], 'bg', '.png'), source: 'css-background' });
-          }
-        }
-        if (types.includes('svgs')) {
-          const list = root.matches && root.matches('svg') ? [root] : [];
-          root.querySelectorAll('svg').forEach(s => list.push(s));
-          list.forEach(s => add({ kind: 'svg', inline: s.outerHTML, name: 'icon-' + (assets.length + 1) + '.svg',
-            viewBox: s.getAttribute('viewBox') || '', title: (s.querySelector('title') && s.querySelector('title').textContent) || (s.getAttribute('aria-label') || '') }));
-          root.querySelectorAll('img[src$=".svg"]').forEach(i => { if (i.src) add({ kind: 'svg', url: i.src, name: _xName(i.src, 'icon', '.svg') }); });
-        }
-        if (types.includes('videos')) {
-          const list = root.matches && root.matches('video') ? [root] : [];
-          root.querySelectorAll('video').forEach(v => list.push(v));
-          for (const v of list) {
-            const src = v.currentSrc || v.src || (v.querySelector('source') && v.querySelector('source').src);
-            if (src) add({ kind: 'video', url: src, name: _xName(src, 'video', '.mp4') });
-            if (v.poster) add({ kind: 'image', url: v.poster, name: _xName(v.poster, 'poster', '.jpg'), source: 'video-poster' });
-          }
-        }
-      }
-      return assets;
-    }
-    // Only blob: URLs must be resolved in-page (main can't fetch them); http(s)
-    // and data: are downloaded main-side (no CORS, carries the page session).
-    async function resolveBlobAssets(assets) {
-      for (const a of assets) {
-        if (a.url && a.url.startsWith('blob:')) {
-          try {
-            const blob = await (await fetch(a.url)).blob();
-            a.mime = blob.type || '';
-            a.b64 = await new Promise(r => { const fr = new FileReader(); fr.onloadend = () => r((fr.result || '').toString().split(',')[1] || ''); fr.readAsDataURL(blob); });
-            delete a.url;
-          } catch (e) { a.fetchError = String((e && e.message) || e); }
-        }
-      }
     }
 
     async function sendResult() {
@@ -1265,7 +1351,7 @@ function cathodeCombinedPage(OPTS) {
   });
 }
 
-function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false }) {
+function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false, panelMode = false }) {
   const opts = {
     isClick: isClick === true,
     bounds: bounds || {},
@@ -1274,6 +1360,7 @@ function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevM
     mouseUpX, mouseUpY,
     aiDevMode: aiDevMode === true,
     wholePage: wholePage === true,
+    panelMode: panelMode === true,
     CSS_PROPS,
     Z,
   };

@@ -1,7 +1,36 @@
 /* ── Cathode Design Tokens ──────────────────────────────────────── */
 /* Mirrors the CSS variables used in CathodeTerminal's renderer.    */
 
+/* Title face — Zalando Sans SemiExpanded (variable, bundled).
+   SemiExpanded = font-stretch 112.5% (set on body below). */
+@font-face {
+  font-family: 'Zalando Sans SemiExpanded';
+  src: url('./fonts/zalando-sans-var.woff2') format('woff2');
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./fonts/geist-mono-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  /* ── Spec shade ramp (mirrors the app redesign) ── */
+  --spec-text:        #BCBCBC;   /* shade 0 */
+  --spec-text-dim:    #817E89;   /* shade 1 */
+  --spec-text-faint:  #46434D;   /* shade 2 */
+  --spec-structural:  #28262F;   /* shade 3 */
+  --spec-dropdown-bg: #212026;   /* shade 4 */
+  --spec-toolbar-bg:  #19191C;   /* shade 5 */
+  --spec-header-bg:   #111113;   /* shade 6 */
+  --spec-input-bg:    #08090C;   /* shade 7 */
+  --font-title: 'Zalando Sans SemiExpanded', system-ui, sans-serif;
+
   /* Backgrounds */
   --bg-base:        #1a1a1a;
   --bg-panel:       #1e1e1e;
@@ -63,4 +92,5 @@ body {
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.5;
+  font-stretch: 112.5%;   /* SemiExpanded for Zalando titles; Geist Mono unaffected */
 }
