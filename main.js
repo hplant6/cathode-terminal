@@ -42,7 +42,7 @@ function saveScale(sf) {
   try {
     fs.mkdirSync(path.dirname(DISPLAY_FILE), { recursive: true });
     fs.writeFileSync(DISPLAY_FILE, JSON.stringify({ scaleFactor: sf }));
-  } catch (_) {}
+  } catch (e) { logErr('save scale', e); }
 }
 
 const savedScale = readSavedScale();
@@ -65,7 +65,7 @@ function loadLastURL() {
 }
 function saveLastURL(url) {
   if (!url || url === 'about:blank') return;
-  try { fs.writeFileSync(getStateFile(), JSON.stringify({ url })); } catch (_) {}
+  try { fs.writeFileSync(getStateFile(), JSON.stringify({ url })); } catch (e) { logErr('save last url', e); }
 }
 
 let mainWindow;
@@ -97,6 +97,11 @@ const POPUP_BAR_HEIGHT  = 36;
 function uiSend(channel, data) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
 }
+
+// Most failures here are deliberately best-effort. Route the ones worth
+// diagnosing (data-losing file writes) through this so they're visible in the
+// console instead of vanishing — without changing the best-effort behavior.
+function logErr(label, e) { console.error('[cathode] ' + label + ':', (e && e.message) || e); }
 
 // Bounds that park a WebContentsView far offscreen (views can't be hidden,
 // only moved). Shared sentinel — do not mutate.
@@ -754,7 +759,7 @@ function stripBlock(text) {
   return out.replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\n+$/, '') + (out.trim() ? '\n' : '');
 }
 
-ipcMain.handle('storybook-write-memory', (_, { url }) => {
+ipcMain.handle('storybook-write-memory', (_, { url } = {}) => {
   const dir = sessionCwd();
   const written = [];
   for (const name of MEMORY_FILES) {
@@ -793,7 +798,7 @@ ipcMain.handle('storybook-clear-memory', () => {
 
 // Single source of truth: when any HTML modal is open, push EVERY native
 // WebContentsView offscreen so the modal (which is HTML) is never occluded.
-ipcMain.on('modal-overlay', (_, { open }) => {
+ipcMain.on('modal-overlay', (_, { open } = {}) => {
   modalOpen = open;
   repositionAll();
 });
@@ -855,7 +860,7 @@ function repositionBrowserView(overrideFraction) {
 let currentProjectDir = '';
 function homeDir() { return platform.homeDir(); }
 function sessionCwd() { return currentProjectDir || homeDir(); }
-ipcMain.on('set-project-dir', (_, { dir }) => { currentProjectDir = dir || ''; });
+ipcMain.on('set-project-dir', (_, { dir } = {}) => { currentProjectDir = dir || ''; });
 
 // ── Agent runtime environment (WSL vs Windows vs native) ──────────
 // Most tools (claude/aider/llm) run in WSL on Windows. Gemini/Codex may be
@@ -923,9 +928,9 @@ ipcMain.on('pty-restart', (_, { id, command })     => {
   killPty(id);
   spawnPty(id, command || ptyCommands[id] || 'claude');
 });
-ipcMain.on('set-active-pty', (_, { id }) => { activePtyId = id; });
+ipcMain.on('set-active-pty', (_, { id } = {}) => { activePtyId = id; });
 
-ipcMain.handle('check-model', (_, { command }) => {
+ipcMain.handle('check-model', (_, { command } = {}) => {
   return new Promise(resolve => {
     try {
       const safe = command.replace(/[^a-zA-Z0-9\-_.]/g, '');
@@ -953,7 +958,7 @@ ipcMain.handle('check-claude-auth', () => new Promise(resolve => {
 }));
 
 let onboardingProc = null;
-ipcMain.on('onboarding-run', (_, { id, command }) => {
+ipcMain.on('onboarding-run', (_, { id, command } = {}) => {
   const send = uiSend;
   safeKill(onboardingProc);
   try {
@@ -980,7 +985,7 @@ ipcMain.on('onboarding-run', (_, { id, command }) => {
 ipcMain.on('onboarding-cancel', () => { safeKill(onboardingProc); onboardingProc = null; });
 
 // ── Profile installer (streams output back to the modal) ──────────
-ipcMain.on('profile-install', (_, { installId, command }) => {
+ipcMain.on('profile-install', (_, { installId, command } = {}) => {
   const send = uiSend;
   try {
     const proc = platform.nixSpawn(['bash', '-lc', command], {
@@ -1132,7 +1137,11 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
 
   // Accumulate stderr so we can show it if the process dies early
   let stderrBuf = '';
-  proc.stderr.on('data', d => { stderrBuf += d.toString(); console.error('[acp]', d.toString().trim()); });
+  proc.stderr.on('data', d => {
+    stderrBuf += d.toString();
+    if (stderrBuf.length > 65536) stderrBuf = stderrBuf.slice(-65536);   // keep only recent stderr (error report uses the tail)
+    console.error('[acp]', d.toString().trim());
+  });
 
   let connected = false;
   let errorSent = false;   // an error path already told the renderer — don't double-report
@@ -1188,7 +1197,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       catch (_) { return { content: '' }; }
     },
     async writeTextFile(params) {
-      try { fs.writeFileSync(params.path, params.content, 'utf8'); } catch (_) {}
+      try { fs.writeFileSync(params.path, params.content, 'utf8'); } catch (e) { logErr('agent writeTextFile ' + params.path, e); }
       return {};
     },
   };
@@ -1234,14 +1243,14 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   }
 }
 
-ipcMain.on('acp-spawn', (_, { id, model, agent }) => {
+ipcMain.on('acp-spawn', (_, { id, model, agent } = {}) => {
   spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
     console.error('[acp] spawn error:', err);
     uiSend('acp-error', { id, message: err.message });
   });
 });
 
-ipcMain.on('acp-prompt', async (_, { id, text }) => {
+ipcMain.on('acp-prompt', async (_, { id, text } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   try {
@@ -1253,13 +1262,13 @@ ipcMain.on('acp-prompt', async (_, { id, text }) => {
   }
 });
 
-ipcMain.on('acp-cancel', async (_, { id }) => {
+ipcMain.on('acp-cancel', async (_, { id } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   try { await s.conn.cancel({ sessionId: s.sessionId }); } catch (_) {}
 });
 
-ipcMain.on('acp-kill', (_, { id }) => {
+ipcMain.on('acp-kill', (_, { id } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   safeKill(s.proc);
@@ -1295,6 +1304,7 @@ function spawnClaudeChat(text) {
     claudeChatBuf += chunk.toString('utf8');
     const lines = claudeChatBuf.split('\n');
     claudeChatBuf = lines.pop() ?? '';
+    if (claudeChatBuf.length > 1048576) claudeChatBuf = '';   // drop a pathological line with no newline (malformed stream)
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -1316,7 +1326,7 @@ function spawnClaudeChat(text) {
   });
 }
 
-ipcMain.on('claude-chat-send',   (_, { text }) => spawnClaudeChat(text));
+ipcMain.on('claude-chat-send',   (_, { text } = {}) => spawnClaudeChat(text));
 ipcMain.on('claude-chat-cancel', () => {
   if (claudeChatProc) {
     safeKill(claudeChatProc);
@@ -1570,7 +1580,7 @@ function setEmulation(d, notify = true) {
   repositionBrowserView();
   if (notify) uiSend('device-changed', { name: deviceEmulation ? deviceEmulation.name : '', default: deviceEmulation === null });
 }
-ipcMain.on('show-device-menu', (_, { x, y, devices, activeName, defaultView }) => {
+ipcMain.on('show-device-menu', (_, { x, y, devices, activeName, defaultView } = {}) => {
   const tpl = [{ label: 'Default view', type: 'checkbox', checked: !!defaultView, click: () => setEmulation({ default: true }) }];
   tpl.push({ type: 'separator' });
   tpl.push({ label: 'Responsive', type: 'checkbox', checked: !defaultView && !activeName, click: () => setEmulation({ responsive: true }) });
@@ -1588,7 +1598,7 @@ ipcMain.on('set-device', (_, d) => setEmulation(d || null, false));
 // Resize-handle drag: hide the view while a ghost frame is dragged, then apply
 // the dragged size as a custom (Responsive) viewport on release.
 ipcMain.on('device-resize-start', () => { resizingDevice = true; repositionBrowserView(); });
-ipcMain.on('device-resize-end', (_, { width, height }) => {
+ipcMain.on('device-resize-end', (_, { width, height } = {}) => {
   resizingDevice = false;
   if (width > 0 && height > 0) deviceEmulation = { name: '', fit: false, width, height };
   repositionBrowserView();
@@ -1699,7 +1709,7 @@ ipcMain.handle('clipboard-read', () => { try { return clipboard.readText(); } ca
 
 // Fast check (no health-check) whether a given MCP server is configured in any
 // agent's user-scope config. Reads the config files directly.
-ipcMain.handle('mcp-has-server', async (_, { name }) => {
+ipcMain.handle('mcp-has-server', async (_, { name } = {}) => {
   const r = await wslRun(
     'cat ~/.claude.json 2>/dev/null; echo "==SPLIT=="; cat ~/.gemini/settings.json 2>/dev/null; echo "==SPLIT=="; cat ~/.codex/config.toml 2>/dev/null',
     8000);
@@ -1725,7 +1735,7 @@ function buildCustomEntry(c) {
 }
 
 // Connect: add the server to every installed agent at user scope
-ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom }) => {
+ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom } = {}) => {
   const entry = catalogKey === 'custom' ? buildCustomEntry(custom) : MCP_CATALOG[catalogKey];
   if (!entry) return { ok: false, error: 'Unknown service' };
   const agents = await detectMcpAgents();
@@ -1744,7 +1754,7 @@ ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom }) => {
 });
 
 // Disconnect: remove from every agent
-ipcMain.handle('mcp-disconnect', async (_, { serverName }) => {
+ipcMain.handle('mcp-disconnect', async (_, { serverName } = {}) => {
   for (const agent of await detectMcpAgents()) {
     await wslRun(`${agent.cli} mcp remove ${shq(serverName)} -s user`, T_MCP_PROBE);
   }
@@ -1814,7 +1824,7 @@ ipcMain.handle('pick-project-dir', async () => {
 // All async (fs.promises): the project dir is usually a \\wsl.localhost UNC
 // path where each sync FS call blocks the main thread for a network
 // round-trip — code-poll alone fired several of those every 1.2 s.
-ipcMain.handle('code-list', async (_, { rel }) => {
+ipcMain.handle('code-list', async (_, { rel } = {}) => {
   try {
     const dir = codeSafeJoin(rel);
     if (!dir) return { entries: [], error: currentProjectDir ? 'Invalid path' : 'No project folder' };
@@ -1830,7 +1840,7 @@ ipcMain.handle('code-list', async (_, { rel }) => {
   } catch (e) { return { entries: [], error: String(e.message || e) }; }
 });
 
-ipcMain.handle('code-read', async (_, { rel }) => {
+ipcMain.handle('code-read', async (_, { rel } = {}) => {
   try {
     const file = codeSafeJoin(rel);
     if (!file) return { error: currentProjectDir ? 'Invalid path' : 'No project folder' };
@@ -1894,7 +1904,7 @@ ipcMain.handle('diff-status', async () => {
   return { ok: true, branch, files };
 });
 
-ipcMain.handle('diff-file', async (_, { rel, status }) => {
+ipcMain.handle('diff-file', async (_, { rel, status } = {}) => {
   let before = '', after = '';
   const gitPath = String(rel).replace(/\\/g, '/');
   if (status !== 'added') {
@@ -1911,7 +1921,7 @@ ipcMain.handle('diff-file', async (_, { rel, status }) => {
 // Lightweight mtime probe for live-reload polling. Returns { rel: mtimeMs|null }.
 // File content edits bump the file's mtime; entry add/delete/rename bumps the
 // dir's. Stats run in parallel — over UNC each one is a network round-trip.
-ipcMain.handle('code-poll', async (_, { paths }) => {
+ipcMain.handle('code-poll', async (_, { paths } = {}) => {
   const out = {};
   if (!currentProjectDir || !Array.isArray(paths)) return out;
   await Promise.all(paths.map(async rel => {
@@ -1935,7 +1945,7 @@ function loadSavedApiKey() {
 
 ipcMain.on('set-api-key', (_, key) => {
   process.env.ANTHROPIC_API_KEY = key;
-  try { fs.writeFileSync(getApiKeyFile(), key, 'utf8'); } catch (_) {}
+  try { fs.writeFileSync(getApiKeyFile(), key, 'utf8'); } catch (e) { logErr('save api key', e); }
 });
 
 // ── In-app update: git-pull the app's own checkout and relaunch ───
@@ -2031,7 +2041,7 @@ ipcMain.on('show-settings-menu', (_, pos) => {
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
 
-ipcMain.on('show-tab-settings-menu', (_, { x, y, agent }) => {
+ipcMain.on('show-tab-settings-menu', (_, { x, y, agent } = {}) => {
   const memFile = (AGENT_MEMORY[agent] || {}).file || 'AGENTS.md';
   const tpl = [
     { label: `Edit ${memFile}`, click: () => uiSend('edit-agent-memory', agent || 'claude') },
@@ -2214,13 +2224,13 @@ async function clearPanelHighlight(view) {
   if (!wc || wc.isDestroyed()) return;
   try { await wc.executeJavaScript('window.__cathodePanel && window.__cathodePanel.clear()'); } catch (_) {}
 }
-ipcMain.on('pick-panel-update', async (_, { active }) => {
+ipcMain.on('pick-panel-update', async (_, { active } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
 // Live style edit from a drawer → apply to the actual page element.
-ipcMain.on('pick-panel-style', async (_, { i, prop, value }) => {
+ipcMain.on('pick-panel-style', async (_, { i, prop, value } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   const v = (value === null || value === undefined) ? 'null' : JSON.stringify(String(value));
@@ -2246,7 +2256,7 @@ ipcMain.on('pick-panel-cancel', async () => {
 
 // ── Extract tool panel ────────────────────────────────────────────
 let pendingExtract = null;   // { view, items }
-ipcMain.on('extract-panel-highlight', async (_, { active }) => {
+ipcMain.on('extract-panel-highlight', async (_, { active } = {}) => {
   const p = pendingExtract;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
@@ -2376,7 +2386,7 @@ ipcMain.on('pick-cancel', () => {
   ).catch(() => {});
 });
 
-ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions }) => {
+ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions } = {}) => {
   const buf  = Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
   const dir  = require('path').join(require('electron').app.getPath('userData'), 'screenshots');
   require('fs').mkdirSync(dir, { recursive: true });
@@ -2432,7 +2442,7 @@ ipcMain.on('resize-panel-reset', async () => {
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.reset()'); } catch (_) {}
 });
-ipcMain.on('resize-panel-set', async (_, { dim, value }) => {
+ipcMain.on('resize-panel-set', async (_, { dim, value } = {}) => {
   const p = pendingResize;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodeResize && window.__cathodeResize.set(${JSON.stringify(String(dim))}, ${Number(value)})`); } catch (_) {}
@@ -2490,9 +2500,9 @@ ipcMain.on('pick-eyedropper', async () => {
   }
 });
 
-ipcMain.handle('eyedropper-set-prop', (_, { prop }) =>
+ipcMain.handle('eyedropper-set-prop', (_, { prop } = {}) =>
   edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setProp(${JSON.stringify(String(prop))})`));
-ipcMain.on('eyedropper-set-color', (_, { hex }) => {
+ipcMain.on('eyedropper-set-color', (_, { hex } = {}) => {
   edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setColor(${JSON.stringify(String(hex))})`);
 });
 ipcMain.on('eyedropper-send', async (_, { instruction = '' } = {}) => {
@@ -2554,10 +2564,10 @@ ipcMain.on('pick-a11y', async () => {
     uiSend('pick-cancelled');
   }
 });
-ipcMain.on('a11y-set-color', (_, { idx, which, hex }) => {
+ipcMain.on('a11y-set-color', (_, { idx, which, hex } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.setColor(${Number(idx)}, ${JSON.stringify(String(which))}, ${JSON.stringify(String(hex))})`);
 });
-ipcMain.on('a11y-flash', (_, { idx }) => {
+ipcMain.on('a11y-flash', (_, { idx } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.flash(${Number(idx)})`);
 });
 ipcMain.on('a11y-send', async (_, { issues = [] } = {}) => {
@@ -2593,7 +2603,7 @@ ipcMain.on('a11y-cancel', async () => {
 // ── Component picker window ───────────────────────────────────────
 let pickerWindow = null;
 
-ipcMain.on('open-component-picker', (_, { target, sbUrl }) => {
+ipcMain.on('open-component-picker', (_, { target, sbUrl } = {}) => {
   if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
 
   const [wx, wy] = mainWindow.getPosition();
@@ -2632,7 +2642,7 @@ function clearCpHighlight() {
   if (!view || view.webContents.isDestroyed()) return;
   view.webContents.executeJavaScript("(function(){var e=document.getElementById('__cathode_cp_hl__');if(e)e.remove();})()").catch(() => {});
 }
-ipcMain.on('cp-highlight-target', (_, { selector }) => {
+ipcMain.on('cp-highlight-target', (_, { selector } = {}) => {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed() || !selector) return;
   const js = `(function(){
@@ -2716,22 +2726,38 @@ ipcMain.on('pick-component', async () => {
 // ── Media download (Extract tool) ─────────────────────────────────
 // Bytes are fetched main-side via Electron net (no page CORS; carries the
 // view's session cookies). inline SVG / data: / blob-b64 are written directly.
+const NET_IDLE_MS = 30000;   // abort an asset fetch after this long with no progress (tune for slow links / big assets)
 function netFetch(url, session) {
   return new Promise((resolve, reject) => {
-    let req;
+    let req, settled = false, timer;
+    // Single-settlement guard so a late error after a timeout/abort can't
+    // double-resolve the promise.
+    const settle = (fn, arg) => { if (settled) return; settled = true; clearTimeout(timer); fn(arg); };
+    // Idle timeout: abort if no progress for 20s. Without this, a connection that
+    // opens but never sends `end` hangs this promise (and its caller) forever.
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        try { req && req.abort(); } catch (_) {}
+        settle(reject, new Error('request stalled (timeout)'));
+      }, NET_IDLE_MS);
+    };
     try { req = net.request({ url, session }); } catch (e) { return reject(e); }
+    arm();
     req.on('response', res => {
-      if (res.statusCode >= 400) { req.abort(); return reject(new Error('HTTP ' + res.statusCode)); }
+      arm();
+      if (res.statusCode >= 400) { req.abort(); return settle(reject, new Error('HTTP ' + res.statusCode)); }
       const chunks = []; let size = 0;
       res.on('data', c => {
+        arm();   // progress → reset the stall timer
         size += c.length;
-        if (size > 60 * 1024 * 1024) { req.abort(); return reject(new Error('too large (>60MB)')); }
+        if (size > 60 * 1024 * 1024) { req.abort(); return settle(reject, new Error('too large (>60MB)')); }
         chunks.push(c);
       });
-      res.on('end', () => resolve(Buffer.concat(chunks)));
-      res.on('error', reject);
+      res.on('end', () => settle(resolve, Buffer.concat(chunks)));
+      res.on('error', e => settle(reject, e));
     });
-    req.on('error', reject);
+    req.on('error', e => settle(reject, e));
     req.end();
   });
 }

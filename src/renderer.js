@@ -5350,7 +5350,13 @@ const SLASH_COMMANDS = [
 ];
 
 // ── Saved prompts ─────────────────────────────────────────────────
-let savedPrompts = JSON.parse(localStorage.getItem(LS.savedPrompts) || '[]');
+// Corrupt/half-written localStorage must not throw at module load (that would
+// abort the whole renderer script). Parse defensively with a fallback.
+function safeParse(raw, fallback) {
+  try { const v = JSON.parse(raw); return v == null ? fallback : v; }
+  catch (_) { return fallback; }
+}
+let savedPrompts = safeParse(localStorage.getItem(LS.savedPrompts), []);
 
 function savePromptsToStorage() {
   localStorage.setItem(LS.savedPrompts, JSON.stringify(savedPrompts));
@@ -5859,7 +5865,7 @@ document.getElementById('btn-ui-attach-folder').addEventListener('click', async 
 let updateComponentPickerBtn = null; // set by component picker IIFE
 
 // ── Storybook panel ──────────────────────────────────────────────
-let sbConfig = JSON.parse(localStorage.getItem(LS.storybook) || 'null');
+let sbConfig = safeParse(localStorage.getItem(LS.storybook), null);
 
 function sbContextText(cfg) {
   return `[Design System] Before making any UI changes, reference the Storybook at ${cfg.value}. Use its design tokens, component APIs, and visual styles to ensure consistency with the existing design system.`;
