@@ -845,6 +845,17 @@ function truncUrl(u) {
   return '…' + (s.length > 22 ? s.slice(0, 22) + '…' : s);
 }
 
+// Append the glyph + label every chip shares (chip-specific extras stay at the call site).
+function fillChip(chip, glyphHtml, text) {
+  const glyph = document.createElement('span');
+  glyph.innerHTML = glyphHtml;
+  chip.appendChild(glyph.firstChild);
+  const label = document.createElement('span');
+  label.className = 'chip-label';
+  label.textContent = text;
+  chip.appendChild(label);
+}
+
 function renderFigmaChips() {
   composerChips.innerHTML = '';
   figmaChips.forEach((c, i) => {
@@ -853,14 +864,7 @@ function renderFigmaChips() {
     chip.className = 'composer-chip' + (incomplete ? ' incomplete' : '');
     chip.dataset.key = c.key;
 
-    const glyph = document.createElement('span');
-    glyph.innerHTML = FIGMA_GLYPH;
-    chip.appendChild(glyph.firstChild);
-
-    const label = document.createElement('span');
-    label.className = 'chip-label';
-    label.textContent = c.title;
-    chip.appendChild(label);
+    fillChip(chip, FIGMA_GLYPH, c.title);
 
     if (c.needsUrl) {
       const url = document.createElement('span');
@@ -886,14 +890,7 @@ function renderFigmaChips() {
     chip.className = 'composer-chip attach-chip';
     chip.title = c.path;
 
-    const glyph = document.createElement('span');
-    glyph.innerHTML = c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH;
-    chip.appendChild(glyph.firstChild);
-
-    const label = document.createElement('span');
-    label.className = 'chip-label';
-    label.textContent = baseName(c.path);
-    chip.appendChild(label);
+    fillChip(chip, c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(c.path));
 
     const x = document.createElement('button');
     x.className = 'chip-x';
@@ -923,26 +920,14 @@ function buildChatChips(figma, attach) {
   (figma || []).forEach(c => {
     const chip = document.createElement('span');
     chip.className = 'composer-chip';
-    const glyph = document.createElement('span');
-    glyph.innerHTML = FIGMA_GLYPH;
-    chip.appendChild(glyph.firstChild);
-    const label = document.createElement('span');
-    label.className = 'chip-label';
-    label.textContent = c.title;
-    chip.appendChild(label);
+    fillChip(chip, FIGMA_GLYPH, c.title);
     wrap.appendChild(chip);
   });
   (attach || []).forEach(c => {
     const chip = document.createElement('span');
     chip.className = 'composer-chip attach-chip';
     chip.title = c.path;
-    const glyph = document.createElement('span');
-    glyph.innerHTML = c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH;
-    chip.appendChild(glyph.firstChild);
-    const label = document.createElement('span');
-    label.className = 'chip-label';
-    label.textContent = baseName(c.path);
-    chip.appendChild(label);
+    fillChip(chip, c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(c.path));
     wrap.appendChild(chip);
   });
   return wrap;
@@ -2016,24 +2001,32 @@ function acpAppendChunk(s, text, messageId) {
   acpScrollEnd(s);
 }
 
-function acpAddToolCard(s, update) {
-  acpFinalizeStream(s);
+// Shared card shell for tool + terminal updates: a header (name + "Running"
+// status) over a body. Returns the parts each caller wires up further.
+function makeToolCard(name) {
   const card = document.createElement('div');
   card.className = 'acp-tool';
-
   const header = document.createElement('div');
   header.className = 'acp-tool-header';
   const nameEl = document.createElement('span');
   nameEl.className = 'acp-tool-name';
-  nameEl.textContent = update.title || update.toolCallId || 'tool';
+  nameEl.textContent = name;
   const statusEl = document.createElement('span');
   statusEl.className = 'acp-tool-status running';
   statusEl.textContent = 'Running';
   header.appendChild(nameEl);
   header.appendChild(statusEl);
-
   const bodyEl = document.createElement('div');
   bodyEl.className = 'acp-tool-body';
+  card.appendChild(header);
+  card.appendChild(bodyEl);
+  return { card, header, statusEl, bodyEl };
+}
+
+function acpAddToolCard(s, update) {
+  acpFinalizeStream(s);
+  const name = update.title || update.toolCallId || 'tool';
+  const { card, header, statusEl, bodyEl } = makeToolCard(name);
   if (update.content?.type === 'text') bodyEl.textContent = stripAnsi(update.content.text);
 
   let collapsed = false;
@@ -2042,10 +2035,8 @@ function acpAddToolCard(s, update) {
     bodyEl.style.display = collapsed ? 'none' : '';
   });
 
-  card.appendChild(header);
-  card.appendChild(bodyEl);
   s.msgsEl.appendChild(card);
-  acpRawLog(s, `\n[${update.title || update.toolCallId || 'tool'}]\n`);
+  acpRawLog(s, `\n[${name}]\n`);
   if (update.content?.type === 'text') acpRawLog(s, stripAnsi(update.content.text));
   acpScrollEnd(s);
   s.toolCards.set(update.toolCallId, { card, statusEl, bodyEl });
@@ -2072,22 +2063,7 @@ function acpUpdateToolCard(s, update) {
 function acpAddTermCard(s, { termId, title }) {
   if (s.toolCards.has(termId)) return;
   acpFinalizeStream(s);
-  const card = document.createElement('div');
-  card.className = 'acp-tool';
-  const header = document.createElement('div');
-  header.className = 'acp-tool-header';
-  const nameEl = document.createElement('span');
-  nameEl.className = 'acp-tool-name';
-  nameEl.textContent = title || 'terminal';
-  const statusEl = document.createElement('span');
-  statusEl.className = 'acp-tool-status running';
-  statusEl.textContent = 'Running';
-  header.appendChild(nameEl);
-  header.appendChild(statusEl);
-  const bodyEl = document.createElement('div');
-  bodyEl.className = 'acp-tool-body';
-  card.appendChild(header);
-  card.appendChild(bodyEl);
+  const { card, statusEl, bodyEl } = makeToolCard(title || 'terminal');
   s.msgsEl.appendChild(card);
   acpScrollEnd(s);
   s.toolCards.set(termId, { card, statusEl, bodyEl });
