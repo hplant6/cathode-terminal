@@ -103,6 +103,15 @@ function uiSend(channel, data) {
 // console instead of vanishing — without changing the best-effort behavior.
 function logErr(label, e) { console.error('[cathode] ' + label + ':', (e && e.message) || e); }
 
+// Commands we run on the user's behalf (onboarding step / profile install) are
+// intentionally the user's own — but they arrive over IPC and go straight to a
+// shell, so reject the things that are only ever abuse: empty, absurdly long, or
+// containing NUL / newlines (a single setup command is one line; a newline is the
+// hallmark of an injected multi-command payload).
+function validRunCommand(c) {
+  return typeof c === 'string' && c.trim().length > 0 && c.length <= 4096 && !/[\x00\r\n]/.test(c);
+}
+
 // Bounds that park a WebContentsView far offscreen (views can't be hidden,
 // only moved). Shared sentinel — do not mutate.
 const OFFSCREEN_BOUNDS = { x: -10000, y: 0, width: 1, height: 1 };
@@ -971,6 +980,7 @@ ipcMain.handle('check-claude-auth', () => new Promise(resolve => {
 let onboardingProc = null;
 ipcMain.on('onboarding-run', (_, { id, command } = {}) => {
   const send = uiSend;
+  if (!validRunCommand(command)) { send('onboarding-done', { id, code: 1 }); return; }
   safeKill(onboardingProc);
   try {
     // Keep a local ref: the killed proc's async 'close' must not null out a
@@ -998,6 +1008,7 @@ ipcMain.on('onboarding-cancel', () => { safeKill(onboardingProc); onboardingProc
 // ── Profile installer (streams output back to the modal) ──────────
 ipcMain.on('profile-install', (_, { installId, command } = {}) => {
   const send = uiSend;
+  if (!validRunCommand(command)) { send('profile-install-error', { installId, message: 'Invalid install command.' }); return; }
   try {
     const proc = platform.nixSpawn(['bash', '-lc', command], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1677,11 +1688,11 @@ function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 // Async (non-blocking) — must NOT freeze the main thread: `claude mcp list`
 // health-checks can take many seconds, during which the UI/native views would
 // otherwise be frozen mid-repaint.
-function wslRun(cmdString, timeout = 25000) {
+function wslRun(cmdString, timeout = 25000, extraEnv = null) {
   return new Promise(resolve => {
     const { file, args } = platform.nixFileArgs(['bash', '-lic', cmdString]);
     execFile(file, args,
-      { encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024 },
+      { encoding: 'utf8', timeout, maxBuffer: 4 * 1024 * 1024, env: extraEnv ? { ...process.env, ...extraEnv } : process.env },
       (err, stdout, stderr) => {
         if (err) resolve({ ok: false, out: ((stdout || '') + (stderr || '')) || err.message });
         else resolve({ ok: true, out: stdout });
@@ -1702,18 +1713,23 @@ async function detectMcpAgents() {
   return _mcpAgentCache;
 }
 
-function buildMcpAddCmd(agent, entry, token) {
+// The secret is referenced from the process env (CATHODE_MCP_SECRET, set by the
+// caller via wslRun) instead of embedded, so it never appears in this command
+// string / the process list. The placeholder is shell-quoted with the rest, then
+// spliced to '"$VAR"' so bash expands it from the env at run time.
+function buildMcpAddCmd(agent, entry, hasToken) {
+  const TOK = '@@CATHODE_MCP_SECRET@@';
   const parts = [agent.cli, 'mcp', 'add', entry.serverName, '-s', 'user', '-t', entry.transport];
   if (entry.transport === 'stdio') {
-    if (entry.envVar && token) parts.push('-e', `${entry.envVar}=${token}`);
+    if (entry.envVar && hasToken) parts.push('-e', `${entry.envVar}=${TOK}`);
     if (entry.staticEnv) for (const [k, v] of Object.entries(entry.staticEnv)) parts.push('-e', `${k}=${v}`);
     if (agent.sep) parts.push('--');
     parts.push(entry.command, ...(entry.args || []));
   } else {
     parts.push(entry.url);
-    if (entry.authHeader && token) parts.push('-H', `${entry.authHeader}: ${token}`);
+    if (entry.authHeader && hasToken) parts.push('-H', `${entry.authHeader}: ${TOK}`);
   }
-  return parts.map(shq).join(' ');
+  return parts.map(shq).join(' ').replace(TOK, `'"$CATHODE_MCP_SECRET"'`);
 }
 
 ipcMain.handle('mcp-agents', async () => (await detectMcpAgents()).map(a => ({ key: a.key, label: a.label })));
@@ -1757,7 +1773,7 @@ ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom } = {}) => {
   const results = [];
   for (const agent of agents) {
     await wslRun(`${agent.cli} mcp remove ${shq(entry.serverName)} -s user`, T_MCP_PROBE);   // idempotent
-    const r = await wslRun(buildMcpAddCmd(agent, entry, token), T_MCP_ADD);
+    const r = await wslRun(buildMcpAddCmd(agent, entry, !!token), T_MCP_ADD, token ? { CATHODE_MCP_SECRET: String(token) } : null);
     results.push({
       agent: agent.key, label: agent.label, ok: r.ok,
       detail: r.ok ? '' : r.out.trim().split('\n').filter(Boolean).slice(-1)[0] || 'failed',
