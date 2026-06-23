@@ -277,6 +277,15 @@ function startSysPerf() {
     uiSend('sysperf', { cpu: cpuPercent(), ram: ramPercent(), gpu: platform.gpuPercent() });
   }, 2000);
 }
+function stopSysPerf() {
+  if (!_sysPerfTimer) return;
+  clearInterval(_sysPerfTimer);
+  _sysPerfTimer = null;
+  platform.stopGpuSampler();
+}
+// Renderer drives this by the sysperf panel's visibility — no point sampling
+// CPU/RAM/GPU every 2 s (and rebuilding the bars) while the panel is closed.
+ipcMain.on('sysperf-active', (_, on) => { on ? startSysPerf() : stopSysPerf(); });
 
 // Top processes by memory or CPU, grouped by name and summed so multi-process
 // apps (Chrome, Code…) read as one entry — like Task Manager. On-demand (the
@@ -2964,7 +2973,8 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
-  startSysPerf();
+  // sysperf sampling is started on demand by the renderer (sysperf-active IPC)
+  // when its panel is open, instead of running unconditionally for the app's life.
   setTimeout(() => startupUpdateCheck(), 4000);   // quiet, non-blocking
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

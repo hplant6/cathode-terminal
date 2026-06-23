@@ -1781,11 +1781,26 @@ function updateMsgsFade(el) {
   el._stick = el.scrollHeight - el.scrollTop - el.clientHeight < 80;   // near bottom → keep following
 }
 
+// Cap the rendered chat at ACP_MAX_MSGS nodes so long sessions stay bounded
+// (the full transcript is still in the terminal's 5000-line scrollback). Drops
+// the matching toolCards entry too, so a trimmed card isn't pinned in memory.
+const ACP_MAX_MSGS = 300;
+function acpTrim(s) {
+  const msgs = s.msgsEl;
+  while (msgs.childElementCount > ACP_MAX_MSGS) {
+    const old = msgs.firstElementChild;
+    if (!old) break;
+    if (old.dataset.toolKey) s.toolCards.delete(old.dataset.toolKey);
+    old.remove();
+  }
+}
+
 function acpScrollEnd(s) {
   if (s._scrollScheduled) return;
   s._scrollScheduled = true;
   requestAnimationFrame(() => {
     s._scrollScheduled = false;
+    acpTrim(s);
     // Only follow new content when the user is at/near the bottom, so a message
     // pinned to the middle isn't yanked away by the streaming reply.
     if (s.msgsEl._stick !== false) s.msgsEl.lastElementChild?.scrollIntoView({ block: 'end' });
@@ -2027,6 +2042,7 @@ function acpAddToolCard(s, update) {
   acpFinalizeStream(s);
   const name = update.title || update.toolCallId || 'tool';
   const { card, header, statusEl, bodyEl } = makeToolCard(name);
+  if (update.toolCallId) card.dataset.toolKey = update.toolCallId;   // lets acpTrim drop the toolCards entry
   if (update.content?.type === 'text') bodyEl.textContent = stripAnsi(update.content.text);
 
   let collapsed = false;
@@ -2064,6 +2080,7 @@ function acpAddTermCard(s, { termId, title }) {
   if (s.toolCards.has(termId)) return;
   acpFinalizeStream(s);
   const { card, statusEl, bodyEl } = makeToolCard(title || 'terminal');
+  card.dataset.toolKey = termId;   // lets acpTrim drop the toolCards entry
   s.msgsEl.appendChild(card);
   acpScrollEnd(s);
   s.toolCards.set(termId, { card, statusEl, bodyEl });
@@ -4278,10 +4295,12 @@ function growPanel(el, open) {
   let on = localStorage.getItem(LS.sysperf) !== '0';
   panel.style.display = on ? '' : 'none';   // initial state (no animation)
   btn.classList.toggle('active', on);
+  ipcRenderer.send('sysperf-active', on);   // only sample/tick in main while the panel is open
   btn.addEventListener('click', () => {
     on = !on;
     localStorage.setItem(LS.sysperf, on ? '1' : '0');
     btn.classList.toggle('active', on);
+    ipcRenderer.send('sysperf-active', on);
     growPanel(panel, on);                   // animate grow-in / shrink-out on toggle
   });
 })();
