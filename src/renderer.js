@@ -282,8 +282,8 @@ function updateSvtThumb() {
 }
 
 function switchAcpView(id, view) {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   s.viewMode = view;
   s.msgsEl.style.display  = view === 'chat' ? '' : 'none';
   s.termEl.style.display  = view === 'term' ? '' : 'none';
@@ -644,40 +644,14 @@ function setUsageOpen(open) {
   btnUsage.classList.toggle('active', open);
   document.getElementById('left-panel')?.classList.toggle('usage-open', open);  // sysperf bg → solid shade 7 while usage is open
   const el = usagePanel;
-  if (el._growAnim) el._growAnim();   // cancel any in-flight grow/shrink
-
-  const finish = (after) => {
-    const done = () => {
-      el.style.transition = ''; el.style.height = ''; el.style.overflow = '';
-      el.removeEventListener('transitionend', onEnd); clearTimeout(t); el._growAnim = null;
-      if (after) after();
-    };
-    const onEnd = (e) => { if (!e || e.propertyName === 'height') done(); };
-    const t = setTimeout(done, 380);
-    el.addEventListener('transitionend', onEnd);
-    el._growAnim = done;
-  };
-
+  if (el._growAnim) el._growAnim();   // cancel any in-flight grow/shrink before re-measuring
   if (open) {
     el.style.display = '';
     if (!_lastUsage) { refreshUsage(); return; }   // first load: just show (no measured height yet)
     renderUsage(_lastUsage);                        // populate so the target height is accurate
     refreshUsage();                                 // refresh fresh data in the background
-    const end = el.scrollHeight;
-    el.style.overflow = 'hidden';
-    el.style.height = '0px';
-    void el.offsetHeight;                           // commit the start height
-    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
-    el.style.height = end + 'px';
-    finish();
-  } else {
-    el.style.overflow = 'hidden';
-    el.style.height = el.offsetHeight + 'px';
-    void el.offsetHeight;
-    el.style.transition = 'height 0.3s cubic-bezier(0.45,0.05,0.2,1)';
-    el.style.height = '0px';
-    finish(() => { el.style.display = 'none'; });
   }
+  growPanel(el, open);   // shared height grow/shrink (defined below)
 }
 
 btnUsage.addEventListener('click', () => setUsageOpen(!usageOpen));
@@ -1794,6 +1768,12 @@ function createNotifToggle() {
   return btn;
 }
 
+// The session for id, but only if it's a live ACP session (else null).
+function acpSession(id) {
+  const s = sessions.get(id);
+  return s && s.type === 'acp' ? s : null;
+}
+
 function acpSetStatus(s, state) {
   const prev = s.status;
   const labels = { ready: 'Ready', thinking: 'Working…', connecting: 'Connecting…', installing: 'Installing adapter…', error: 'Error', closed: 'Session ended' };
@@ -2125,8 +2105,8 @@ function handleAcpUpdate(s, update) {
 
 // ── ACP IPC listeners ─────────────────────────────────────────────
 ipcRenderer.on('acp-installing', (_, { id }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   acpSetStatus(s, 'installing');
   acpRawLog(s, '⬇ Installing adapter (one-time setup)…\n');
   const el = document.createElement('div');
@@ -2150,8 +2130,8 @@ ipcRenderer.on('acp-install-progress', (_, { id, text }) => {
 });
 
 ipcRenderer.on('acp-ready', (_, { id, version, model, cwd, agent }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   if (agent) s.agent = agent;
   if (s._installEl) {
     s._installEl.remove();
@@ -2180,8 +2160,8 @@ ipcRenderer.on('acp-closed', (_, { id }) => {
 });
 
 ipcRenderer.on('acp-error', (_, { id, message }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; s._pendingModelLabel = null; }
   acpFinalizeStream(s);
   acpRawLog(s, `\nError: ${message}\n`);
@@ -2194,8 +2174,8 @@ ipcRenderer.on('acp-error', (_, { id, message }) => {
 });
 
 ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   acpFinalizeStream(s);
   const label = toolCall?.title || toolCall?.input?.command || 'tool';
   acpRawLog(s, `▶ ${label}\n`);
@@ -2207,15 +2187,15 @@ ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
 });
 
 ipcRenderer.on('acp-term-create', (_, { id, termId, title }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   acpRawLog(s, `\n[terminal: ${title || termId}]\n`);
   acpAddTermCard(s, { termId, title });
 });
 
 ipcRenderer.on('acp-term-output', (_, { id, termId, output }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   const stripped = stripAnsi(output);
   // Collect ▎ notice lines from startup banner output
   if (s._bannerCollecting && s._bannerNoticesEl) {
@@ -2234,8 +2214,8 @@ ipcRenderer.on('acp-term-output', (_, { id, termId, output }) => {
 });
 
 ipcRenderer.on('acp-term-release', (_, { id, termId }) => {
-  const s = sessions.get(id);
-  if (!s || s.type !== 'acp') return;
+  const s = acpSession(id);
+  if (!s) return;
   const tc = s.toolCards.get(termId);
   if (tc) { tc.statusEl.className = 'acp-tool-status done'; tc.statusEl.textContent = 'Done'; }
 });
