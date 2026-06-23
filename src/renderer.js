@@ -88,9 +88,6 @@ function applyTheme(name) {
 }
 
 // ── Pin icons ─────────────────────────────────────────────────────
-const ICON_PIN_UNPINNED = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="9" y1="16.25" x2="9" y2="12.25"></line><path d="M14.25,12.25c-.089-.699-.318-1.76-.969-2.875-.335-.574-.703-1.028-1.031-1.375V3.75c0-1.105-.895-2-2-2h-2.5c-1.105,0-2,.895-2,2v4.25c-.329,.347-.697,.801-1.031,1.375-.65,1.115-.88,2.176-.969,2.875H14.25Z"></path></g></svg>`;
-const ICON_PIN_PINNED   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g fill="currentColor"><path d="M9,17c-.414,0-.75-.336-.75-.75v-4c0-.414,.336-.75,.75-.75s.75,.336,.75,.75v4c0,.414-.336,.75-.75,.75Z"></path><path d="M13.929,8.997c-.266-.456-.578-.888-.929-1.288V3.75c0-1.517-1.233-2.75-2.75-2.75h-2.5c-1.517,0-2.75,1.233-2.75,2.75v3.959c-.352,.4-.663,.832-.929,1.288-.563,.965-.921,2.027-1.065,3.158-.027,.214,.039,.429,.181,.59,.143,.162,.348,.254,.563,.254H14.25c.215,0,.42-.093,.563-.254,.142-.162,.208-.376,.181-.59-.144-1.131-.502-2.193-1.065-3.158Z"></path></g></svg>`;
-const ICON_PIN_REMOVE   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g fill="currentColor"><path d="M3.75,13h1.25L13,5v-1.25c0-1.517-1.233-2.75-2.75-2.75h-2.5c-1.517,0-2.75,1.233-2.75,2.75v3.959c-.352,.4-.663,.832-.929,1.288-.563,.965-.921,2.027-1.065,3.158-.027,.214,.039,.429,.181,.59,.143,.162,.348,.254,.563,.254Z"></path><path d="M13.21,7.972l-4.96,5.028v3.25c0,.414,.336,.75,.75,.75s.75-.336,.75-.75v-3.25h4.5c.215,0,.42-.093,.563-.254,.142-.162,.208-.376,.181-.59-.144-1.131-.502-2.193-1.065-3.158-.21-.36-.456-.699-.72-1.025Z"></path><path d="M2,16.75c-.192,0-.384-.073-.53-.22-.293-.293-.293-.768,0-1.061L15.47,1.47c.293-.293,.768-.293,1.061,0s.293,.768,0,1.061L2.53,16.53c-.146,.146-.338,.22-.53,.22Z"></path></g></svg>`;
 
 const TERM_OPTS = {
   cursorBlink: true,
@@ -112,8 +109,6 @@ const PTY_MODEL_SWITCH_SETTLE_MS = 1300; // PTY has no "ready" signal — confir
 const ptySessionsEl = document.getElementById('pty-sessions');
 const ptyTabsEl     = document.getElementById('pty-tabs-container');
 // chat log / status removed
-const chatLogEl    = null;
-const chatStatusEl = null;
 const sessions      = new Map(); // id → { name, term, fitAddon, el, ro }
 let activeId        = null;
 let nextId          = 1;
@@ -444,7 +439,6 @@ function fmtTokens(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
   return String(n);
 }
-function barClass(pct) { return pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : ''; }
 
 function fmtReset(iso) {
   if (!iso) return '';
@@ -1691,11 +1685,6 @@ function stripAnsi(str) {
     .replace(/[\x00-\x09\x0b-\x1f\x7f]/g, '');
 }
 
-// LED audio-equalizer drawn on a tiny canvas: an 8×4 grid of 4px squares
-// (2px gap on all sides), tinted bottom→top with the warm
-// gradient. Bars dance while the agent works; a static dim grid sits there
-// when idle ("Ready"). Pure canvas + rAF — no animation lib needed.
-const SPEC_STOPS  = [[0, '#FF2020'], [0.35, '#FF5720'], [0.7, '#FFE16B'], [1, '#FFF8DB']];   // equalizer
 const GRAPH_STOPS = [[0, '#FF5720'], [0.5, '#FFE16B'], [1, '#FCF2C8']];                       // usage graphs
 function _specHx(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
 function _rgbAt(p, stops) {
@@ -1710,55 +1699,7 @@ function _rgbAt(p, stops) {
   }
   return _specHx(stops[stops.length - 1][1]);
 }
-function specRgbAt(p)  { return _rgbAt(p, SPEC_STOPS); }
-function specGradAt(p) { const c = specRgbAt(p); return `rgb(${c[0]},${c[1]},${c[2]})`; }
 function graphRgbAt(p) { return _rgbAt(p, GRAPH_STOPS); }   // usage gauge/bar warm ramp
-function createEqualizer(canvas) {
-  const ctx = canvas.getContext('2d');
-  const COLS = 8, ROWS = 4, CELL = 4, GAPX = 2, GAPY = 2;
-  const W = COLS * CELL + (COLS - 1) * GAPX;   // 46
-  const H = ROWS * CELL + (ROWS - 1) * GAPY;   // 22
-  const rowColor = [];
-  for (let L = 0; L < ROWS; L++) rowColor[L] = specGradAt(L / (ROWS - 1));   // bottom→top gradient
-  let raf = null, t0 = 0, animating = false, dpr = 0;
-  function setup() {
-    const d = window.devicePixelRatio || 1;
-    if (canvas.width === Math.round(W * d) && d === dpr) return;
-    dpr = d; canvas.width = Math.round(W * d); canvas.height = Math.round(H * d);
-    ctx.setTransform(d, 0, 0, d, 0, 0);
-  }
-  function render(heights) {
-    setup();
-    ctx.clearRect(0, 0, W, H);
-    for (let c = 0; c < COLS; c++) {
-      const h = heights ? heights[c] : 0;
-      for (let L = 0; L < ROWS; L++) {                    // L=0 bottom → ROWS-1 top
-        ctx.fillStyle = rowColor[L];                      // vertical gradient (per row)
-        ctx.globalAlpha = L < h ? 1 : 0.16;               // lit vs dim grid
-        ctx.fillRect(c * (CELL + GAPX), (ROWS - 1 - L) * (CELL + GAPY), CELL, CELL);
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-  function frame(ts) {
-    if (!t0) t0 = ts;
-    const t = (ts - t0) / 1000;
-    const heights = [];
-    for (let c = 0; c < COLS; c++) {
-      const v = Math.abs(Math.sin(t * 2.1 + c * 0.6) * 0.6 + Math.sin(t * 3.7 + c * 1.3) * 0.3 + Math.sin(t * 1.3 + c * 2.1) * 0.25);
-      heights[c] = Math.max(1, Math.round(Math.min(1, v) * ROWS));
-    }
-    render(heights);
-    raf = requestAnimationFrame(frame);
-  }
-  // Redraw the static grid if the canvas becomes visible (or DPI changes) while idle.
-  try { new ResizeObserver(() => { if (canvas.clientWidth && !animating) render(null); }).observe(canvas); } catch (_) {}
-  render(null);
-  return {
-    start() { animating = true; if (raf) return; t0 = 0; raf = requestAnimationFrame(frame); },
-    stop()  { animating = false; if (raf) { cancelAnimationFrame(raf); raf = null; } render(null); },
-  };
-}
 
 // Status animation controller for the domino loader.
 // start(): run the cascade. stop(): freeze each bar where the cascade left it,
@@ -2002,27 +1943,9 @@ function addReplyMeta(s, bubble, text) {
 }
 
 const COPY_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12.25 5.75H13.75C14.85 5.75 15.75 6.65 15.75 7.75V13.75C15.75 14.85 14.85 15.75 13.75 15.75H7.75C6.65 15.75 5.75 14.85 5.75 13.75V12.25"></path><path d="M10.25 2.25H4.25C3.15 2.25 2.25 3.15 2.25 4.25V10.25C2.25 11.35 3.15 12.25 4.25 12.25H10.25C11.35 12.25 12.25 11.35 12.25 10.25V4.25C12.25 3.15 11.35 2.25 10.25 2.25Z"></path></svg>';
-const COPY_DONE_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 9.5 7 13 14.5 5"></polyline></svg>';
 
 // Hover copy button for a chat message. `getText` reads the text at click time
 // (so it works for still-streaming assistant messages).
-function attachCopyBtn(msgEl, getText) {
-  const btn = document.createElement('button');
-  btn.className = 'acp-copy-btn';
-  btn.title = 'Copy message';
-  btn.innerHTML = COPY_ICON;
-  btn.addEventListener('mousedown', (e) => e.preventDefault());   // don't clear the user's text selection
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const text = (getText() || '').trim();
-    if (!text) return;
-    navigator.clipboard.writeText(text).then(() => {
-      btn.innerHTML = COPY_DONE_ICON; btn.classList.add('copied'); btn.title = 'Copied';
-      setTimeout(() => { btn.innerHTML = COPY_ICON; btn.classList.remove('copied'); btn.title = 'Copy message'; }, 1300);
-    }).catch(() => {});
-  });
-  msgEl.appendChild(btn);
-}
 
 // ── Image attachments (chat thumbnails + lightbox) ────────────────
 const CHAT_IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
@@ -2319,76 +2242,6 @@ ipcRenderer.on('acp-term-release', (_, { id, termId }) => {
 
 // Boot first session
 createSession();
-
-// ── Pin system ───────────────────────────────────────────────────
-function getTermRowHeight(termEl) {
-  const row = termEl.querySelector('.xterm-rows > div');
-  return row ? row.getBoundingClientRect().height : Math.ceil(TERM_OPTS.fontSize * 1.2);
-}
-
-
-// ── Chat log ──────────────────────────────────────────────────────
-
-function makeChatBubble(role, text, pinned = false) {
-  const el = document.createElement('div');
-  el.className = `chat-msg chat-msg-${role}`;
-  if (pinned) el.classList.add('pinned');
-
-  const body = document.createElement('span');
-  body.className = 'chat-msg-body';
-  body.textContent = text;
-  el.appendChild(body);
-
-  if (role === 'ai') {
-    const btn = document.createElement('button');
-    btn.className = 'chat-pin-btn' + (pinned ? ' pinned' : '');
-    btn.innerHTML = pinned ? ICON_PIN_PINNED : ICON_PIN_UNPINNED;
-    btn.title = pinned ? 'Unpin' : 'Pin';
-    btn.addEventListener('mouseenter', () => {
-      const s = sessions.get(activeId);
-      const msg = s?.chatMsgs.find(m => m.el === el);
-      if (msg?.pinned) btn.innerHTML = ICON_PIN_REMOVE;
-    });
-    btn.addEventListener('mouseleave', () => {
-      const s = sessions.get(activeId);
-      const msg = s?.chatMsgs.find(m => m.el === el);
-      btn.innerHTML = msg?.pinned ? ICON_PIN_PINNED : ICON_PIN_UNPINNED;
-    });
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const s = sessions.get(activeId);
-      const msg = s?.chatMsgs.find(m => m.el === el);
-      if (!msg) return;
-      msg.pinned = !msg.pinned;
-      el.classList.toggle('pinned', msg.pinned);
-      btn.className = 'chat-pin-btn' + (msg.pinned ? ' pinned' : '');
-      btn.innerHTML = msg.pinned ? ICON_PIN_PINNED : ICON_PIN_UNPINNED;
-      btn.title = msg.pinned ? 'Unpin' : 'Pin';
-    });
-    el.appendChild(btn);
-  }
-  return el;
-}
-
-function renderChatLog(_id) {}
-
-function showSessionHeader(_id) {}
-
-function readStatusLines(s) {
-  const buf = s.term.buffer.active;
-  const cursorLine = buf.baseY + buf.cursorY;
-  const found = [];
-  for (let i = Math.max(0, cursorLine - 20); i <= cursorLine; i++) {
-    const line = buf.getLine(i);
-    if (!line) continue;
-    const text = line.translateToString(true).trim();
-    if (!text) continue;
-    if (SPINNER_RE.test(text) || /^[+└├]/.test(text)) found.push(text);
-  }
-  return found.slice(-3); // at most 3 lines (spinner/mulling + sub-lines)
-}
-
-function setChatStatus(_lines) {}
 
 function scanBufferForBullets(_id) { return false; }
 function updateChatAi(_id) {}
@@ -3041,12 +2894,6 @@ function updateWfEmpty() {
 }
 
 // Hand a task to the active agent (fills the composer, ready to review + send)
-function prefillComposer(text) {
-  uiTextarea.value = text;
-  uiTextarea.dispatchEvent(new Event('input', { bubbles: true }));   // resize + char count + save btn
-  uiTextarea.focus();
-  uiTextarea.setSelectionRange(text.length, text.length);
-}
 // Send a task straight to the active agent
 function sendToAgent(text) {
   uiTextarea.value = text;
@@ -3390,7 +3237,6 @@ ipcRenderer.on('devtools-closed', () => devToolsBtn.classList.remove('active'));
 // ── Pick mode ─────────────────────────────────────────────────────
 let pickMode = null;
 
-const PICK_CURSORS = { box: 'crosshair', lasso: 'crosshair', screenshot: 'crosshair', resize: 'move', component: 'cell', draw: 'crosshair', aidev: 'crosshair', eyedropper: 'crosshair' };
 function applyPickCursor(mode) {
   document.documentElement.setAttribute('data-pick', mode || '');
 }
@@ -4993,7 +4839,6 @@ const uiCharCount = document.getElementById('ui-char-count');
 let msgHistory = [];
 let historyIdx  = 0;
 
-function refitActive() { refitSession(activeId, 60); }
 
 
 // ── Audit types (persisted) ───────────────────────────────────────

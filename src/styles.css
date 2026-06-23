@@ -1554,27 +1554,6 @@ html, body {
 }
 .svt-tab.active { color: var(--accent); }
 
-/* ── Chat pin ── */
-.chat-msg-ai { position: relative; }
-.chat-msg-body { display: block; }
-.chat-pin-btn {
-  position: absolute; top: 6px; right: 6px;
-  width: 18px; height: 18px;
-  background: transparent; border: none; padding: 0;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-dim);
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-.chat-msg-ai:hover .chat-pin-btn { opacity: 0.45; }
-.chat-pin-btn:hover               { opacity: 1 !important; color: var(--accent); }
-.chat-pin-btn.pinned              { opacity: 0.75; color: var(--accent); }
-.chat-pin-btn.pinned:hover        { opacity: 1; }
-.chat-msg-ai.pinned               { border-color: var(--accent-border); background: var(--accent-dim); }
-
 /* ── Audit dropdown ── */
 #terminal-header-right {
   display: flex;
@@ -2015,89 +1994,6 @@ html, body {
   min-height: 0;
   background: var(--spec-toolbar-bg);   /* shade 5 */
 }
-
-.chat-msg {
-  max-width: 85%;
-  padding: 14px 18px;
-  font: 600 14px/22px var(--font-mono);   /* Geist Mono SemiBold — chat body (Figma "Input") */
-  color: #FFFFFF;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border-radius: var(--r-blob);
-}
-/* User → right, no fill (border matches the container so it reads as bare text) */
-.chat-msg-user {
-  align-self: flex-end;
-  background: transparent;
-  border: 1px solid var(--spec-toolbar-bg);
-  color: #FFFFFF;
-  border-radius: var(--r-blob) var(--r-blob) 0 var(--r-blob);   /* square bottom-right (tail) */
-}
-/* AI → left, shade-4 bubble */
-.chat-msg-ai {
-  align-self: flex-start;
-  background: var(--spec-dropdown-bg);
-  border: none;
-  color: #FFFFFF;
-  border-radius: 0 var(--r-blob) var(--r-blob) var(--r-blob);   /* square top-left (tail) */
-  padding-right: 28px;
-}
-.chat-msg-ai.streaming { opacity: 0.75; }
-
-/* Winamp overrides */
-body[data-theme="winamp"] .chat-msg-user {
-  background: rgba(212,170,0,0.12);
-  border-color: rgba(212,170,0,0.3);
-}
-body[data-theme="winamp"] .chat-msg-ai {
-  background: var(--bg-toolbar);
-}
-
-/* Session header (ASCII banner) */
-.chat-header {
-  font: 11px/1.45 var(--font-mono);
-  color: var(--text-dim);
-  opacity: 0.55;
-  white-space: pre;
-  padding: 8px 4px 10px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-  flex-shrink: 0;
-}
-
-/* Status bar — thinking / working */
-#chat-status {
-  display: none;
-  flex-direction: column;
-  gap: 3px;
-  padding: 7px 14px 7px;
-  flex-shrink: 0;
-  border-top: 1px solid rgba(212,170,0,0.15);
-  background: rgba(212,170,0,0.04);
-}
-#left-panel.ui-mode #chat-status.active { display: flex; }
-.cs-main {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font: 12px/1.4 var(--font-mono);
-}
-.cs-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #d4aa00;
-  flex-shrink: 0;
-  animation: cs-pulse 1.4s ease-in-out infinite;
-}
-@keyframes cs-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.2; }
-}
-.cs-verb  { color: #d4aa00; }
-.cs-stats { color: var(--text-dim); }
-.cs-hl    { color: #e8921a; font-weight: 600; }
-.cs-sub   { font: 11px/1.4 var(--font-mono); color: var(--text-dim); padding-left: 13px; }
 
 /* Relocated composer toolbar — Figma "Chat tool bar" spec */
 #ui-toolbar {

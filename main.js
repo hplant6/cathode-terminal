@@ -507,12 +507,19 @@ function repositionInlinePopup() {
 ipcMain.on('close-inline-popup', () => closeInlinePopup());
 
 // ── Right panel views (Figma, Storybook, custom URL) ─────────────
-function ensureCustomView(url) {
-  if (customViews.has(url)) return customViews.get(url);
+// A panel WebContentsView (Figma / Storybook / custom URL): isolated context,
+// our shortcut handler, navigated to url. Caller positions it via repositionRightPanelView().
+function createPanelView(url) {
   const view = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false } });
   mainWindow.contentView.addChildView(view);
   attachShortcutHandler(view.webContents);
   view.webContents.loadURL(url).catch(() => {});
+  return view;
+}
+
+function ensureCustomView(url) {
+  if (customViews.has(url)) return customViews.get(url);
+  const view = createPanelView(url);
   customViews.set(url, view);
   return view;
 }
@@ -681,10 +688,7 @@ async function openDevToolsPanel(inspectX, inspectY) {
 }
 
 function createFigmaView() {
-  figmaView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false } });
-  mainWindow.contentView.addChildView(figmaView);
-  attachShortcutHandler(figmaView.webContents);
-  figmaView.webContents.loadURL('https://www.figma.com').catch(() => {});
+  figmaView = createPanelView('https://www.figma.com');
   repositionRightPanelView();
 }
 
@@ -694,10 +698,7 @@ function createStorybookView(url) {
     repositionRightPanelView();
     return;
   }
-  storybookView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false } });
-  mainWindow.contentView.addChildView(storybookView);
-  attachShortcutHandler(storybookView.webContents);
-  storybookView.webContents.loadURL(url).catch(() => {});
+  storybookView = createPanelView(url);
   repositionRightPanelView();
 }
 
