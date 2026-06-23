@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeImage, nativeTheme, dialog, safeStorage, clipboard, net } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeImage, nativeTheme, dialog, safeStorage, clipboard, net, shell } = require('electron');
 Menu.setApplicationMenu(null);
 nativeTheme.themeSource = 'dark';
 const path = require('path');
@@ -314,6 +314,17 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // The main window runs with nodeIntegration — never let it navigate to, or open,
+  // remote content (that would run with full Node access). Keep it on the local
+  // app; route any external link to the OS browser instead.
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file://')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url).catch(() => {}); }
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
 
   // Keep the custom maximize/restore icon in sync with the real window state.
   const sendMaxState = () => uiSend('window-maximized-state', mainWindow.isMaximized());
@@ -1310,7 +1321,9 @@ function spawnClaudeChat(text) {
       if (!trimmed) continue;
       try {
         const event = JSON.parse(trimmed);
-        if (event.type === 'system' && event.subtype === 'init' && event.session_id) {
+        // session_id is interpolated into a shell command (--resume) below, so
+        // only accept a strict token — never trust agent output into a shell.
+        if (event.type === 'system' && event.subtype === 'init' && /^[A-Za-z0-9_-]{1,128}$/.test(event.session_id || '')) {
           claudeChatSession = event.session_id;
         }
         uiSend('claude-chat-event', event);
@@ -1933,19 +1946,55 @@ ipcMain.handle('code-poll', async (_, { paths } = {}) => {
   return out;
 });
 
-function getApiKeyFile() {
-  return path.join(app.getPath('userData'), '.api-key');
+function getApiKeyFile() { return path.join(app.getPath('userData'), '.api-key'); }
+
+// Secrets at rest: encrypt with the OS keychain (safeStorage) when available,
+// and always write 0600. Falls back to plaintext only where the OS can't
+// encrypt (e.g. headless Linux with no keyring) so the app still works.
+function encryptToFile(file, plaintext) {
+  const data = safeStorage.isEncryptionAvailable()
+    ? safeStorage.encryptString(String(plaintext))
+    : Buffer.from(String(plaintext), 'utf8');
+  fs.writeFileSync(file, data, { mode: 0o600 });
 }
+function decryptFromFile(file) {
+  const buf = fs.readFileSync(file);                 // throws if missing — caller guards
+  if (safeStorage.isEncryptionAvailable()) {
+    try { return safeStorage.decryptString(buf); }
+    catch (_) { return buf.toString('utf8'); }       // legacy plaintext → re-encrypted on next write
+  }
+  return buf.toString('utf8');
+}
+
 function loadSavedApiKey() {
   try {
-    const key = fs.readFileSync(getApiKeyFile(), 'utf8').trim();
+    const key = decryptFromFile(getApiKeyFile()).trim();
     if (key) process.env.ANTHROPIC_API_KEY = key;
   } catch (_) {}
 }
 
 ipcMain.on('set-api-key', (_, key) => {
-  process.env.ANTHROPIC_API_KEY = key;
-  try { fs.writeFileSync(getApiKeyFile(), key, 'utf8'); } catch (e) { logErr('save api key', e); }
+  process.env.ANTHROPIC_API_KEY = key || '';
+  try { encryptToFile(getApiKeyFile(), key || ''); } catch (e) { logErr('save api key', e); }
+});
+
+// Seal/open a string for the renderer, so its secrets stay in localStorage but
+// encrypted at rest. Synchronous so the renderer keeps its sync storage API. The
+// "v1:" prefix marks sealed values, so legacy plaintext is read as-is and
+// re-sealed on the next write.
+ipcMain.on('secret-seal', (e, plaintext) => {
+  try {
+    e.returnValue = safeStorage.isEncryptionAvailable()
+      ? 'v1:' + safeStorage.encryptString(String(plaintext)).toString('base64')
+      : String(plaintext);
+  } catch (_) { e.returnValue = String(plaintext); }
+});
+ipcMain.on('secret-open', (e, sealed) => {
+  try {
+    e.returnValue = (typeof sealed === 'string' && sealed.startsWith('v1:') && safeStorage.isEncryptionAvailable())
+      ? safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'))
+      : (sealed || '');
+  } catch (_) { e.returnValue = sealed || ''; }
 });
 
 // ── In-app update: git-pull the app's own checkout and relaunch ───

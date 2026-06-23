@@ -2362,7 +2362,7 @@ let openKeyboardShortcutsModal = null;
 ipcRenderer.on('settings-action', (_, action) => {
   switch (action) {
     case 'api-key': {
-      const saved = localStorage.getItem(LS.apiKey) || '';
+      const saved = secureGet(LS.apiKey) || '';
       apiKeyInput.value = saved;
       apiKeyModalCtl.open();
       requestAnimationFrame(() => apiKeyInput.focus());
@@ -2391,7 +2391,7 @@ document.getElementById('api-key-cancel').addEventListener('click', closeApiKeyM
 document.getElementById('api-key-confirm').addEventListener('click', () => {
   const key = apiKeyInput.value.trim();
   if (key) {
-    localStorage.setItem(LS.apiKey, key);
+    secureSet(LS.apiKey, key);
     ipcRenderer.send('set-api-key', key);
   }
   closeApiKeyModal();
@@ -2405,22 +2405,35 @@ apiKeyInput.addEventListener('keydown', e => {
 // ── API Keys modal ────────────────────────────────────────────────
 const API_KEYS_STORE = LS.apiKeys;
 
+// Secrets in localStorage are sealed by the main process (safeStorage) so they
+// aren't readable at rest; sendSync keeps these accessors synchronous. Legacy
+// plaintext is read as-is and re-sealed on the next write.
+function secureGet(k) {
+  const raw = localStorage.getItem(k);
+  if (!raw) return '';
+  try { return ipcRenderer.sendSync('secret-open', raw); } catch (_) { return raw; }
+}
+function secureSet(k, v) {
+  try { localStorage.setItem(k, ipcRenderer.sendSync('secret-seal', String(v))); }
+  catch (_) { localStorage.setItem(k, String(v)); }
+}
+
 function loadApiKeys() {
-  try { const r = localStorage.getItem(API_KEYS_STORE); if (r) return JSON.parse(r); } catch (_) {}
-  const legacy = localStorage.getItem(LS.apiKey);
+  try { const r = secureGet(API_KEYS_STORE); if (r) return JSON.parse(r); } catch (_) {}
+  const legacy = secureGet(LS.apiKey);
   if (legacy) {
     const keys = [{ id: `k${Date.now()}`, name: 'Default', key: legacy, active: true }];
-    localStorage.setItem(API_KEYS_STORE, JSON.stringify(keys));
+    secureSet(API_KEYS_STORE, JSON.stringify(keys));
     return keys;
   }
   return [];
 }
 
 function persistApiKeys(keys) {
-  localStorage.setItem(API_KEYS_STORE, JSON.stringify(keys));
+  secureSet(API_KEYS_STORE, JSON.stringify(keys));
   const active = keys.find(k => k.active);
   if (active) {
-    localStorage.setItem(LS.apiKey, active.key);
+    secureSet(LS.apiKey, active.key);
     ipcRenderer.send('set-api-key', active.key);
   }
 }
@@ -2444,8 +2457,8 @@ function renderApiKeysList() {
     item.innerHTML = `
       <div class="api-key-dot"></div>
       <div class="api-key-info">
-        <span class="api-key-label">${k.name}</span>
-        <span class="api-key-masked">${maskKey(k.key)}</span>
+        <span class="api-key-label">${escHtml(k.name)}</span>
+        <span class="api-key-masked">${escHtml(maskKey(k.key))}</span>
       </div>
       <button class="api-key-use" ${k.active ? 'disabled' : ''}>${k.active ? 'Active' : 'Use'}</button>
       <button class="api-key-del" title="Remove">✕</button>
@@ -2459,7 +2472,7 @@ function renderApiKeysList() {
     item.querySelector('.api-key-del').addEventListener('click', () => {
       let all = loadApiKeys().filter(x => x.id !== k.id);
       if (k.active && all.length) { all[0].active = true; persistApiKeys(all); }
-      else localStorage.setItem(API_KEYS_STORE, JSON.stringify(all));
+      else secureSet(API_KEYS_STORE, JSON.stringify(all));
       renderApiKeysList();
     });
     listEl.appendChild(item);
@@ -2529,7 +2542,7 @@ function commitNewApiKey() {
   const isFirst = !keys.length;
   keys.push({ id: `k${Date.now()}`, name, key, active: isFirst });
   if (isFirst) persistApiKeys(keys);
-  else localStorage.setItem(API_KEYS_STORE, JSON.stringify(keys));
+  else secureSet(API_KEYS_STORE, JSON.stringify(keys));
   apiKeyNewForm.style.display = 'none';
   renderApiKeysList();
 }
@@ -6648,6 +6661,6 @@ let openOnboarding = null;
 })();
 
 // ── Ready ─────────────────────────────────────────────────────────
-const _savedApiKey = localStorage.getItem(LS.apiKey);
+const _savedApiKey = secureGet(LS.apiKey);
 if (_savedApiKey) ipcRenderer.send('set-api-key', _savedApiKey);
 ipcRenderer.send('renderer-ready');
