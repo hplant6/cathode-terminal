@@ -756,7 +756,39 @@ ipcMain.on('storybook-disconnect', () => {
 // answers, then hand the live URL to the existing storybookView + component
 // picker. The child is detached (its own process group) so the whole build
 // tree can be torn down on stop / quit.
-let sbServer = null;   // { proc, port, url, dir }
+let sbServer = null;   // { proc, port, url, dir, log }
+
+const nodeNet = require('net');   // Node's net (Electron's `net` above is the Chromium client)
+const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'storybook-demo') : path.join(__dirname, 'storybook-demo');
+function sbStateFile() { return path.join(app.getPath('userData'), 'storybook-server.json'); }
+function tailLines(s, n) { return (s || '').split('\n').filter(Boolean).slice(-n).join('\n'); }
+
+// Find a free TCP port from `start` upward, so a busy 6006 doesn't block us.
+function findFreePort(start, tries = 30) {
+  return new Promise((resolve) => {
+    let port = start, n = 0;
+    const tryPort = () => {
+      const srv = nodeNet.createServer();
+      srv.once('error', () => { try { srv.close(); } catch (_) {} if (++n >= tries) return resolve(start); port++; tryPort(); });
+      srv.once('listening', () => srv.close(() => resolve(port)));
+      srv.listen(port, '127.0.0.1');
+    };
+    tryPort();
+  });
+}
+
+// Persist the managed PID so a crashed run can be reaped next launch — guarded by
+// the owning app's PID, so another *live* instance's server is never touched.
+function writeSbState() { try { fs.writeFileSync(sbStateFile(), JSON.stringify({ sbPid: sbServer.proc.pid, appPid: process.pid, port: sbServer.port }), 'utf8'); } catch (_) {} }
+function clearSbState() { try { fs.unlinkSync(sbStateFile()); } catch (_) {} }
+function reapOrphanStorybook() {
+  let st; try { st = JSON.parse(fs.readFileSync(sbStateFile(), 'utf8')); } catch (_) { return; }
+  if (!st || !st.sbPid) return clearSbState();
+  let appAlive = false; try { process.kill(st.appPid, 0); appAlive = true; } catch (_) {}
+  if (appAlive) return;   // another running instance still owns it — leave it alone
+  try { process.kill(-st.sbPid, 'SIGTERM'); } catch (_) { try { process.kill(st.sbPid, 'SIGTERM'); } catch (_) {} }
+  clearSbState();
+}
 
 function sbStatus(state, extra = {}) { uiSend('storybook-server-status', { state, ...extra }); }
 
@@ -782,11 +814,12 @@ function stopStorybookServer() {
   if (!sbServer) return;
   const proc = sbServer.proc;
   sbServer = null;
+  clearSbState();
   try { process.kill(-proc.pid, 'SIGTERM'); } catch (_) { try { proc.kill(); } catch (_) {} }
 }
 
 // Resolve the working dir (empty → bundled demo) + detect an installed Storybook.
-function sbResolveDir(dir) { return (dir && fs.existsSync(dir)) ? dir : path.join(__dirname, 'storybook-demo'); }
+function sbResolveDir(dir) { return (dir && fs.existsSync(dir)) ? dir : SB_DEMO_DIR; }
 function sbBin(dir) { return path.join(dir, 'node_modules', '.bin', 'storybook' + (process.platform === 'win32' ? '.cmd' : '')); }
 function sbHasStorybook(dir) { return fs.existsSync(path.join(dir, '.storybook')) && fs.existsSync(sbBin(dir)); }
 
@@ -822,10 +855,10 @@ function ensurePreviewHead(projectDir) {
 
 ipcMain.handle('storybook-detect', (_, { dir } = {}) => {
   const projectDir = sbResolveDir(dir);
-  return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === path.join(__dirname, 'storybook-demo') };
+  return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === SB_DEMO_DIR };
 });
 
-ipcMain.handle('storybook-server-start', async (_, { dir, port = 6006 } = {}) => {
+ipcMain.handle('storybook-server-start', async (_, { dir, port } = {}) => {
   if (sbServer) return { ok: true, url: sbServer.url, already: true };
   const projectDir = sbResolveDir(dir);
   if (!sbHasStorybook(projectDir)) {
@@ -834,11 +867,12 @@ ipcMain.handle('storybook-server-start', async (_, { dir, port = 6006 } = {}) =>
   }
   ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
   const bin = sbBin(projectDir);
-  const url = `http://localhost:${port}`;
+  const usePort = port || await findFreePort(6006);   // step 6: don't get blocked by a busy 6006
+  const url = `http://localhost:${usePort}`;
   sbStatus('starting', { url, dir: projectDir });
   let proc;
   try {
-    proc = spawn(bin, ['dev', '-p', String(port), '--ci'], {
+    proc = spawn(bin, ['dev', '-p', String(usePort), '--ci'], {
       cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, BROWSER: 'none' },
     });
@@ -846,14 +880,16 @@ ipcMain.handle('storybook-server-start', async (_, { dir, port = 6006 } = {}) =>
     sbServer = null; sbStatus('error', { message: e.message });
     return { ok: false, error: e.message };
   }
-  sbServer = { proc, port, url, dir: projectDir };
-  if (proc.stdout) proc.stdout.on('data', () => {});   // drain pipes so the child never blocks
-  if (proc.stderr) proc.stderr.on('data', () => {});
-  proc.on('exit', (code) => { if (sbServer && sbServer.proc === proc) { sbServer = null; sbStatus('stopped', { code }); } });
+  sbServer = { proc, port: usePort, url, dir: projectDir, log: '' };
+  writeSbState();
+  const onLog = (d) => { if (sbServer) sbServer.log = (sbServer.log + d).slice(-4000); };   // rolling tail for diagnosis
+  if (proc.stdout) proc.stdout.on('data', onLog);
+  if (proc.stderr) proc.stderr.on('data', onLog);
+  proc.on('exit', (code) => { if (sbServer && sbServer.proc === proc) { const log = sbServer.log; sbServer = null; clearSbState(); sbStatus('stopped', { code, log: tailLines(log, 8) }); } });
 
   const ready = await pollStorybookReady(url);
   if (!sbServer) return { ok: false, error: 'stopped' };            // stopped during startup
-  if (!ready) { stopStorybookServer(); sbStatus('error', { message: 'Timed out waiting for Storybook to start.' }); return { ok: false, error: 'timeout' }; }
+  if (!ready) { const log = sbServer.log; stopStorybookServer(); sbStatus('error', { message: 'Storybook didn’t come up on ' + url + '.', log: tailLines(log, 8) }); return { ok: false, error: 'timeout' }; }
   createStorybookView(url);                                          // auto-connect the live view
   sbStatus('ready', { url, dir: projectDir });
   return { ok: true, url };
@@ -3221,6 +3257,7 @@ function relaunchWithScale(scale) {
 
 app.whenReady().then(async () => {
   loadSavedApiKey();
+  reapOrphanStorybook();   // step 6: clean up a Storybook server orphaned by a crashed run
   const { screen } = require('electron');
   const currentScale = screen.getPrimaryDisplay().scaleFactor;
 

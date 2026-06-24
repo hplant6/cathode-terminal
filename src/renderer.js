@@ -6159,7 +6159,8 @@ const sbStatusEl = document.getElementById('sb-status');
 sbStartBtn?.addEventListener('click', () => {
   ipcRenderer.invoke('storybook-server-start', { dir: document.getElementById('sb-folder').value.trim() });
 });
-ipcRenderer.on('storybook-server-status', (_, { state, url, message } = {}) => {
+ipcRenderer.on('storybook-server-status', (_, { state, url, message, log } = {}) => {
+  if (log && (state === 'error' || (state === 'stopped'))) console.warn('[storybook server]', message || '', '\n' + log);
   if (sbStatusEl) {
     const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Failed to start', stopped: 'Storybook stopped' };
     sbStatusEl.textContent = labels[state] || '';
