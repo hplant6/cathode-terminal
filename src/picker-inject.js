@@ -1,5 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 const { Z } = require('./ui-constants');
 
 const LASSO_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'lasso-cursor.svg'), 'utf8')).toString('base64');
@@ -21,6 +22,7 @@ function getPickerScript(mode) {
     : mode === 'component' ? STORYBOOK_CURSOR
     : 'crosshair';
   return `(function() {
+  ${MARCH_KEYFRAMES_JS}
   const existing = document.getElementById('__cathode_picker__');
   if (existing) existing.remove();
   const existingHl = document.getElementById('__cathode_hl__');
@@ -54,8 +56,8 @@ function getPickerScript(mode) {
     hl.id = '__cathode_hl__';
     hl.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
-      'border:2px solid #4a9eff', 'background:rgba(74,158,255,0.08)',
-      'box-sizing:border-box', 'transition:all 40ms', 'border-radius:2px',
+      'box-sizing:border-box', 'transition:left 40ms,top 40ms,width 40ms,height 40ms',
+      '${MARCH_OUTLINE_CSS}',
     ].join(';');
     document.body.appendChild(hl);
 
@@ -63,7 +65,7 @@ function getPickerScript(mode) {
     const label = document.createElement('div');
     label.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
-      'background:#4a9eff', 'color:#fff', 'font:bold 11px/18px monospace',
+      'background:#FF5720', 'color:#fff', 'font:bold 11px/18px monospace',
       'padding:1px 6px', 'border-radius:2px', 'white-space:nowrap',
     ].join(';');
     document.body.appendChild(label);

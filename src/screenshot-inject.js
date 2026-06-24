@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { MARCH_BORDER_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 
 // Build the camera cursor data URL once at require time
 const cameraSVG = fs.readFileSync(path.join(__dirname, 'icons', 'camera.svg'), 'utf8')
@@ -10,6 +11,7 @@ const CURSOR_URL = `url("data:image/svg+xml;base64,${CURSOR_B64}") 9 9, crosshai
 
 function getScreenshotScript() {
   return `(function() {
+  ${MARCH_KEYFRAMES_JS}
   const existing = document.getElementById('__cathode_shot__');
   if (existing) existing.remove();
 
@@ -36,15 +38,15 @@ function getScreenshotScript() {
     const sel = document.createElement('div');
     sel.style.cssText = [
       'position:fixed', 'pointer-events:none',
-      'border:2px solid #4a9eff',
       'display:none', 'box-sizing:border-box',
+      '${MARCH_BORDER_CSS}',
     ].join(';');
     overlay.appendChild(sel);
 
     const lbl = document.createElement('div');
     lbl.style.cssText = [
       'position:fixed', 'pointer-events:none',
-      'background:#4a9eff', 'color:#fff',
+      'background:#FF5720', 'color:#fff',
       'font:700 10px/16px monospace', 'padding:1px 6px',
       'border-radius:0 0 3px 3px', 'display:none',
     ].join(';');

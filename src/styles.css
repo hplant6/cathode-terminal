@@ -2245,47 +2245,90 @@ html, body {
   color: #fff; font-size: 16px; cursor: pointer; transition: background 0.12s;
 }
 #img-lightbox-close:hover { background: rgba(255,255,255,0.18); }
-/* Filter chips (scoped under #pick-panel so the winamp button bevel can't apply) */
-#pick-panel-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 8px; flex-shrink: 0; }
-#pick-panel .pp-chip {
-  width: auto; height: auto; flex: 0 0 auto;
-  font: 11px/1 var(--font-mono, monospace); padding: 6px 12px; border-radius: 13px;
-  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
-  cursor: pointer; box-shadow: none; transition: background 0.1s, color 0.1s, border-color 0.1s;
+/* Frame the box-select menu like the chat container. The panel is an opaque
+   shade-6 MAT covering the whole column (so nothing behind shows through its
+   corners); the inner card carries the dark surface + blob radius, framed by
+   the panel's padding (8px top/left/bottom, flush right — like the chat). */
+#pick-panel { inset: 0; background: var(--spec-header-bg); padding: 8px 0 8px 8px; overflow: visible; }
+#pick-panel-inner {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--spec-toolbar-bg); border-radius: var(--r-blob); overflow: hidden;   /* shade 5 */
 }
-#pick-panel .pp-chip:hover { background: rgba(255,255,255,0.05); color: var(--text); border-color: var(--text-dim); }
-#pick-panel .pp-chip.active { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); box-shadow: none; }
+
+/* Box-select header: 16px title, sentence-case subtitle, no divider above the filter row */
+#pick-panel-head { border-bottom: none; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+.pp-head-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pp-new-sel {
+  flex-shrink: 0; width: auto; height: auto; box-shadow: none;
+  padding: 9px 16px; background: #FF5720; border: none; border-radius: 5px;
+  color: #fff; cursor: pointer;
+  font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: background 0.12s, color 0.12s;
+}
+.pp-new-sel:hover { background: #E64A1C; color: #fff; }
+#pick-panel .tp-title { font-size: 16px; }
+#pick-panel .tp-sub { font-size: 11px; text-transform: none; font-weight: 400; letter-spacing: 0.02em; }
+
+/* Filter dropdown (replaces the old category chips) — shows "Filter: <value>" */
+.ct-select.pp-filter-ct { flex: 1 1 0; width: auto; min-width: 0; }   /* 50% of the row (override .ct-select width:100%) */
+.pp-filter-ct .ct-select-btn {   /* match the app's dropdown buttons (shade-4, blob corner, Zalando uppercase) */
+  width: auto; height: 32px; box-shadow: none;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px 18px 3px;
+  padding: 0 12px; gap: 8px; justify-content: space-between;
+  font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim);
+  transition: background 0.12s;
+}
+.pp-filter-ct .ct-select-btn:hover,
+.pp-filter-ct.open .ct-select-btn { background: var(--spec-structural); border: none; }
+.pp-filter-ct .ct-select-label::before { content: 'Filter: '; color: var(--spec-text-dim); }   /* label prefix (button only) — shade 1 */
+.pp-filter-ct .ct-select-chev { width: 10px; height: 10px; margin-right: 3px; color: var(--spec-text-dim); }
+/* Menu → match the app's signature dropdowns (shade-7 bg, no border, shade-6 hover) */
+.pp-filter-ct .ct-select-menu { background: var(--spec-input-bg); border: none; }
+.pp-filter-ct .ct-select-opt { color: var(--spec-text-dim); }
+.pp-filter-ct .ct-select-opt:hover { background: var(--spec-header-bg); color: var(--spec-text); }
+.pp-filter-ct .ct-select-opt.selected { background: var(--spec-header-bg); color: #FF5720; }
 
 /* Single property filter (replaces the per-drawer search) */
-#pick-panel-filter-wrap { padding: 0 12px 10px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+#pick-panel-filter-wrap { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; flex-shrink: 0; border-bottom: 1px solid var(--spec-header-bg); }
 .pp-filter {
-  width: 100%; box-sizing: border-box; background: var(--bg-toolbar);
-  border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text);
-  font: 11px var(--font-mono, monospace); padding: 6px 10px; outline: none;
+  flex: 1; min-width: 0; height: 32px; box-sizing: border-box; background: var(--spec-input-bg);
+  border: 1px solid var(--spec-structural); border-radius: 4px; color: var(--spec-text);
+  font: 12px var(--font-mono); padding: 0 10px; outline: none;
 }
-.pp-filter:focus { border-color: var(--accent-border); }
-.pp-filter::placeholder { color: var(--text-dim); }
+.pp-filter:focus { border-color: #FF5720; }
+.pp-filter::placeholder { color: var(--spec-text-dim); }
 
 /* Drawer list */
-#pick-panel-list { flex: 1; overflow-y: auto; padding: 4px 0; min-height: 0; }
-.pp-drawer { border-bottom: 1px solid rgba(255,255,255,0.04); }
+#pick-panel-list { flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding: 0; min-height: 0; }
+#pick-panel-list::-webkit-scrollbar-thumb { background: var(--spec-text-faint); }   /* shade 2 grab handle */
+.pp-drawer { border-bottom: 1px solid var(--spec-header-bg); }
 .pp-drawer:last-child { border-bottom: none; }
 .pp-drawer-head {
-  display: flex; align-items: center; gap: 6px;
-  padding: 9px 12px 9px 10px; cursor: pointer; transition: background 0.1s;
+  display: flex; align-items: center; gap: 10px;
+  height: 55px; padding: 0 12px; cursor: pointer; transition: background 0.1s;
+  position: sticky; top: 0; z-index: 2; background: var(--spec-toolbar-bg);   /* shade 5; sticky title — properties scroll underneath */
 }
-.pp-drawer-head:hover { background: rgba(255,255,255,0.03); }
-.pp-caret { font-size: 8px; color: var(--text-dim); width: 10px; text-align: center; flex-shrink: 0; transition: transform 0.12s; }
-.pp-caret.open { transform: rotate(90deg); }
-.pp-el-name { flex: 1; font: 12px var(--font-ui); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-drawer-head:hover { background: var(--spec-dropdown-bg); }   /* shade 4 (opaque, so rows don't show through the sticky header) */
+.pp-caret {
+  width: 10px; height: 10px; flex-shrink: 0; background: var(--spec-text-dim);
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / contain;
+          mask: url('icons/chevron.svg') no-repeat center / contain;
+  transform: rotate(-90deg); transition: transform 0.12s;   /* closed → points right; .open → down */
+}
+.pp-caret.open { transform: rotate(0deg); }
+.pp-el-name { flex: 1; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-el-desc { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; color: var(--spec-text-dim); }   /* descriptor prefix in Geist Mono, shade 1 */
+.pp-el-count { flex-shrink: 0; margin-right: 6px; font: 11px var(--font-mono); color: var(--spec-text-dim); }   /* per-element selected-property count */
 #pick-panel .pp-el-x {
   width: auto; height: auto;
-  border: none; background: transparent; color: var(--text-dim); box-shadow: none;
+  border: none; background: transparent; color: var(--spec-text-dim); box-shadow: none;
   cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 4px; flex-shrink: 0;
-  transition: color 0.12s, background 0.12s;
+  transition: color 0.12s;
 }
-#pick-panel .pp-el-x:hover { color: var(--text); background: rgba(255,255,255,0.06); box-shadow: none; }
-.pp-drawer-body { background: rgba(0,0,0,0.18); border-top: 1px solid rgba(255,255,255,0.04); }
+#pick-panel .pp-el-x:hover { color: #fff; background: transparent; box-shadow: none; }
+.pp-drawer-body { background: var(--spec-input-bg); border-top: 1px solid var(--spec-structural); }
 .pp-css-row {
   display: flex; align-items: baseline; gap: 6px; padding: 5px 12px 5px 24px;
   cursor: pointer; transition: background 0.08s;
@@ -2313,31 +2356,39 @@ html, body {
 
 /* Sectioned, typed-control property fields (Claude-design inspector style) */
 .pp-section { padding: 2px 0 8px; }
-.pp-section-title { padding: 9px 12px 5px; font: 700 9px var(--font-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); }
+.pp-section-title { padding: 11px 12px 7px; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
 .pp-field {
-  display: flex; align-items: center; gap: 8px;
-  margin: 4px 10px; padding: 0 8px; height: 30px;
-  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-toolbar);
-  transition: border-color 0.12s, background 0.12s;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0; padding: 0 12px; height: 56px;
+  border: none; border-bottom: 1px solid var(--spec-header-bg); border-radius: 0; background: transparent;
+  transition: background 0.12s;
 }
-.pp-field:hover { border-color: var(--text-dim); }
-.pp-field.selected { border-color: var(--accent-border); background: var(--accent-dim); }
+.pp-field:hover { background: var(--spec-header-bg); }
+.pp-field.selected { background: var(--spec-header-bg); border-bottom-color: var(--spec-input-bg); }   /* active row → shade-6 fill, shade-7 bottom border */
 #pick-panel .pp-field-sel {
-  width: 9px; height: 9px; padding: 0; flex-shrink: 0; border-radius: 50%; box-shadow: none;
-  border: 1.5px solid var(--text-dim); background: transparent; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+  width: 24px; height: 24px; padding: 0; flex-shrink: 0; margin-right: 3px; border-radius: 5px; box-shadow: none;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid transparent; background: var(--spec-structural); cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
 }
-#pick-panel .pp-field-sel:hover { border-color: var(--text); }
-#pick-panel .pp-field.selected .pp-field-sel { background: var(--accent); border-color: var(--accent); }
-.pp-field-label { flex: 0 0 auto; min-width: 58px; font: 11px var(--font-ui); color: var(--text-dim); white-space: nowrap; }
-.pp-field.selected .pp-field-label, .pp-field.modified .pp-field-label { color: var(--text); }
+#pick-panel .pp-field-sel:hover { border-color: #FF5720; }
+#pick-panel .pp-field.selected .pp-field-sel { background: #FF5720; border-color: #FF5720; }
+#pick-panel .pp-field.selected .pp-field-sel::after {
+  content: ''; width: 16px; height: 14px;
+  background: url('icons/check.svg') no-repeat center / contain;   /* white check */
+}
+.pp-field-label { flex: 0 0 auto; min-width: 58px; font: 600 16px var(--font-mono); color: var(--spec-text-dim); white-space: nowrap; }
+.pp-field.selected .pp-field-label, .pp-field.modified .pp-field-label { color: #FF5720; }
 .pp-field-ctrl { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .pp-ctrl-input {
-  flex: 1; min-width: 0; box-sizing: border-box; text-align: right;
-  background: transparent; border: none; outline: none; color: var(--text);
-  font: 12px var(--font-ui); padding: 0;
+  flex: 0 0 auto; width: 135px; height: 30px; box-sizing: border-box; text-align: left;
+  background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 4px; outline: none; color: var(--spec-text);
+  font: 11px var(--font-mono); padding: 0 8px;
 }
-.pp-ctrl-input::placeholder { color: var(--text-dim); }
-.pp-num { flex: 0 1 auto; max-width: 88px; }
+.pp-ctrl-input::placeholder { color: var(--spec-text-dim); }
+.pp-ctrl-input:focus { border-color: #FF5720; }
+.pp-field.selected .pp-ctrl-input { color: #FF5720; }
+.pp-num { flex: 0 0 auto; width: 135px; max-width: 135px; }   /* match the dropdown width */
 #pick-panel .pp-select, #pick-panel .pp-unit {
   -webkit-appearance: none; appearance: none;
   width: auto; height: auto; box-shadow: none;
@@ -2347,43 +2398,107 @@ html, body {
 }
 #pick-panel .pp-unit { flex: 0 0 auto; color: var(--text-dim); }
 .pp-field .pp-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; }
-.pp-color-hex { flex: 1; }
+.pp-color-hex { flex: 0 0 auto; width: 135px; }   /* match the other inputs/dropdowns */
+/* Image-property folder button (pick a local image → passed to the agent) */
+#pick-panel .pp-img-pick {
+  flex-shrink: 0; width: auto; height: auto; padding: 0; box-shadow: none;
+  background: transparent; border: none; color: var(--spec-text-faint);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: color 0.12s;
+}
+#pick-panel .pp-img-pick:hover { color: var(--spec-text); }
+#pick-panel .pp-img-pick svg { width: 15px; height: 15px; }
 /* drag-to-scrub handle on numeric fields (sits ~25px left of the value) */
-.pp-field .pp-scrub { display: inline-flex; align-items: center; flex-shrink: 0; margin-right: 20px; color: var(--text-dim); cursor: ew-resize; }
-.pp-field .pp-scrub:hover { color: var(--text); }
+/* Drag-to-adjust slider for length fields (replaces the scrub handle) */
+.pp-field .pp-slider {
+  flex: 1; min-width: 40px; height: 10px; margin: 0 4px;
+  background: var(--spec-toolbar-bg); border-radius: 999px;   /* shade-5 track */
+  position: relative; cursor: ew-resize;
+}
+.pp-field .pp-slider-knob {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 18px; height: 30px; border-radius: 999px;            /* shade-2 knob, dropdown-tall */
+  background: var(--spec-text-faint); cursor: grab;
+  display: flex; align-items: center; justify-content: center;
+}
+.pp-field .pp-slider-knob:active { cursor: grabbing; }
+.pp-field .pp-slider-knob::before {
+  content: ''; width: 14px; height: 14px;
+  background: url('icons/drag.svg') no-repeat center / contain;   /* shade-1 grip dots */
+}
+/* numeric input + its in-field scrub handle (right side) */
+.pp-num-wrap { position: relative; flex: 0 0 auto; width: 135px; }
+.pp-num-wrap .pp-num { width: 100%; padding-right: 30px; }
+.pp-num-wrap .pp-scrub {
+  position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; color: var(--spec-text-dim); cursor: ew-resize;
+}
+.pp-num-wrap .pp-scrub:hover { color: var(--spec-text); }
 /* compact custom dropdown (app-styled menu) inside a field card */
-.pp-field .pp-ct { width: auto; flex: 0 1 auto; min-width: 0; }
-.pp-field .pp-ct .ct-select-btn {
-  width: auto; height: auto; box-shadow: none; background: transparent; border: none; border-radius: 0;
-  padding: 0; gap: 4px; justify-content: flex-end; font: 12px var(--font-ui); color: var(--text);
+.pp-field .pp-ct { width: auto; flex: 0 0 auto; min-width: 135px; }
+.pp-field .pp-ct .ct-select-btn {   /* match the app's Model/Figma/Default-View dropdowns */
+  width: auto; height: 30px; box-shadow: none; background: var(--spec-dropdown-bg);
+  border: none; border-radius: 3px 3px 18px 3px;
+  padding: 0 12px; gap: 8px; justify-content: space-between;
+  font-family: var(--font-title); font-size: 10px; color: var(--spec-text-dim);
+  transition: background 0.12s;
 }
 .pp-field .pp-ct .ct-select-btn:hover,
-.pp-field .pp-ct.open .ct-select-btn { border: none; }
-.pp-field .pp-ct .ct-select-label { font: 12px var(--font-ui); }
-.pp-field .pp-ct .ct-select-chev { width: 10px; height: 10px; }
+.pp-field .pp-ct.open .ct-select-btn { background: var(--spec-structural); border: none; }
+.pp-field .pp-ct .ct-select-label { font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; }
+.pp-field .pp-ct .ct-select-chev { width: 10px; height: 10px; margin-right: 3px; color: var(--spec-text-dim); }
+.pp-field.selected .pp-ct .ct-select-label { color: #FF5720; }
 .pp-field .pp-ct-unit { flex: 0 0 auto; }
 .pp-field .pp-ct-unit .ct-select-label { color: var(--text-dim); }
 
 /* Footer: textarea + buttons */
-#pick-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
+#pick-panel-foot { position: relative; flex-shrink: 0; border-top: 1px solid var(--spec-structural); padding: 0; }
 #pick-panel-textarea {
   display: block; width: 100%; box-sizing: border-box;
-  min-height: 72px; max-height: 220px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
+  min-height: 72px; max-height: 70vh; resize: none;          /* custom handle below */
+  background: var(--spec-input-bg); color: var(--spec-text);  /* shade 7 — matches the chat input */
+  border: none; border-radius: 0;
+  font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;
 }
-#pick-panel-textarea:focus { border-color: var(--accent-border); }
-#pick-panel-textarea::placeholder { color: var(--text-dim); }
-#pick-panel-btns, .pp-btns { display: flex; gap: 8px; margin-top: 8px; }
+#pick-panel-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 — matches the chat placeholder */
+/* Custom resize handle, upper-right of the input (replaces the native grip) */
+#pick-panel-resize {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: auto; height: auto; padding: 0; box-shadow: none;
+  background: transparent; border: none; color: var(--spec-text-faint);
+  display: flex; align-items: center; justify-content: center; cursor: ns-resize;
+  transition: color 0.12s;
+}
+#pick-panel-resize:hover { color: var(--spec-text); }
+.pp-btns { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Pick-panel send bar — mirrors the main chat send bar (#ui-footer) */
+#pick-panel-btns {
+  display: flex; align-items: stretch; gap: 2px; min-height: 40px;
+  background: var(--spec-toolbar-bg);                  /* shade 5 (shows in the 2px seam) */
+  border-radius: 0 0 var(--r-blob) var(--r-blob);
+}
+#pick-panel .pp-btn {
+  flex: 1; width: auto; height: auto; align-self: stretch; box-shadow: none;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 0;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+#pick-panel .pp-btn-ghost { background: var(--spec-dropdown-bg); color: var(--spec-text-dim); border-radius: 0 0 0 var(--r-blob); }   /* cancel → bottom-left blob */
+#pick-panel .pp-btn-ghost:hover { background: var(--spec-structural); color: var(--spec-text); }
+#pick-panel .pp-btn-primary { background: #4C2112; color: var(--spec-text-dim); border-radius: 0 0 var(--r-blob) 0; }              /* send → bottom-right blob */
+#pick-panel .pp-btn-primary:hover { background: #FF5720; color: #fff; }
+
 .tool-panel .pp-btn {
   flex: 1; width: auto; height: 32px; border-radius: var(--radius-md); box-shadow: none;
   font: 600 12px var(--font-ui); cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.tool-panel .pp-btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
-.tool-panel .pp-btn-ghost:hover { background: rgba(255,255,255,0.05); color: var(--text); border-color: var(--text-dim); box-shadow: none; }
-.tool-panel .pp-btn-primary { background: var(--accent-dim); border: 1px solid var(--accent-border); color: var(--accent); }
-.tool-panel .pp-btn-primary:hover { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: none; }
+.tool-panel .pp-btn-ghost { background: var(--spec-toolbar-bg); border: 1px solid var(--spec-structural); color: var(--spec-text); }
+.tool-panel .pp-btn-ghost:hover { background: var(--spec-structural); color: var(--spec-text); border-color: var(--spec-text-faint); box-shadow: none; }
+.tool-panel .pp-btn-primary { background: #4C2112; border: 1px solid #4C2112; color: var(--spec-text); }
+.tool-panel .pp-btn-primary:hover { background: #FF5720; color: #fff; border-color: #FF5720; box-shadow: none; }
 
 /* Resize panel content */
 #resize-panel-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
@@ -2969,6 +3084,7 @@ html, body {
    ════════════════════════════════════════════════════════════════ */
 
 /* Page tools — floating vertical palette on the panel divider (Figma "tool button container") */
+#toolbar.hidden-by-pick { display: none; }   /* hidden while the box-select menu is open */
 #toolbar {
   position: absolute;
   bottom: 96px;                   /* mirror the old 96px top offset to the bottom of the app */

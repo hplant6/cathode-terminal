@@ -26,7 +26,51 @@ function cathodeCombinedPage(OPTS) {
     const e = document.getElementById(id); if (e) e.remove();
   });
 
+  // ── Marching-ants selection outline (shared by the selection boxes + hover) ──
+  // 4px orange dash / 3px gap drawn as per-edge gradients (native 'dashed' can't
+  // size segments), a soft glow, and a clockwise march. Keyframes injected once.
+  if (!document.getElementById('__cathode_march_style__')) {
+    const __ms = document.createElement('style');
+    __ms.id = '__cathode_march_style__';
+    __ms.textContent = '@keyframes cathode-march{from{background-position:0 0,0 100%,0 0,100% 0}to{background-position:7px 0,-7px 100%,0 -7px,100% 7px}}';
+    document.documentElement.appendChild(__ms);
+  }
+  const MARCH_CSS = [
+    'border:none','background-color:transparent','border-radius:0',
+    'background-image:repeating-linear-gradient(90deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(90deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,#FF5720 0 4px,transparent 4px 7px)',
+    'background-position:0 0,0 100%,0 0,100% 0',
+    'background-size:100% 1px,100% 1px,1px 100%,1px 100%',
+    'background-repeat:repeat-x,repeat-x,repeat-y,repeat-y',
+    'box-shadow:0 0 14px 2px rgba(255,87,32,0.275),0 0 30px 6px rgba(255,87,32,0.14)',
+    'animation:cathode-march 0.6s linear infinite',
+  ].join(';');
+
   // ── Element detection ───────────────────────────────────────────
+  // 1–3 word human descriptor of what an element is (drawer-title prefix).
+  function describe(el, tag) {
+    if (tag === 'input') {
+      const t = (el.type || 'text').toLowerCase();
+      return ({ checkbox: 'Checkbox', radio: 'Radio Button', button: 'Button', submit: 'Submit Button',
+        reset: 'Button', range: 'Slider', color: 'Color Picker', file: 'File Input', email: 'Email Input',
+        password: 'Password Input', search: 'Search Input', number: 'Number Input', tel: 'Phone Input',
+        url: 'URL Input', date: 'Date Input', 'datetime-local': 'Date Input', month: 'Date Input',
+        week: 'Date Input', time: 'Time Input', hidden: 'Hidden Input' })[t] || 'Text Input';
+    }
+    const MAP = {
+      textarea: 'Text Area', select: 'Dropdown', button: 'Button', a: 'Link', img: 'Image', picture: 'Image',
+      svg: 'Icon', video: 'Video', audio: 'Audio', canvas: 'Canvas', label: 'Label', p: 'Paragraph',
+      h1: 'Heading', h2: 'Heading', h3: 'Heading', h4: 'Heading', h5: 'Heading', h6: 'Heading',
+      span: 'Text', strong: 'Text', b: 'Text', em: 'Text', i: 'Text', small: 'Text', code: 'Code',
+      pre: 'Code Block', blockquote: 'Quote', ul: 'List', ol: 'List', li: 'List Item', dl: 'List',
+      table: 'Table', tr: 'Table Row', td: 'Table Cell', th: 'Table Cell', form: 'Form', fieldset: 'Field Group',
+      nav: 'Navigation', header: 'Header', footer: 'Footer', main: 'Main', aside: 'Sidebar',
+      section: 'Section', article: 'Article', figure: 'Figure', figcaption: 'Caption', iframe: 'Embed', hr: 'Divider',
+    };
+    if (MAP[tag]) return MAP[tag];
+    if (el.childElementCount === 0 && (el.textContent || '').trim()) return 'Text Block';
+    return 'Container';
+  }
+
   function getInfo(el) {
     if (!el) return null;
     const tag = el.tagName.toLowerCase();
@@ -56,7 +100,7 @@ function cathodeCombinedPage(OPTS) {
       }
     }
     const cssSelector = tag + id + (cls ? '.' + cls : '');
-    return { el, label: reactName || cssSelector, cssSelector, reactComponent: reactName, tag, debugSource };
+    return { el, label: reactName || cssSelector, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
   }
 
   let items;
@@ -73,7 +117,7 @@ function cathodeCombinedPage(OPTS) {
     const _seen = new Set();
     items = [];
     for (const _el of document.querySelectorAll('*')) {
-      if (items.length >= 14) break;
+      if (items.length >= 24) break;
       if (_el.id && _el.id.startsWith('__cathode')) continue;
       const _r = _el.getBoundingClientRect();
       if (_r.width < 2 || _r.height < 2) continue;
@@ -81,8 +125,13 @@ function cathodeCombinedPage(OPTS) {
       if (_r.right < _b.x || _r.left > _b.x + _b.width ||
           _r.bottom < _b.y || _r.top > _b.y + _b.height) continue;
       const _info = getInfo(_el);
-      if (!_info || _seen.has(_info.label)) continue;
-      _seen.add(_info.label);
+      if (!_info) continue;
+      // Dedup by label + position, not label alone — otherwise sibling inputs /
+      // text blocks (which share a tag and often have no id/class, so an identical
+      // label) collapse to a single entry and only divs-with-classes survive.
+      const _key = _info.label + '@' + Math.round(_r.left) + ',' + Math.round(_r.top);
+      if (_seen.has(_key)) continue;
+      _seen.add(_key);
       items.push(_info);
     }
   }
@@ -350,15 +399,16 @@ function cathodeCombinedPage(OPTS) {
     function pBox(item) {
       const r = item.el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) return null;
+      const PAD = 5;   // extend the outline outward so border/outline edits stay visible
       const b = document.createElement('div');
       b.style.cssText = [
-        'position:fixed','box-sizing:border-box','pointer-events:none','border-radius:2px',
-        'left:' + r.left + 'px','top:' + r.top + 'px','width:' + r.width + 'px','height:' + r.height + 'px',
-        'border:2px solid #22d3ee','background:rgba(34,211,238,0.10)',
+        'position:fixed','box-sizing:border-box','pointer-events:none',
+        'left:' + (r.left - PAD) + 'px','top:' + (r.top - PAD) + 'px','width:' + (r.width + PAD * 2) + 'px','height:' + (r.height + PAD * 2) + 'px',
+        MARCH_CSS,
       ].join(';');
       const tg = document.createElement('div');
       tg.textContent = item.label;
-      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:#22d3ee;color:#06141a;font:700 10px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
+      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:#FF5720;color:#fff;font:700 12px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
       b.appendChild(tg);
       return b;
     }
@@ -411,8 +461,8 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, cssSelector, reactComponent, tag, debugSource, cssProps }) =>
-      ({ label, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [] }));
+    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps }) =>
+      ({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [] }));
     return Promise.resolve({ panel: true, items: serial });
   }
 
@@ -421,13 +471,13 @@ function cathodeCombinedPage(OPTS) {
   hl.id = '__cathode_row_hl__';
   hl.style.cssText = [
     'position:fixed','pointer-events:none','z-index:' + Z.ROW_HIGHLIGHT,
-    'border:2px solid #22d3ee','background:rgba(34,211,238,0.12)',
-    'box-sizing:border-box','border-radius:2px','display:none',
+    'box-sizing:border-box','display:none',
+    MARCH_CSS,
   ].join(';');
   const hlTag = document.createElement('div');
   hlTag.style.cssText = [
     'position:absolute','bottom:100%','left:-2px',
-    'background:#22d3ee','color:#06141a',
+    'background:#FF5720','color:#fff',
     'font:700 10px/16px monospace','padding:1px 7px',
     'border-radius:3px 3px 0 0','white-space:nowrap',
   ].join(';');

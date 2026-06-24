@@ -1826,6 +1826,15 @@ ipcMain.handle('show-folder-dialog', async () => {
   return filePaths[0] || null;
 });
 
+// Pick a single image file (for the box-select image properties → passed to the agent by path).
+ipcMain.handle('pick-image-file', async () => {
+  const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico'] }],
+  });
+  return (filePaths && filePaths[0]) || null;
+});
+
 // ── Code tab: project file browsing (read-only) ───────────────────
 // currentProjectDir comes back from the folder dialog as a Windows path
 // (UNC \\wsl.localhost\... for WSL folders, C:\... for Windows), so Node fs
@@ -2302,6 +2311,26 @@ ipcMain.on('pick-panel-style', async (_, { i, prop, value } = {}) => {
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.style(${Number(i)}, ${JSON.stringify(String(prop))}, ${v})`); } catch (_) {}
 });
 // Finalize: the renderer sends the resolved items (with selectedCSS already built).
+// Picked images are passed by absolute local path (in url('…')); tell the agent
+// to copy them into the project and rewrite the references to be portable.
+function localAssetNote(items) {
+  const paths = new Set();
+  for (const it of (items || [])) {
+    for (const css of (it.selectedCSS || [])) {
+      const val = css.replace(/\/\*.*?\*\//g, '');   // ignore the "was:" comment — only the chosen value
+      let m; const re = /url\(\s*['"]?([^'")]+)['"]?\s*\)/gi;
+      while ((m = re.exec(val))) {
+        const u = m[1].trim();
+        if (/^([a-zA-Z]:[\\/]|\/)/.test(u)) paths.add(u);   // absolute local path (drive letter or leading /)
+      }
+    }
+  }
+  if (!paths.size) return '';
+  return '\n\nThe CSS above references local image files by absolute path:\n'
+    + [...paths].map(p => `  • ${p}`).join('\n')
+    + '\n\nCopy each of these into the working project directory (e.g. an assets/ folder within the project) and update the url() references to point at the copied paths relative to the project.';
+}
+
 ipcMain.on('pick-panel-send', async (_, { instruction = '', items = [] } = {}) => {
   const p = pendingPanelPick;
   pendingPanelPick = null;
@@ -2309,7 +2338,7 @@ ipcMain.on('pick-panel-send', async (_, { instruction = '', items = [] } = {}) =
   await clearPanelHighlight(p.view);
   uiSend('pick-cancelled');
   if (!items.length && !instruction.trim()) return;
-  const message = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction });
+  const message = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction }) + localAssetNote(items);
   uiSend('pick-send-to-session', message);
 });
 ipcMain.on('pick-panel-cancel', async () => {

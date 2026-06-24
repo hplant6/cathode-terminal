@@ -1,5 +1,6 @@
 const fs     = require('fs');
 const path   = require('path');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 const SHARED = require('./inject-shared');
 
 const RESIZE_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'resize-cursor.svg'), 'utf8')).toString('base64');
@@ -12,6 +13,7 @@ const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 9 9, move`
 // drives live dims, reset, the final result, and teardown.
 function getResizeScript() {
   return `(function() {
+  ${MARCH_KEYFRAMES_JS}
   ['__cr_ov','__cr_hv','__cr_hr'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
   if (window.__cathodeResize) { try { window.__cathodeResize.clear(); } catch(e){} }
 
@@ -43,9 +45,8 @@ function getResizeScript() {
 
     var hv = document.createElement('div');
     hv.id = '__cr_hv';
-    hv.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;' +
-      'border:2px solid #4a9eff;background:rgba(74,158,255,.07);box-sizing:border-box;display:none;' +
-      'border-radius:2px;transition:all 40ms;';
+    hv.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;display:none;' +
+      'transition:left 40ms,top 40ms,width 40ms,height 40ms;${MARCH_OUTLINE_CSS}';
     document.body.appendChild(hv);
 
     var lastHover = null;

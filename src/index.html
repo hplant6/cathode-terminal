@@ -207,28 +207,33 @@
 
       <!-- Box/Lasso element panel — overtakes the chat column when a selection is made -->
       <div id="pick-panel" class="tool-panel" hidden>
+        <div id="pick-panel-inner">
         <div id="pick-panel-head" class="tp-head">
-          <span id="pick-panel-title" class="tp-title">Box Select</span>
-          <span id="pick-panel-sub" class="tp-sub">Targeted Elements</span>
-        </div>
-        <div id="pick-panel-chips">
-          <button class="pp-chip" data-filter="color">color</button>
-          <button class="pp-chip" data-filter="font">font</button>
-          <button class="pp-chip" data-filter="padding">padding</button>
-          <button class="pp-chip" data-filter="border">border</button>
-          <button class="pp-chip" data-filter="height">height</button>
-          <button class="pp-chip" data-filter="width">width</button>
+          <div class="pp-head-text">
+            <span id="pick-panel-title" class="tp-title">Box Select</span>
+            <span id="pick-panel-sub" class="tp-sub">Pass selected CSS elements to chat, or assign changes</span>
+          </div>
+          <button id="pick-panel-new" class="pp-new-sel">New Selection</button>
         </div>
         <div id="pick-panel-filter-wrap">
           <input id="pick-panel-filter" class="pp-filter" type="text" placeholder="filter properties…" spellcheck="false" autocomplete="off" />
+          <select id="pick-panel-filter-select">
+            <option value="">All</option>
+            <option value="background-image">Background image</option>
+            <option value="border-radius">Corner radius</option>
+            <option value="shadow">Shadow</option>
+            <option value="letter-spacing">Letter spacing</option>
+          </select>
         </div>
         <div id="pick-panel-list"></div>
         <div id="pick-panel-foot">
-          <textarea id="pick-panel-textarea" placeholder="give instructions here" spellcheck="true"></textarea>
+          <textarea id="pick-panel-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <button id="pick-panel-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div id="pick-panel-btns">
             <button id="pick-panel-cancel-btn" class="pp-btn pp-btn-ghost">Cancel</button>
             <button id="pick-panel-send" class="pp-btn pp-btn-primary">Send</button>
           </div>
+        </div>
         </div>
       </div>
 

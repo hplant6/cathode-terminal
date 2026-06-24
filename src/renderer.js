@@ -3222,6 +3222,7 @@ ipcRenderer.on('devtools-closed', () => devToolsBtn.classList.remove('active'));
 
 // ── Pick mode ─────────────────────────────────────────────────────
 let pickMode = null;
+let lastDrawMode = 'box';   // remembers box vs lasso for the panel's "New Selection" button
 
 function applyPickCursor(mode) {
   document.documentElement.setAttribute('data-pick', mode || '');
@@ -3235,6 +3236,7 @@ function setPickMode(mode) {
     return;
   }
   pickMode = mode;
+  if (mode === 'box' || mode === 'lasso') lastDrawMode = mode;
   applyPickCursor(mode);
   document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`btn-pick-${mode}`).classList.add('active');
@@ -3337,7 +3339,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   const panel       = document.getElementById('pick-panel');
   const titleEl     = document.getElementById('pick-panel-title');
   const listEl      = document.getElementById('pick-panel-list');
-  const chipBar     = document.getElementById('pick-panel-chips');
+  const filterSelect = document.getElementById('pick-panel-filter-select');
   const filterInput = document.getElementById('pick-panel-filter');
   const textarea    = document.getElementById('pick-panel-textarea');
   const sendBtn     = document.getElementById('pick-panel-send');
@@ -3432,6 +3434,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   function updateSendCount() {
     const n = rows.filter(r => !r.removed).reduce((a, r) => a + r.checked.size, 0);
     sendBtn.textContent = n ? `Send (${n})` : 'Send';
+    fieldBodies.forEach(fb => { if (fb.count) fb.count.textContent = `${fb.row.checked.size} Selected`; });
   }
 
   // ── one property as a field card with a typed control ─────────
@@ -3468,6 +3471,22 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     else if (type === 'length') ctrlLength(ctrl, p.name, cur, commit);
     else                        ctrlText(ctrl, cur, commit);
 
+    // Image properties: a folder button to pick a local image — its path is
+    // written as url('…') so it rides along to the agent (which can open it).
+    if (/image/.test(p.name)) {
+      const pick = el('button', 'pp-img-pick'); pick.innerHTML = FOLDER_GLYPH; pick.title = 'Choose image…';
+      pick.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const file = await ipcRenderer.invoke('pick-image-file');
+        if (!file) return;
+        const v = `url('${file}')`;
+        const input = ctrl.querySelector('input');
+        if (input) input.value = v;
+        commit(v);
+      });
+      ctrl.appendChild(pick);
+    }
+
     field.append(sel, label, ctrl);
     return field;
   }
@@ -3497,7 +3516,33 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   function ctrlLength(ctrl, prop, cur, commit) {
     const parsed = parseLen(cur);
     const num = el('input', 'pp-ctrl-input pp-num'); num.type = 'text'; num.value = parsed ? parsed.num : cur;
-    // Drag-scrub handle: left ↓, right ↑ (Shift ±10, Alt ±0.1).
+    // Slider: drag the knob to scrub the value (relative; Shift ±10, Alt ±0.1).
+    const slider = el('div', 'pp-slider'); slider.title = 'Drag to adjust';
+    const knob = el('div', 'pp-slider-knob');
+    slider.appendChild(knob);
+    knob.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      knob.style.transform = '';   // re-centre on the current value as you grab it
+      const startX = e.clientX, V = parseFloat(num.value) || 0;
+      const half = slider.clientWidth / 2;
+      document.body.style.cursor = 'ew-resize';
+      function onMove(ev) {
+        const off = Math.max(-half, Math.min(half, ev.clientX - startX));
+        num.value = Math.round(V * (1 + off / half) * 1000) / 1000;   // left → 0, centre → V, right → 2×V
+        knob.style.transform = `translate(calc(-50% + ${off}px), -50%)`;
+        apply();
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove, true);
+        document.removeEventListener('mouseup', onUp, true);
+        document.body.style.cursor = '';
+        // knob stays where it was released
+      }
+      document.addEventListener('mousemove', onMove, true);
+      document.addEventListener('mouseup', onUp, true);
+    });
+    // Drag-scrub handle inside the input (right side) — same behaviour as before.
+    const numWrap = el('div', 'pp-num-wrap');
     const scrub = el('span', 'pp-scrub'); scrub.innerHTML = SLIDE_ICON; scrub.title = 'Drag to adjust';
     scrub.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -3505,8 +3550,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       document.body.style.cursor = 'ew-resize';
       function onMove(ev) {
         const step = ev.shiftKey ? 10 : ev.altKey ? 0.1 : 1;
-        const v = startNum + Math.round((ev.clientX - startX) / 2) * step;
-        num.value = Math.round(v * 1000) / 1000;
+        num.value = Math.round((startNum + Math.round((ev.clientX - startX) / 2) * step) * 1000) / 1000;
         apply();
       }
       function onUp() {
@@ -3517,7 +3561,8 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       document.addEventListener('mousemove', onMove, true);
       document.addEventListener('mouseup', onUp, true);
     });
-    ctrl.append(scrub, num);
+    numWrap.append(num, scrub);
+    ctrl.append(slider, numWrap);
     let unitSel = null;
     if (!UNITLESS.has(prop)) {
       unitSel = el('select', 'pp-unit');
@@ -3583,18 +3628,21 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       const drawer = el('div', 'pp-drawer');
 
       const head  = el('div', 'pp-drawer-head');
-      const caret = el('span', 'pp-caret' + (row.expanded ? ' open' : ''), '▶');
-      const name  = el('span', 'pp-el-name', row.item.label);
+      const caret = el('span', 'pp-caret' + (row.expanded ? ' open' : ''));   // chevron via CSS mask (icons/chevron.svg)
+      const name  = el('span', 'pp-el-name');
+      if (row.item.descriptor) name.appendChild(el('span', 'pp-el-desc', `${row.item.descriptor}: `));
+      name.appendChild(document.createTextNode(row.item.label));
       name.title  = row.item.cssSelector || row.item.label;
+      const count = el('span', 'pp-el-count', `${row.checked.size} Selected`);
       const x     = el('button', 'pp-el-x', '✕'); x.title = 'Remove';
-      head.append(caret, name, x);
+      head.append(caret, name, count, x);
       drawer.appendChild(head);
 
       const body  = el('div', 'pp-drawer-body');
       body.style.display = row.expanded ? '' : 'none';
       if (row.expanded) buildBody(row, i, body);
       drawer.appendChild(body);
-      fieldBodies.push({ row, i, body, caret });
+      fieldBodies.push({ row, i, body, caret, count });
 
       head.addEventListener('click', (e) => {
         if (e.target === x) return;
@@ -3637,17 +3685,11 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       sec.style.display = any ? '' : 'none';
     });
   }
-  chipBar.querySelectorAll('.pp-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const f = chip.dataset.filter;
-      if (activeChip === f) { activeChip = null; chip.classList.remove('active'); }
-      else {
-        chipBar.querySelectorAll('.pp-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active'); activeChip = f;
-      }
-      applyFilter();
-    });
-  });
+  if (filterSelect) {
+    enhanceSelect(filterSelect);
+    filterSelect.closest('.ct-select')?.classList.add('pp-filter-ct');
+    filterSelect.addEventListener('change', () => { activeChip = filterSelect.value || null; applyFilter(); });
+  }
   filterInput.addEventListener('input', applyFilter);
 
   // ── color picker (lazy iro, shared singleton) ─────────────────
@@ -3756,20 +3798,22 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   function open(items, tool) {
     clearPickMode();
     if (tool) titleEl.textContent = tool;
-    rows = items.map(item => ({ item, removed: false, expanded: false, checked: new Set(), mods: {} }));
+    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {} }));   // single selection → open by default
     activeChip = null;
     hovered = null;
-    chipBar.querySelectorAll('.pp-chip').forEach(c => c.classList.remove('active'));
+    if (filterSelect) filterSelect.value = '';   // reset to "Filter: All"
     filterInput.value = '';
     textarea.value = '';
     render();
     pushHighlight();         // nothing highlighted until hover/open
     panel.hidden = false;
+    document.getElementById('toolbar')?.classList.add('hidden-by-pick');   // hide the floating tool palette while the menu is open
     setTimeout(() => textarea.focus(), 0);
   }
   function close() {
     colorPicker.hide();
     panel.hidden = true;
+    document.getElementById('toolbar')?.classList.remove('hidden-by-pick');
     hovered = null;
     rows = []; listEl.innerHTML = ''; textarea.value = '';
   }
@@ -3794,6 +3838,29 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
 
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
+  // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
+  document.getElementById('pick-panel-new')?.addEventListener('click', () => setPickMode(lastDrawMode));
+  // Custom resize handle (upper-right of the input): drag to set the textarea height (up → taller).
+  const resizeHandle = document.getElementById('pick-panel-resize');
+  if (resizeHandle) {
+    let startY = 0, startH = 0;
+    const onMove = (e) => {
+      const max = Math.round(window.innerHeight * 0.7);
+      textarea.style.height = Math.max(72, Math.min(startH + (startY - e.clientY), max)) + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = ''; document.body.style.userSelect = '';
+    };
+    resizeHandle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY; startH = textarea.getBoundingClientRect().height;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none';
+    });
+  }
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }

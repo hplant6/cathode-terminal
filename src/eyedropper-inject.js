@@ -9,6 +9,7 @@
 //   pickedColor, instruction } or null.
 const fs   = require('fs');
 const path = require('path');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 
 const ED_CURSOR_B64 = Buffer.from(
   fs.readFileSync(path.join(__dirname, 'icons', 'eyedropper-cursor.svg'), 'utf8')
@@ -18,6 +19,7 @@ const ED_CURSOR = `url("data:image/svg+xml;base64,${ED_CURSOR_B64}") 2 20, cross
 
 function getEyedropperScript(snapshotDataUrl) {
   return `(function() {
+  ${MARCH_KEYFRAMES_JS}
   ['__ed_ov','__ed_loupe','__ed_pop','__ed_hl__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
 
   return new Promise(function(resolve) {
@@ -386,8 +388,7 @@ function getEyedropperScript(snapshotDataUrl) {
       // targeted-element link → hover to outline it on the page
       var hl = document.createElement('div');
       hl.id = '__ed_hl__';
-      hl.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #4a9eff;'
-        + 'background:rgba(74,158,255,.12);box-sizing:border-box;border-radius:2px;display:none;';
+      hl.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;display:none;${MARCH_OUTLINE_CSS}';
       document.body.appendChild(hl);
       meta.addEventListener('mouseenter', function(){
         var rr = selEl.getBoundingClientRect();
