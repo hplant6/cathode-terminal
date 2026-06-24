@@ -554,21 +554,16 @@
               <rect x="6" y="38" width="22" height="5" rx="2.5" fill="currentColor"/>
             </svg>
             <h2 class="sb-title">Design Storybook</h2>
-            <p class="sb-desc">Connect a Storybook to give Claude context about your design system — tokens, components, and styles — so it builds consistently every time.</p>
+            <p class="sb-desc">Run a Storybook so Claude has live context about your design system — or have your agent build one, optionally straight from a Figma file.</p>
 
             <div class="sb-form">
               <div class="sb-field">
-                <label class="sb-label">Storybook URL</label>
-                <input id="sb-url" type="text" class="sb-input" placeholder="http://localhost:6006" spellcheck="false"/>
-              </div>
-
-              <div class="sb-field">
-                <label class="sb-label">Project folder <span class="sb-label-opt">(optional)</span></label>
+                <label class="sb-label">Project folder <span class="sb-label-opt">(optional — defaults to the bundled demo)</span></label>
                 <div class="sb-folder-row">
-                  <input id="sb-folder" type="text" class="sb-input" placeholder="Home folder (applies globally)" spellcheck="false" readonly/>
+                  <input id="sb-folder" type="text" class="sb-input" placeholder="Bundled demo Storybook" spellcheck="false" readonly/>
                   <button id="sb-folder-pick" class="sb-folder-btn" title="Choose project folder">Browse…</button>
                 </div>
-                <div class="sb-folder-hint">Writes <code>CLAUDE.md</code> / <code>AGENTS.md</code> / <code>GEMINI.md</code> here so every model references the Storybook. Leave empty to apply across all projects.</div>
+                <div class="sb-folder-hint">Writes <code>CLAUDE.md</code> / <code>AGENTS.md</code> / <code>GEMINI.md</code> here so every model references the Storybook.</div>
               </div>
 
               <label class="sb-check-row">
@@ -576,9 +571,21 @@
                 <span>Also prepend a reminder before each message (helps tools without memory files, e.g. Aider)</span>
               </label>
 
+              <!-- Primary: spin up the managed dev server for the folder -->
               <button id="sb-start" class="sb-connect-btn">Start Storybook</button>
               <div id="sb-status" class="sb-status" hidden></div>
-              <button id="sb-connect" class="sb-connect-btn sb-connect-alt">Connect to a running URL</button>
+
+              <!-- Build a new one with the agent — optionally from a Figma file via the Figma MCP -->
+              <div class="sb-divider"><span>no Storybook yet?</span></div>
+              <input id="sb-figma-url" type="text" class="sb-input" placeholder="Figma file URL (optional — build from your design)" spellcheck="false"/>
+              <button id="sb-build" class="sb-connect-btn sb-connect-alt">Build with agent</button>
+
+              <!-- Advanced: connect to an externally-running Storybook -->
+              <button id="sb-manual-toggle" class="sb-link-btn">Connect to a running URL instead</button>
+              <div id="sb-manual" hidden>
+                <input id="sb-url" type="text" class="sb-input" placeholder="http://localhost:6006" spellcheck="false"/>
+                <button id="sb-connect" class="sb-connect-btn sb-connect-alt">Connect</button>
+              </div>
             </div>
           </div>
         </div>

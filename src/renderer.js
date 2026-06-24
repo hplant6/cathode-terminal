@@ -6065,6 +6065,8 @@ function renderSbConnected() {
   if (filesEl) {
     filesEl.textContent = `${sbConfig.projectDir || 'Home folder (global)'}  —  CLAUDE.md · AGENTS.md · GEMINI.md`;
   }
+  const disc = document.getElementById('sb-disconnect');
+  if (disc) disc.textContent = sbConfig.managed ? 'Stop Storybook' : 'Disconnect';   // managed → Stop kills the server
 }
 
 function renderSbSetup() {
@@ -6100,7 +6102,7 @@ document.getElementById('sb-connect').addEventListener('click', async () => {
     setTimeout(() => document.getElementById('sb-url').style.borderColor = '', 1500);
     return;
   }
-  sbConfig = { value: url, autoInject: auto, projectDir: dir };
+  sbConfig = { value: url, autoInject: auto, projectDir: dir, managed: false };   // manual URL → not app-managed
   localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
   // Point future sessions at the project dir, then write the memory files there
   ipcRenderer.send('set-project-dir', { dir });
@@ -6111,6 +6113,7 @@ document.getElementById('sb-connect').addEventListener('click', async () => {
 });
 
 document.getElementById('sb-disconnect').addEventListener('click', async () => {
+  if (sbConfig?.managed) ipcRenderer.invoke('storybook-server-stop');   // kill the managed dev server
   await ipcRenderer.invoke('storybook-clear-memory');   // remove the managed block first
   sbConfig = null;
   localStorage.removeItem(LS.storybook);
@@ -6152,14 +6155,45 @@ ipcRenderer.on('storybook-server-status', (_, { state, url, message } = {}) => {
     // main already loaded the live view — mirror the manual Connect tail so the picker + memory are wired up
     document.getElementById('sb-url').value = url;
     const dir = document.getElementById('sb-folder').value.trim();
-    sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir };
+    sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: true };
     localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
     ipcRenderer.send('set-project-dir', { dir });
     ipcRenderer.invoke('storybook-write-memory', { url });
     renderSbConnected();
     updateComponentPickerBtn?.();
   }
+  if (state === 'stopped' && sbConfig?.managed) {   // server died/stopped while connected → back to setup
+    sbConfig = null;
+    localStorage.removeItem(LS.storybook);
+    ipcRenderer.send('storybook-disconnect');
+    renderSbSetup();
+    updateComponentPickerBtn?.();
+  }
 });
+
+// Build a Storybook with the agent — optionally from a Figma file via the Figma MCP
+document.getElementById('sb-build')?.addEventListener('click', () => {
+  const dir   = document.getElementById('sb-folder').value.trim();
+  const figma = document.getElementById('sb-figma-url').value.trim();
+  if (dir) ipcRenderer.send('set-project-dir', { dir });   // run the agent in the chosen folder
+  const base = 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
+  const prompt = figma
+    ? `${base}. Then, using the Figma MCP (Framelink figma-developer-mcp), call get_figma_data on ${figma} and download any assets with download_images, and build components plus matching Storybook stories that faithfully reproduce the design’s layout, spacing, colors, typography, and assets. Organize stories under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`
+    : `${base}, then generate stories for the project’s existing components organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;
+  const ok = routeToActiveSession(prompt);
+  if (sbStatusEl) {
+    sbStatusEl.hidden = false;
+    sbStatusEl.dataset.state = ok ? 'starting' : 'error';
+    sbStatusEl.textContent = ok ? 'Asked the agent to build a Storybook — watch the chat, then click Start when it’s ready.' : 'No active agent session to build with.';
+  }
+});
+
+// Advanced: reveal the manual "connect to a running URL" controls
+document.getElementById('sb-manual-toggle')?.addEventListener('click', () => {
+  const m = document.getElementById('sb-manual');
+  if (m) m.hidden = !m.hidden;
+});
+document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stopPropagation());
 
 // ── Storybook component picker panel (left column) ───────────────
 // Ported from the old separate component-picker window. The renderer already

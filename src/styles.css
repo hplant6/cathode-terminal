@@ -3338,6 +3338,12 @@ button:active { background: var(--btn-active); }
 .sb-status[data-state="starting"] { color: #FF5720; }
 .sb-status[data-state="ready"]    { color: #4ade80; }
 .sb-status[data-state="error"]    { color: #f44747; }
+/* "no Storybook yet?" divider + build path + collapsible manual-URL section */
+.sb-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+.sb-divider::before, .sb-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.sb-link-btn { margin-top: 8px; background: none; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 4px; text-decoration: underline; }
+.sb-link-btn:hover { color: var(--text); }
+#sb-manual { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 
 #sb-connected { display: none; flex-direction: column; padding: 20px; gap: 16px; }
 .sb-conn-header {
