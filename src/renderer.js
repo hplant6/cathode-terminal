@@ -4201,41 +4201,29 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   const listEl    = document.getElementById('a11y-list');
   const barCount  = document.getElementById('a11y-count');
   const toggleAll = document.getElementById('a11y-toggle-all');
+  const instrEl   = document.getElementById('a11y-instructions');
   const sendBtn   = document.getElementById('a11y-send');
   const cancelBtn = document.getElementById('a11y-cancel');
 
-  const ORDER  = ['contrast', 'alt', 'label', 'name'];
-  const COLORS = { contrast: '#f59e0b', alt: '#ef4444', label: '#ef4444', name: '#ef4444' };
   function descFor(cat, need) {
-    if (cat === 'contrast') return `Text and background fall below the WCAG AA contrast minimum of ${need}:1. Adjust the colors below until it passes.`;
+    if (cat === 'contrast') return `Text and background fall below the WCAG AA contrast minimum of ${need}:1.`;
     if (cat === 'alt')   return 'This image has no alt attribute, so screen readers cannot describe it. Add concise alt text — or empty alt if it is purely decorative.';
-    if (cat === 'label') return 'This control has no accessible name (no label, aria-label, or title), so assistive tech cannot tell users what it is for.';
+    if (cat === 'label') return 'This control has no accessible name (no label, aria-label, or title), so assistive tech users cannot tell users what it is for.';
     if (cat === 'name')  return 'This button or link has no text or accessible name, so screen readers announce it with nothing to describe it.';
     return '';
   }
   function placeholderFor(cat) {
-    if (cat === 'alt')      return 'What does this image show?';
-    if (cat === 'label')    return 'What is this control for?';
-    if (cat === 'name')     return 'What should this control say?';
-    if (cat === 'contrast') return 'Any notes on the color fix?';
-    return 'Instructions';
+    if (cat === 'alt')   return 'Describe what this image shows';
+    if (cat === 'label') return 'Describe what this control is for';
+    if (cat === 'name')  return 'Describe what this control should say';
+    return 'Add a note for this fix';
   }
-  // WCAG contrast (local — avoids round-tripping to the page on every edit).
-  function hexToRgb(h) {
-    h = (h || '').replace('#', '');
-    if (h.length === 3) h = h.split('').map(c => c + c).join('');
-    const n = parseInt(h, 16);
-    return (h.length === 6 && !isNaN(n)) ? { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 } : null;
-  }
-  function relLum({ r, g, b }) {
-    const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-  }
-  function contrast(h1, h2) {
-    const a = hexToRgb(h1), b = hexToRgb(h2);
-    if (!a || !b) return null;
-    const L1 = relLum(a), L2 = relLum(b);
-    return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+  // "input[type=text]" → "INPUT TYPE [TEXT]"
+  function formatDetail(detail) {
+    if (!detail) return '';
+    const m = /^([a-z0-9]+)(?:\[type=([^\]]+)\])?/i.exec(detail);
+    if (!m) return detail.toUpperCase();
+    return m[1].toUpperCase() + (m[2] ? ` TYPE [${m[2].toUpperCase()}]` : '');
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
@@ -4245,92 +4233,36 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     const n = issues.filter(i => state[i.idx].checked).length;
     barCount.textContent = `${issues.length} issue${issues.length === 1 ? '' : 's'} found`;
     sendBtn.textContent = n ? `Send ${n}` : 'Send';
-    sendBtn.disabled = n === 0;
-    toggleAll.textContent = n === issues.length && n > 0 ? 'Deselect all' : 'Select all';
+    toggleAll.textContent = n > 0 ? 'uncheck all' : 'check all';
   }
-  function updateRatio(iss) {
-    const st = state[iss.idx];
-    if (!st.ratioEl) return;
-    const cr = contrast(st.text, st.bg);
-    if (cr == null) { st.ratioEl.textContent = ''; return; }
-    const pass = cr >= iss.need;
-    st.ratioEl.textContent = `${cr.toFixed(2)}:1 — ${pass ? 'Passes AA' : 'Fails AA'}`;
-    st.ratioEl.style.color = pass ? '#4ade80' : '#f59e0b';
-  }
-  function colorEditor(iss, which, initial) {
-    const row = el('div', 'a11y-color-row');
-    row.append(el('span', 'a11y-color-label', which === 'text' ? 'Text' : 'Background'));
-    const sw = el('label', 'a11y-color-sw'); sw.style.background = initial;
-    const pick = el('input', 'a11y-color-pick'); pick.type = 'color'; pick.value = initial.toLowerCase();
-    sw.appendChild(pick);
-    const hex = el('input', 'a11y-color-hex'); hex.type = 'text'; hex.value = initial; hex.spellcheck = false;
-    row.append(sw, hex);
-    function apply(v) {
-      sw.style.background = v;
-      state[iss.idx][which] = v.toUpperCase();
-      ipcRenderer.send('a11y-set-color', { idx: iss.idx, which, hex: v });
-      updateRatio(iss);
-    }
-    pick.addEventListener('click', e => e.stopPropagation());
-    pick.addEventListener('input', e => { e.stopPropagation(); hex.value = pick.value.toUpperCase(); apply(pick.value); });
-    hex.addEventListener('click', e => e.stopPropagation());
-    hex.addEventListener('input', e => {
-      e.stopPropagation();
-      let v = hex.value.trim();
-      if (/^#?[0-9a-fA-F]{6}$/.test(v)) { if (v[0] !== '#') v = '#' + v; pick.value = v.toLowerCase(); apply(v); }
-    });
-    return row;
-  }
-  function buildIssue(iss) {
+  function buildIssue(iss, n) {
     const wrap = el('div', 'a11y-issue');
     const head = el('div', 'a11y-head');
-    const cb = el('input', 'a11y-cb'); cb.type = 'checkbox'; cb.checked = state[iss.idx].checked;
-    cb.addEventListener('click', e => e.stopPropagation());
-    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; updateCount(); });
-    const num = el('span', 'a11y-num', String(iss.idx + 1)); num.style.background = COLORS[iss.cat];
+    head.append(el('span', 'a11y-num', String(n)));
     const mid = el('div', 'a11y-mid');
-    const row1 = el('div', 'a11y-row1');
-    row1.append(el('span', 'a11y-detail', iss.detail || iss.label));
-    const badge = el('span', 'a11y-badge', iss.badge);
-    badge.style.color = COLORS[iss.cat]; badge.style.background = COLORS[iss.cat] + '1f'; badge.style.border = '1px solid ' + COLORS[iss.cat] + '4d';
-    row1.append(badge);
-    const selRow = el('div', 'a11y-sel', iss.selector); selRow.title = iss.selector;
-    mid.append(row1, selRow);
-    const chev = el('span', 'a11y-chev'); chev.innerHTML = '<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><polyline points="3,1.5 6.5,5 3,8.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    head.append(cb, num, mid, chev);
-
-    const body = el('div', 'a11y-body'); body.hidden = true;
-    body.append(el('div', 'a11y-desc', descFor(iss.cat, iss.need)));
-    if (iss.cat === 'contrast') {
-      body.append(colorEditor(iss, 'text', iss.fgHex), colorEditor(iss, 'bg', iss.bgHex));
-      const ratio = el('div', 'a11y-ratio'); state[iss.idx].ratioEl = ratio; body.append(ratio); updateRatio(iss);
-    }
-    const note = el('textarea', 'a11y-note'); note.rows = 2; note.placeholder = placeholderFor(iss.cat);
-    note.addEventListener('click', e => e.stopPropagation());
+    mid.append(el('span', 'a11y-detail', formatDetail(iss.detail)));
+    if (iss.badge) mid.append(el('span', 'a11y-badge', iss.badge));
+    head.append(mid);
+    const fix = el('label', 'a11y-fix');
+    fix.append(el('span', 'a11y-fix-label', 'Fix Issue'));
+    const cb = el('input', 'a11y-cb'); cb.type = 'checkbox'; cb.checked = state[iss.idx].checked;
+    fix.append(cb);
+    head.append(fix);
+    wrap.append(head);
+    wrap.append(el('div', 'a11y-desc', descFor(iss.cat, iss.need)));   // explanation always shown
+    const note = el('textarea', 'a11y-note'); note.rows = 1; note.placeholder = placeholderFor(iss.cat);
+    note.value = state[iss.idx].instruction || '';
+    note.hidden = !cb.checked;   // input only when "Fix Issue" is checked
     note.addEventListener('input', () => { state[iss.idx].instruction = note.value; });
-    body.append(note);
-
-    head.addEventListener('click', (e) => {
-      if (e.target === cb) return;
-      const open = body.hidden;
-      body.hidden = !open;
-      chev.classList.toggle('open', open);
-      if (open) ipcRenderer.send('a11y-flash', { idx: iss.idx });
-    });
-    wrap.append(head, body);
+    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; note.hidden = !cb.checked; updateCount(); });
+    head.addEventListener('mouseenter', () => ipcRenderer.send('a11y-flash', { idx: iss.idx }));
+    wrap.append(note);
     return wrap;
   }
-
   function render() {
     listEl.innerHTML = '';
-    if (!issues.length) { listEl.appendChild(el('div', 'a11y-empty', 'No contrast or a11y issues found.')); return; }
-    const byCat = {};
-    issues.forEach(i => { (byCat[i.cat] = byCat[i.cat] || []).push(i); });
-    ORDER.forEach(cat => {
-      const list = byCat[cat]; if (!list) return;
-      listEl.appendChild(el('div', 'a11y-group-title', `${list[0].label} (${list.length})`));
-      list.forEach(iss => listEl.appendChild(buildIssue(iss)));
-    });
+    if (!issues.length) { listEl.appendChild(el('div', 'a11y-empty', 'No accessibility issues found.')); return; }
+    issues.forEach((iss, i) => listEl.appendChild(buildIssue(iss, i + 1)));
   }
 
   function open(data) {
@@ -4338,33 +4270,31 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     issues = data.issues || [];
     url = data.url || '';
     state = {};
-    issues.forEach(i => { state[i.idx] = { checked: true, instruction: '', text: i.fgHex, bg: i.bgHex }; });
+    issues.forEach(i => { state[i.idx] = { checked: false, instruction: '' }; });   // all unchecked by default
+    if (instrEl) instrEl.value = '';
     render();
     updateCount();
     panel.hidden = false;
   }
-  function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; }
+  function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; if (instrEl) instrEl.value = ''; }
   function send() {
-    const out = issues.filter(i => state[i.idx].checked).map(i => {
-      const st = state[i.idx];
-      const o = { category: i.label, selector: i.selector, detail: i.detail, instruction: (st.instruction || '').trim(), url };
-      if (i.cat === 'contrast') { o.fromText = i.fgHex; o.fromBg = i.bgHex; o.toText = (st.text || i.fgHex).toUpperCase(); o.toBg = (st.bg || i.bgHex).toUpperCase(); }
-      return o;
-    });
-    ipcRenderer.send('a11y-send', { issues: out });
+    const out = issues.filter(i => state[i.idx].checked).map(i => ({
+      category: i.label, selector: i.selector, detail: i.detail, instruction: (state[i.idx].instruction || '').trim(), url,
+    }));
+    ipcRenderer.send('a11y-send', { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
     close();
   }
   function cancel() { ipcRenderer.send('a11y-cancel'); close(); }
 
   toggleAll.addEventListener('click', () => {
-    const allOn = issues.every(i => state[i.idx].checked);
-    const next = !allOn;
+    const next = !issues.some(i => state[i.idx].checked);   // any checked → uncheck all; none → check all
     issues.forEach(i => { state[i.idx].checked = next; });
-    listEl.querySelectorAll('.a11y-cb').forEach(cb => { cb.checked = next; });
+    render();
     updateCount();
   });
-  sendBtn.addEventListener('click', () => { if (!sendBtn.disabled) send(); });
+  sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
+  instrEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   document.addEventListener('keydown', (e) => {
     if (!panel.hidden && e.key === 'Escape' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)) { e.preventDefault(); cancel(); }
   });
@@ -4379,23 +4309,97 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   const panel     = document.getElementById('screenshot-panel');
   if (!panel) return;
   const img       = document.getElementById('ss-preview-img');
+  const canvas    = document.getElementById('ss-draw-canvas');
+  const markerBtn = document.getElementById('ss-marker-toggle');
+  const controls  = document.getElementById('ss-marker-controls');
+  const iroWrap   = document.getElementById('ss-iro');
+  const swatch    = document.getElementById('ss-swatch');
+  const sizeIn    = document.getElementById('ss-size');
+  const clearBtn  = document.getElementById('ss-clear');
   const instr     = document.getElementById('ss-instructions');
   const sendBtn   = document.getElementById('ss-send');
   const cancelBtn = document.getElementById('ss-cancel');
+  const newBtn    = document.getElementById('ss-new');
+  const ctx = canvas.getContext('2d');
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
+  let markerMode = false, drawing = false, color = '#ff3b30', lineWidth = 4, lastX = 0, lastY = 0, hasDrawing = false, ssIro = null;
+
+  function fitCanvas() {
+    // Size the canvas to the *displayed* image (× dpr) so strokes are crisp even
+    // when a small capture is shown blown-up to the panel width.
+    const dpr = window.devicePixelRatio || 1;
+    const cw  = (canvas.parentElement && canvas.parentElement.clientWidth) || img.naturalWidth || 1;
+    const ar  = (img.naturalWidth && img.naturalHeight) ? img.naturalHeight / img.naturalWidth : 1;
+    canvas.width  = Math.max(1, Math.round(cw * dpr));
+    canvas.height = Math.max(1, Math.round(cw * ar * dpr));
+  }
+  function toCanvas(e) { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }; }
+  function onDown(e) {
+    if (!markerMode) return;
+    drawing = true; hasDrawing = true;
+    const p = toCanvas(e); lastX = p.x; lastY = p.y;
+    ctx.beginPath(); ctx.arc(lastX, lastY, lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+  }
+  function onMove(e) {
+    if (!drawing) return;
+    const p = toCanvas(e);
+    ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
+    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke();
+    lastX = p.x; lastY = p.y;
+  }
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', () => { drawing = false; });
+
+  function setSwatchSize(size) { const d = Math.round(6 + (size / 20) * 24); swatch.style.width = d + 'px'; swatch.style.height = d + 'px'; }
+  function buildIro() {
+    if (!window.iro || ssIro || !iroWrap) return;
+    try {
+      ssIro = new iro.ColorPicker(iroWrap, { width: 90, color, layout: [{ component: iro.ui.Wheel }] });
+      ssIro.on('color:change', (c) => { color = c.hexString; swatch.style.background = color; });
+    } catch (_) {}
+  }
+  function setMarkerMode(on) {
+    markerMode = on;
+    controls.hidden = !on;
+    markerBtn.classList.toggle('active', on);
+    canvas.style.pointerEvents = on ? 'auto' : 'none';
+    if (on) buildIro();
+  }
+  markerBtn.addEventListener('click', () => setMarkerMode(!markerMode));
+  sizeIn.addEventListener('input', () => { lineWidth = +sizeIn.value; setSwatchSize(lineWidth); });
+  clearBtn.addEventListener('click', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); hasDrawing = false; });
+
+  function composite() {
+    const off = document.createElement('canvas');
+    off.width = canvas.width; off.height = canvas.height;
+    const octx = off.getContext('2d');
+    octx.drawImage(img, 0, 0, off.width, off.height);
+    octx.drawImage(canvas, 0, 0);
+    return off.toDataURL('image/png');
+  }
   function open(data) {
     clearPickMode();
+    img.onload = () => { fitCanvas(); ctx.clearRect(0, 0, canvas.width, canvas.height); };
     img.src = data.dataUrl || '';
     instr.value = '';
+    color = '#ff3b30'; lineWidth = 4; hasDrawing = false;
+    sizeIn.value = 4; setSwatchSize(4); swatch.style.background = color;
+    setMarkerMode(false);
     panel.hidden = false;
     setTimeout(() => instr.focus(), 0);
   }
-  function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; }
-  function send() { ipcRenderer.send('screenshot-panel-send', { instruction: instr.value.trim() }); close(); }
+  function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; ctx.clearRect(0, 0, canvas.width, canvas.height); setMarkerMode(false); }
+  function send() {
+    ipcRenderer.send('screenshot-panel-send', { instruction: instr.value.trim(), compositeDataUrl: hasDrawing ? composite() : null });
+    close();
+  }
   function cancel() { ipcRenderer.send('screenshot-panel-cancel'); close(); }
 
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
+  newBtn?.addEventListener('click', () => { pickMode = 'screenshot'; ipcRenderer.send('pick-screenshot'); });
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   document.addEventListener('keydown', (e) => {
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
@@ -4868,19 +4872,40 @@ let openDrawPanel = null;
 (function initDrawPanel() {
   const panel     = document.getElementById('draw-panel');
   if (!panel) return;
-  const img       = document.getElementById('draw-preview-img');
+  const swatch    = document.getElementById('draw-swatch');
+  const iroWrap   = document.getElementById('draw-iro');
+  const sizeIn    = document.getElementById('draw-size');
+  const clearBtn  = document.getElementById('draw-clear');
   const instr     = document.getElementById('draw-instructions');
   const sendBtn   = document.getElementById('draw-send');
   const cancelBtn = document.getElementById('draw-cancel');
-  let compositeDataUrl = '';
+  let drawIro = null;
 
-  function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; compositeDataUrl = ''; }
-  function send() {
-    ipcRenderer.send('draw-composite-done', { compositeDataUrl, instructions: instr.value.trim() });
-    close();
+  // Inline circular color wheel (iro) — wheel only, half size (no hex/sliders).
+  function buildIro(color) {
+    if (!window.iro || drawIro || !iroWrap) return;
+    try {
+      drawIro = new iro.ColorPicker(iroWrap, { width: 90, color: color || '#ff3b30', layout: [{ component: iro.ui.Wheel }] });
+      drawIro.on('color:change', (c) => { swatch.style.background = c.hexString; ipcRenderer.send('marker-set-color', c.hexString); });
+    } catch (_) {}
   }
-  function cancel() { close(); }   // nothing persisted until Send, so just dismiss
-
+  // The swatch is a live preview of the brush — its diameter tracks the size.
+  function setSwatchSize(size) { if (swatch) { const d = Math.round(6 + (size / 20) * 24); swatch.style.width = d + 'px'; swatch.style.height = d + 'px'; } }
+  function open() {
+    clearPickMode();
+    instr.value = '';
+    if (swatch) swatch.style.background = '#ff3b30';
+    if (sizeIn) sizeIn.value = 4;
+    setSwatchSize(4);
+    panel.hidden = false;
+    buildIro('#ff3b30');                                            // build once the panel is visible
+    if (drawIro) { try { drawIro.color.set('#ff3b30'); } catch (_) {} }
+  }
+  function close() { panel.hidden = true; instr.value = ''; }
+  function send() { ipcRenderer.send('marker-send', { instructions: instr.value.trim() }); close(); }   // main grabs the marker + composites
+  function cancel() { ipcRenderer.send('marker-cancel'); close(); }
+  sizeIn?.addEventListener('input', () => { setSwatchSize(+sizeIn.value); ipcRenderer.send('marker-set-size', +sizeIn.value); });
+  clearBtn?.addEventListener('click', () => ipcRenderer.send('marker-clear'));
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
@@ -4888,17 +4913,10 @@ let openDrawPanel = null;
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
   });
 
-  openDrawPanel = function(dataUrl) {
-    clearPickMode();
-    compositeDataUrl = dataUrl;
-    img.src = dataUrl;
-    instr.value = '';
-    panel.hidden = false;
-    setTimeout(() => instr.focus(), 0);
-  };
+  ipcRenderer.on('draw-panel-open', () => open());
 })();
 
-ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl }) => {
+ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instructions = '' }) => {
   const offscreen = document.createElement('canvas');
   const img1 = new Image(), img2 = new Image();
   img1.src = 'data:image/png;base64,' + pageB64;
@@ -4912,8 +4930,8 @@ ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl }) => {
   const ctx = offscreen.getContext('2d');
   ctx.drawImage(img1, 0, 0);
   ctx.drawImage(img2, 0, 0);
-  // Preview + instruction now live in the left-column panel.
-  if (openDrawPanel) openDrawPanel(offscreen.toDataURL('image/png'));
+  // Brush controls + instruction live in the panel; composite + send straight through.
+  ipcRenderer.send('draw-composite-done', { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────
@@ -6117,8 +6135,10 @@ let openComponentPanel = null;
   const instr        = document.getElementById('comp-instructions');
   const insertBtn    = document.getElementById('comp-insert');
   const cancelBtn    = document.getElementById('comp-cancel');
+  const selectNewBtn = document.getElementById('comp-panel-new');
+  const viewBtns     = panel.querySelectorAll('.comp-view-btn');
 
-  let sbUrl = '', allStories = [], target = null, selected = null, openDrawer = null;
+  let sbUrl = '', allStories = [], target = null, selected = null, view = 'row', io = null;
 
   function nodeGet(url) {
     return new Promise((resolve, reject) => {
@@ -6128,63 +6148,91 @@ let openComponentPanel = null;
   }
   function targetSig(t) { return '<' + t.tag + (t.id ? '#' + t.id : '') + ((t.classes && t.classes[0]) ? '.' + t.classes[0] : '') + '>'; }
 
-  function chooseStory(story, drawerEl) {
-    selected = story;
-    listEl.querySelectorAll('.comp-item').forEach(r => r.classList.remove('selected'));
-    drawerEl.classList.add('selected');
-    insertBtn.disabled = false;
-  }
-  function collapseOpen() {
-    if (!openDrawer) return;
-    openDrawer.el.classList.remove('open');
-    const c = openDrawer.el.querySelector('.comp-caret'); if (c) c.classList.remove('open');
-    openDrawer.body.innerHTML = '';   // free the iframe
-    openDrawer.body.hidden = true;
-    openDrawer = null;
-  }
-  function expand(story, drawerEl, body, caret) {
-    collapseOpen();   // accordion — one preview at a time
-    body.hidden = false;
-    body.innerHTML = '';
-    const cap = document.createElement('div'); cap.className = 'comp-preview-cap'; cap.textContent = story.title + '  /  ' + story.name;
+  // Lazy-load a story preview iframe into a card body.
+  function loadPreview(body, story) {
+    if (body.dataset.loaded) return;
+    body.dataset.loaded = '1';
     const frame = document.createElement('iframe'); frame.className = 'comp-preview-frame';
-    const load = document.createElement('div'); load.className = 'comp-preview-loading'; load.textContent = 'Loading preview…';
-    frame.addEventListener('load', () => { load.style.display = 'none'; });
     frame.src = `${sbUrl}/iframe.html?id=${story.id}&viewMode=story`;
-    body.append(cap, frame, load);
-    drawerEl.classList.add('open');
-    if (caret) caret.classList.add('open');
-    openDrawer = { el: drawerEl, body };
+    // Thin thumb-only scrollbars inside the preview (best-effort — only works for
+    // a same-origin Storybook; cross-origin frames silently block this).
+    frame.addEventListener('load', () => {
+      try {
+        const d = frame.contentDocument; if (!d) return;
+        const st = d.createElement('style');
+        st.textContent = '::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}::-webkit-scrollbar-button{display:none;width:0;height:0}::-webkit-scrollbar-thumb{background:#46434D;border-radius:4px}';
+        (d.head || d.documentElement).appendChild(st);
+      } catch (_) {}
+    });
+    body.appendChild(frame);
   }
+  function gridObserver() {
+    if (io) return io;
+    io = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { loadPreview(e.target, e.target._story); io.unobserve(e.target); } });
+    }, { root: listEl, rootMargin: '300px' });
+    return io;
+  }
+  // Storybook titles are "Group / Component" — show only the component segment.
+  const shortTitle = s => (s.title || '').split('/').pop().trim() || s.title;
+  function selectStory(story, card) {
+    selected = story;
+    insertBtn.disabled = false;
+    listEl.querySelectorAll('.comp-item').forEach(c => c.classList.toggle('selected', c === card));
+    const r = card.querySelector('.comp-radio'); if (r) r.checked = true;
+  }
+  function toggleExpand(card, body, story, caret) {   // ROW: chevron expands the preview (accordion)
+    const open = body.hidden;
+    listEl.querySelectorAll('.comp-item-body').forEach(b => { b.hidden = true; });
+    listEl.querySelectorAll('.comp-caret').forEach(c => c.classList.remove('open'));
+    if (open) { body.hidden = false; caret.classList.add('open'); loadPreview(body, story); }
+  }
+  const titleSpans = story => [
+    Object.assign(document.createElement('span'), { className: 'comp-item-title', textContent: shortTitle(story) }),
+    Object.assign(document.createElement('span'), { className: 'comp-item-sep', textContent: '|' }),
+    Object.assign(document.createElement('span'), { className: 'comp-item-name', textContent: story.name }),
+  ];
   function renderList(query) {
-    openDrawer = null;
     const q = (query || '').toLowerCase();
-    const filtered = q ? allStories.filter(s => s.title.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)) : allStories;
+    const filtered = q ? allStories.filter(s => shortTitle(s).toLowerCase().includes(q) || s.name.toLowerCase().includes(q)) : allStories;
+    listEl.className = view === 'grid' ? 'comp-grid' : 'comp-row';
     if (!filtered.length) { listEl.innerHTML = '<div class="comp-loading">No components match.</div>'; return; }
     listEl.innerHTML = '';
+    const obs = view === 'grid' ? gridObserver() : null;
     filtered.slice(0, 200).forEach(story => {
-      const drawer = document.createElement('div');
-      drawer.className = 'comp-item' + (selected && selected.id === story.id ? ' selected' : '');
+      const isSel = selected && selected.id === story.id;
+      const card = document.createElement('div'); card.className = 'comp-item' + (isSel ? ' selected' : '');
       const head = document.createElement('div'); head.className = 'comp-item-head';
-      const caret = document.createElement('span'); caret.className = 'comp-caret'; caret.textContent = '▶';
-      const main = document.createElement('div'); main.className = 'comp-item-main';
-      const t = document.createElement('span'); t.className = 'comp-item-title'; t.textContent = story.title;
-      const n = document.createElement('span'); n.className = 'comp-item-name'; n.textContent = story.name;
-      main.append(t, n);
-      head.append(caret, main);
-      const body = document.createElement('div'); body.className = 'comp-item-body'; body.hidden = true;
-      drawer.append(head, body);
-      head.addEventListener('click', () => {
-        chooseStory(story, drawer);
-        if (drawer.classList.contains('open')) collapseOpen();
-        else expand(story, drawer, body, caret);
-      });
-      listEl.appendChild(drawer);
+      const body = document.createElement('div'); body.className = 'comp-item-body'; body._story = story;
+      if (view === 'grid') {
+        head.append(...titleSpans(story), Object.assign(document.createElement('span'), { className: 'comp-item-check' }));
+        card.append(head, body);
+        card.addEventListener('click', () => selectStory(story, card));
+        body.hidden = false; obs.observe(body);
+      } else {
+        const radio = document.createElement('input'); radio.type = 'radio'; radio.className = 'comp-radio'; radio.name = 'comp-sel'; radio.checked = isSel;
+        radio.addEventListener('click', (e) => { e.stopPropagation(); selectStory(story, card); });
+        const caret = Object.assign(document.createElement('span'), { className: 'comp-caret' });
+        head.append(radio, ...titleSpans(story), caret);
+        card.append(head, body);
+        head.addEventListener('click', (e) => { if (e.target === radio) return; toggleExpand(card, body, story, caret); });
+        body.hidden = true;
+      }
+      listEl.appendChild(card);
     });
   }
+  function setView(v) {
+    if (view === v) return;
+    view = v;
+    if (io) { io.disconnect(); io = null; }
+    viewBtns.forEach(b => b.classList.toggle('active', b.dataset.view === v));
+    renderList(searchIn.value);
+  }
 
+  viewBtns.forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  selectNewBtn.addEventListener('click', () => { pickMode = 'component'; ipcRenderer.send('pick-component'); });
   searchIn.addEventListener('input', () => renderList(searchIn.value));
-  searchIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = listEl.querySelector('.comp-item-head'); if (first) first.click(); } });
+  searchIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = listEl.querySelector('.comp-item'); if (first) first.click(); } });
   locLink.addEventListener('mouseenter', () => { if (target && target.selector) ipcRenderer.send('cp-highlight-target', { selector: target.selector }); });
   locLink.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
 
@@ -6211,7 +6259,7 @@ let openComponentPanel = null;
   }
   function close() {
     ipcRenderer.send('cp-clear-target-highlight');
-    collapseOpen();
+    if (io) { io.disconnect(); io = null; }
     panel.hidden = true;
     listEl.innerHTML = ''; instr.value = ''; searchIn.value = '';
     selected = null; allStories = []; target = null;
@@ -6227,7 +6275,7 @@ let openComponentPanel = null;
   openComponentPanel = async function(tgt, url) {
     clearPickMode();
     sbUrl = (url || '').replace(/\/$/, '');
-    target = tgt; selected = null; openDrawer = null;
+    target = tgt; selected = null;
     insertBtn.disabled = true;
     instr.value = ''; searchIn.value = '';
     const sig = targetSig(tgt);

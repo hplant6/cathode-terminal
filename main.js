@@ -2440,11 +2440,14 @@ ipcMain.on('pick-screenshot', async () => {
 });
 
 let pendingScreenshot = null;   // { filepath }
-ipcMain.on('screenshot-panel-send', (_, { instruction = '' } = {}) => {
+ipcMain.on('screenshot-panel-send', (_, { instruction = '', compositeDataUrl = null } = {}) => {
   const p = pendingScreenshot;
   pendingScreenshot = null;
   uiSend('pick-cancelled');
   if (!p) return;
+  if (compositeDataUrl) {   // marker drawing → overwrite the saved PNG with the annotated composite
+    try { fs.writeFileSync(p.filepath, Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')); } catch (_) {}
+  }
   const instr = (instruction || '').trim();
   uiSend('pick-send-to-session', `[Screenshot: ${p.filepath}]${instr ? '\n\n' + instr : ''}`);
 });
@@ -2456,35 +2459,47 @@ ipcMain.on('screenshot-panel-cancel', () => {
 });
 
 // ── IPC: draw tool ────────────────────────────────────────────────
+// Set up the persistent marker layer, then open the in-app brush panel.
 ipcMain.on('pick-draw', async () => {
   const view = getActivePickView();
   if (!view) { uiSend('pick-cancelled'); return; }
   try {
-    const result = await view.webContents.executeJavaScript(getDrawScript());
+    await view.webContents.executeJavaScript(getDrawScript());
+    uiSend('draw-panel-open');
+  } catch (err) {
+    console.error('Draw setup error:', err);
     uiSend('pick-cancelled');
-    if (!result) return;
+  }
+});
+function markerCall(method, arg) {
+  const view = getActivePickView();
+  if (!view || view.webContents.isDestroyed()) return;
+  const a = arg === undefined ? '' : JSON.stringify(arg);
+  view.webContents.executeJavaScript(`window.__cathodeMarker&&window.__cathodeMarker.${method}(${a})`).catch(() => {});
+}
+ipcMain.on('marker-set-color', (_, c) => markerCall('setColor', c));
+ipcMain.on('marker-set-size',  (_, n) => markerCall('setSize', n));
+ipcMain.on('marker-clear', () => markerCall('clear'));
+ipcMain.on('marker-cancel', () => markerCall('teardown'));
 
-    const { canvasDataUrl } = result;
+// Send: grab the marker layer + a page screenshot, hand to the renderer to
+// composite, then tear the marker down.
+ipcMain.on('marker-send', async (_, { instructions = '' } = {}) => {
+  const view = getActivePickView();
+  if (!view) { uiSend('pick-cancelled'); return; }
+  try {
+    const canvasDataUrl = await view.webContents.executeJavaScript('window.__cathodeMarker&&window.__cathodeMarker.composite()');
     const pageImage = await view.webContents.capturePage();
     const pageB64   = pageImage.toPNG().toString('base64');
-    uiSend('draw-composite', { pageB64, canvasDataUrl });   // panel adds the instruction
+    markerCall('teardown');
+    uiSend('draw-composite', { pageB64, canvasDataUrl, instructions });
   } catch (err) {
-    console.error('Draw tool error:', err);
+    console.error('Marker send error:', err);
     uiSend('pick-cancelled');
   }
 });
 
-ipcMain.on('draw-cancel', () => {
-  const view = getActivePickView();
-  if (view) {
-    view.webContents.executeJavaScript(`
-      (function(){
-        var el = document.getElementById('__cathode_draw_canvas__');
-        if (el) el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      })()
-    `).catch(() => {});
-  }
-});
+ipcMain.on('draw-cancel', () => markerCall('teardown'));
 
 ipcMain.on('pick-cancel', () => {
   const view = getActivePickView();
@@ -2678,11 +2693,11 @@ ipcMain.on('a11y-set-color', (_, { idx, which, hex } = {}) => {
 ipcMain.on('a11y-flash', (_, { idx } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.flash(${Number(idx)})`);
 });
-ipcMain.on('a11y-send', async (_, { issues = [] } = {}) => {
+ipcMain.on('a11y-send', async (_, { issues = [], instruction = '' } = {}) => {
   if (!pendingA11y) { return; }
   await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
   pendingA11y = null;
-  if (!issues.length) return;
+  if (!issues.length && !instruction.trim()) return;
   const groups = {};
   for (const it of issues) (groups[it.category] = groups[it.category] || []).push(it);
   const url = issues[0] && issues[0].url;
@@ -2700,6 +2715,7 @@ ipcMain.on('a11y-send', async (_, { issues = [] } = {}) => {
       if (it.instruction) lines.push(`    note: ${it.instruction}`);
     }
   }
+  if (instruction.trim()) lines.push('', instruction.trim());
   lines.push('', 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.');
   uiSend('pick-send-to-session', lines.join('\n'));
 });
@@ -2748,7 +2764,7 @@ ipcMain.on('open-component-picker', (_, { target, sbUrl } = {}) => {
 function clearCpHighlight() {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed()) return;
-  view.webContents.executeJavaScript("(function(){var e=document.getElementById('__cathode_cp_hl__');if(e)e.remove();})()").catch(() => {});
+  view.webContents.executeJavaScript("(function(){['__cathode_cp_hl__','__cathode_cp_marker__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});})()").catch(() => {});
 }
 ipcMain.on('cp-highlight-target', (_, { selector } = {}) => {
   const view = getActivePickView();
@@ -2783,6 +2799,7 @@ ipcMain.on('pick-component', async () => {
   try {
     const result = await view.webContents.executeJavaScript(`
       (function() {
+        var oldMk = document.getElementById('__cathode_cp_marker__'); if (oldMk) oldMk.remove();
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY};cursor:${STORYBOOK_CURSOR_CSS};background:transparent;';
         document.body.appendChild(overlay);
@@ -2793,6 +2810,10 @@ ipcMain.on('pick-component', async () => {
           overlay.addEventListener('click', e => {
             overlay.remove();
             document.removeEventListener('keydown', onKey);
+            // leave an orange marker (the storybook cursor icon) at the click point
+            const mk = document.createElement('div'); mk.id = '__cathode_cp_marker__';
+            mk.style.cssText = 'position:fixed;left:' + (e.clientX - 9) + 'px;top:' + (e.clientY - 9) + 'px;width:18px;height:18px;z-index:${Z.OVERLAY};pointer-events:none;background:#FF5720;-webkit-mask:url("data:image/svg+xml;base64,${STORYBOOK_CURSOR_B64}") no-repeat center / contain;mask:url("data:image/svg+xml;base64,${STORYBOOK_CURSOR_B64}") no-repeat center / contain;filter:drop-shadow(0 0 4px rgba(255,87,32,0.6));';
+            document.documentElement.appendChild(mk);
             const el = document.elementFromPoint(e.clientX, e.clientY) || document.body;
             const rect = el.getBoundingClientRect();
             const classes = Array.from(el.classList).slice(0, 5);

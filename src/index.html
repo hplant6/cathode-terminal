@@ -291,23 +291,33 @@
       <div id="component-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div id="comp-panel-head" class="tp-head">
-          <span id="comp-panel-title" class="tp-title">Pick Component</span>
-          <span id="comp-panel-sub" class="tp-sub">Storybook</span>
-        </div>
-        <div id="comp-panel-body">
-          <div class="comp-loc">
-            <span class="comp-loc-label">Selected location</span>
-            <span id="comp-loc-link" class="comp-loc-link" title=""></span>
+          <div class="pp-head-text">
+            <span id="comp-panel-title" class="tp-title">Storybook Tool</span>
+            <span id="comp-panel-sub" class="tp-sub">description goes here</span>
           </div>
-          <input id="comp-search" class="pp-filter" type="text" placeholder="Search components…" autocomplete="off" spellcheck="false" />
-          <div id="comp-list"></div>
+          <button id="comp-panel-new" class="pp-new-sel">New Selection</button>
         </div>
+        <div id="comp-insert-at">
+          <span class="comp-insert-label">Insert at:</span>
+          <span id="comp-loc-link" class="comp-loc-link" title=""></span>
+        </div>
+        <div id="comp-filter-row">
+          <input id="comp-search" class="pp-filter" type="text" placeholder="Filter components" autocomplete="off" spellcheck="false" />
+          <div class="comp-view">
+            <span class="comp-view-label">View</span>
+            <div class="comp-view-seg">
+              <button class="comp-view-btn active" data-view="row">Row</button>
+              <button class="comp-view-btn" data-view="grid">Grid</button>
+            </div>
+          </div>
+        </div>
+        <div id="comp-list" class="comp-row"></div>
         <div id="comp-panel-foot" class="tp-foot">
           <textarea id="comp-instructions" class="tp-textarea" placeholder="Instructions — how to use this component at the target (optional)…" spellcheck="true"></textarea>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="comp-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
-            <button id="comp-insert" class="pp-btn pp-btn-primary" disabled>Insert</button>
+            <button id="comp-insert" class="pp-btn pp-btn-primary" disabled>Send</button>
           </div>
         </div>
         </div>
@@ -377,15 +387,17 @@
       <div id="a11y-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-title">Accessibility</span>
-          <span class="tp-sub">WCAG Contrast &amp; Names</span>
+          <span class="tp-title">WCAG Accessibility Tool</span>
+          <span class="tp-sub">Check for a11y</span>
         </div>
         <div id="a11y-bar">
           <span id="a11y-count"></span>
-          <button id="a11y-toggle-all" class="a11y-link">Deselect all</button>
+          <button id="a11y-toggle-all" class="a11y-link">uncheck all</button>
         </div>
         <div id="a11y-list"></div>
         <div id="a11y-foot" class="tp-foot">
+          <textarea id="a11y-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="a11y-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
             <button id="a11y-send" class="pp-btn pp-btn-primary">Send</button>
@@ -398,11 +410,31 @@
       <div id="screenshot-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-title">Screenshot</span>
-          <span class="tp-sub">Captured Region</span>
+          <div class="pp-head-text">
+            <span class="tp-title">Screenshot Tool</span>
+            <span class="tp-sub">Pass a screenshot to chat</span>
+          </div>
+          <button id="ss-new" class="pp-new-sel">New Screenshot</button>
         </div>
         <div id="ss-panel-body">
-          <div id="ss-preview"><img id="ss-preview-img" alt="Screenshot preview" /></div>
+          <div id="ss-canvas-wrap">
+            <img id="ss-preview-img" alt="Screenshot preview" />
+            <canvas id="ss-draw-canvas"></canvas>
+            <button id="ss-marker-toggle" class="ss-marker-btn" title="Draw on the screenshot">
+              <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.5l3 3-7.5 7.5-3.5 .5 .5-3.5z"/><path d="M10 5l3 3"/></svg>
+            </button>
+          </div>
+          <div id="ss-marker-controls" hidden>
+            <div id="ss-iro" class="dr-wheel"></div>
+            <div class="dr-right">
+              <span class="dr-preview-title">Preview</span>
+              <div class="dr-row">
+                <span class="dr-swatch-wrap"><span id="ss-swatch" class="dr-swatch"></span></span>
+                <input id="ss-size" type="range" class="rz-slider dr-slider" min="1" max="20" value="4" />
+              </div>
+            </div>
+            <button id="ss-clear" class="dr-clear-btn">Clear Marker</button>
+          </div>
         </div>
         <div id="ss-panel-foot" class="tp-foot">
           <textarea id="ss-instructions" class="tp-textarea" placeholder="What should the agent do with this screenshot? (optional)" spellcheck="true"></textarea>
@@ -419,11 +451,23 @@
       <div id="draw-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-title">Draw</span>
-          <span class="tp-sub">Marker Annotation</span>
+          <div class="pp-head-text">
+            <span class="tp-title">Marker Tool</span>
+            <span class="tp-sub">Draw marker annotations on screen</span>
+          </div>
+          <button id="draw-clear" class="pp-new-sel">Clear Marker</button>
         </div>
         <div id="draw-panel-body">
-          <div id="draw-preview"><img id="draw-preview-img" alt="Annotation preview" /></div>
+          <div class="dr-controls">
+            <div id="draw-iro" class="dr-wheel"></div>
+            <div class="dr-right">
+              <span class="dr-preview-title">Preview</span>
+              <div class="dr-row">
+                <span class="dr-swatch-wrap"><span id="draw-swatch" class="dr-swatch"></span></span>
+                <input id="draw-size" type="range" class="rz-slider dr-slider" min="1" max="20" value="4" />
+              </div>
+            </div>
+          </div>
         </div>
         <div id="draw-panel-foot" class="tp-foot">
           <textarea id="draw-instructions" class="tp-textarea" placeholder="Describe the change…" spellcheck="true"></textarea>
