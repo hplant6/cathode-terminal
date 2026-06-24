@@ -6134,6 +6134,33 @@ document.getElementById('sb-url').addEventListener('keydown', e => {
   e.stopPropagation();
 });
 
+// ── Managed Storybook server: Start button + live status (auto-connects when ready) ──
+const sbStartBtn = document.getElementById('sb-start');
+const sbStatusEl = document.getElementById('sb-status');
+sbStartBtn?.addEventListener('click', () => {
+  ipcRenderer.invoke('storybook-server-start', { dir: document.getElementById('sb-folder').value.trim() });
+});
+ipcRenderer.on('storybook-server-status', (_, { state, url, message } = {}) => {
+  if (sbStatusEl) {
+    const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Failed to start', stopped: 'Storybook stopped' };
+    sbStatusEl.textContent = labels[state] || '';
+    sbStatusEl.dataset.state = state || '';
+    sbStatusEl.hidden = !state;
+  }
+  if (sbStartBtn) { sbStartBtn.disabled = state === 'starting'; sbStartBtn.textContent = state === 'starting' ? 'Starting…' : 'Start Storybook'; }
+  if (state === 'ready' && url) {
+    // main already loaded the live view — mirror the manual Connect tail so the picker + memory are wired up
+    document.getElementById('sb-url').value = url;
+    const dir = document.getElementById('sb-folder').value.trim();
+    sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir };
+    localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
+    ipcRenderer.send('set-project-dir', { dir });
+    ipcRenderer.invoke('storybook-write-memory', { url });
+    renderSbConnected();
+    updateComponentPickerBtn?.();
+  }
+});
+
 // ── Storybook component picker panel (left column) ───────────────
 // Ported from the old separate component-picker window. The renderer already
 // has the target + Storybook URL, so it drives the panel directly: fetch

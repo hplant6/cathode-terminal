@@ -751,6 +751,77 @@ ipcMain.on('storybook-disconnect', () => {
   destroyStorybookView();
 });
 
+// ── Managed Storybook dev server ──────────────────────────────────
+// Spawn `storybook dev` for a project dir (or the bundled demo), poll until it
+// answers, then hand the live URL to the existing storybookView + component
+// picker. The child is detached (its own process group) so the whole build
+// tree can be torn down on stop / quit.
+let sbServer = null;   // { proc, port, url, dir }
+
+function sbStatus(state, extra = {}) { uiSend('storybook-server-status', { state, ...extra }); }
+
+function pollStorybookReady(url, tries = 150) {
+  return new Promise((resolve) => {
+    let n = 0;
+    const tick = () => {
+      if (!sbServer) return resolve(false);            // stopped while waiting
+      const req = http.get(url + '/iframe.html', (res) => {
+        res.resume();
+        if (res.statusCode && res.statusCode < 500) return resolve(true);
+        retry();
+      });
+      req.on('error', retry);
+      req.setTimeout(2000, () => req.destroy());
+      function retry() { if (++n >= tries) return resolve(false); setTimeout(tick, 1000); }
+    };
+    tick();
+  });
+}
+
+function stopStorybookServer() {
+  if (!sbServer) return;
+  const proc = sbServer.proc;
+  sbServer = null;
+  try { process.kill(-proc.pid, 'SIGTERM'); } catch (_) { try { proc.kill(); } catch (_) {} }
+}
+
+ipcMain.handle('storybook-server-start', async (_, { dir, port = 6006 } = {}) => {
+  if (sbServer) return { ok: true, url: sbServer.url, already: true };
+  const projectDir = (dir && fs.existsSync(dir)) ? dir : path.join(__dirname, 'storybook-demo');
+  const bin = path.join(projectDir, 'node_modules', '.bin', 'storybook' + (process.platform === 'win32' ? '.cmd' : ''));
+  if (!fs.existsSync(bin)) {
+    sbStatus('error', { message: 'Storybook isn’t installed in ' + projectDir + ' — scaffold it through the agent first.' });
+    return { ok: false, error: 'no-storybook', dir: projectDir };
+  }
+  const url = `http://localhost:${port}`;
+  sbStatus('starting', { url, dir: projectDir });
+  let proc;
+  try {
+    proc = spawn(bin, ['dev', '-p', String(port), '--ci'], {
+      cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, BROWSER: 'none' },
+    });
+  } catch (e) {
+    sbServer = null; sbStatus('error', { message: e.message });
+    return { ok: false, error: e.message };
+  }
+  sbServer = { proc, port, url, dir: projectDir };
+  if (proc.stdout) proc.stdout.on('data', () => {});   // drain pipes so the child never blocks
+  if (proc.stderr) proc.stderr.on('data', () => {});
+  proc.on('exit', (code) => { if (sbServer && sbServer.proc === proc) { sbServer = null; sbStatus('stopped', { code }); } });
+
+  const ready = await pollStorybookReady(url);
+  if (!sbServer) return { ok: false, error: 'stopped' };            // stopped during startup
+  if (!ready) { stopStorybookServer(); sbStatus('error', { message: 'Timed out waiting for Storybook to start.' }); return { ok: false, error: 'timeout' }; }
+  createStorybookView(url);                                          // auto-connect the live view
+  sbStatus('ready', { url, dir: projectDir });
+  return { ok: true, url };
+});
+
+ipcMain.handle('storybook-server-stop', () => { stopStorybookServer(); sbStatus('stopped', {}); return { ok: true }; });
+
+app.on('before-quit', stopStorybookServer);
+
 // ── Storybook agent-memory files ──────────────────────────────────
 // Write a clearly-delimited managed block into each model's memory file
 // (CLAUDE.md / AGENTS.md / GEMINI.md) so every tool natively picks up the
