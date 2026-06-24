@@ -3344,6 +3344,9 @@ button:active { background: var(--btn-active); }
 .sb-link-btn { margin-top: 8px; background: none; border: none; color: var(--text-dim); font-size: 12px; cursor: pointer; padding: 4px; text-decoration: underline; }
 .sb-link-btn:hover { color: var(--text); }
 #sb-manual { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.sb-detect { margin: 2px 0; text-align: center; font: 12px var(--font-mono); }
+.sb-detect[data-state="ok"]      { color: #4ade80; }
+.sb-detect[data-state="missing"] { color: var(--text-dim); }
 
 #sb-connected { display: none; flex-direction: column; padding: 20px; gap: 16px; }
 .sb-conn-header {

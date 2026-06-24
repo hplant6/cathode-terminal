@@ -6072,6 +6072,22 @@ function renderSbConnected() {
 function renderSbSetup() {
   document.getElementById('sb-setup').style.display     = 'flex';
   document.getElementById('sb-connected').style.display = 'none';
+  detectStorybook();
+}
+
+// Step 5: detect whether the chosen folder (or the bundled demo) already has a
+// Storybook, and guide the user toward Start vs Build.
+async function detectStorybook() {
+  const det = document.getElementById('sb-detect');
+  if (!det) return;
+  let r;
+  try { r = await ipcRenderer.invoke('storybook-detect', { dir: document.getElementById('sb-folder').value.trim() }); }
+  catch (_) { det.hidden = true; return; }
+  det.dataset.state = r.installed ? 'ok' : 'missing';
+  det.textContent = r.installed
+    ? (r.isDemo ? 'Bundled demo Storybook ready — click Start.' : 'Storybook detected in this folder — click Start.')
+    : 'No Storybook here yet — build one with your agent below.';
+  det.hidden = false;
 }
 
 function sbNotifyMain() {
@@ -6089,7 +6105,7 @@ if (sbConfig) {
 
 document.getElementById('sb-folder-pick').addEventListener('click', async () => {
   const dir = await ipcRenderer.invoke('show-folder-dialog');
-  if (dir) document.getElementById('sb-folder').value = dir;
+  if (dir) { document.getElementById('sb-folder').value = dir; detectStorybook(); }
 });
 
 document.getElementById('sb-connect').addEventListener('click', async () => {
@@ -6172,11 +6188,15 @@ ipcRenderer.on('storybook-server-status', (_, { state, url, message } = {}) => {
 });
 
 // Build a Storybook with the agent — optionally from a Figma file via the Figma MCP
-document.getElementById('sb-build')?.addEventListener('click', () => {
+document.getElementById('sb-build')?.addEventListener('click', async () => {
   const dir   = document.getElementById('sb-folder').value.trim();
   const figma = document.getElementById('sb-figma-url').value.trim();
   if (dir) ipcRenderer.send('set-project-dir', { dir });   // run the agent in the chosen folder
-  const base = 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
+  let installed = false;
+  try { installed = (await ipcRenderer.invoke('storybook-detect', { dir })).installed; } catch (_) {}
+  const base = installed
+    ? 'Storybook is already set up in this project'
+    : 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
   const prompt = figma
     ? `${base}. Then, using the Figma MCP (Framelink figma-developer-mcp), call get_figma_data on ${figma} and download any assets with download_images, and build components plus matching Storybook stories that faithfully reproduce the design’s layout, spacing, colors, typography, and assets. Organize stories under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`
     : `${base}, then generate stories for the project’s existing components organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;

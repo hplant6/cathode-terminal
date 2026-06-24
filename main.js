@@ -785,14 +785,55 @@ function stopStorybookServer() {
   try { process.kill(-proc.pid, 'SIGTERM'); } catch (_) { try { proc.kill(); } catch (_) {} }
 }
 
+// Resolve the working dir (empty → bundled demo) + detect an installed Storybook.
+function sbResolveDir(dir) { return (dir && fs.existsSync(dir)) ? dir : path.join(__dirname, 'storybook-demo'); }
+function sbBin(dir) { return path.join(dir, 'node_modules', '.bin', 'storybook' + (process.platform === 'win32' ? '.cmd' : '')); }
+function sbHasStorybook(dir) { return fs.existsSync(path.join(dir, '.storybook')) && fs.existsSync(sbBin(dir)); }
+
+// App-owned preview styling — written into the project's OWN .storybook/preview-head.html,
+// the only place that can style the (cross-origin) preview iframe. Idempotent managed block.
+const SB_PV_START = '<!-- cathode:preview:start -->';
+const SB_PV_END   = '<!-- cathode:preview:end -->';
+function previewHeadBlock() {
+  return [
+    SB_PV_START,
+    '<style>',
+    '  /* Cathode Terminal — managed preview styling (thumb-only scrollbars) */',
+    '  ::-webkit-scrollbar { width: 8px; height: 8px; }',
+    '  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }',
+    '  ::-webkit-scrollbar-thumb { background: rgba(140,140,150,0.35); border-radius: 4px; }',
+    '  ::-webkit-scrollbar-thumb:hover { background: rgba(140,140,150,0.55); }',
+    '</style>',
+    SB_PV_END,
+  ].join('\n');
+}
+function ensurePreviewHead(projectDir) {
+  const sbDir = path.join(projectDir, '.storybook');
+  if (!fs.existsSync(sbDir)) return;
+  const fp = path.join(sbDir, 'preview-head.html');
+  let existing = '';
+  try { existing = fs.readFileSync(fp, 'utf8'); } catch (_) {}
+  const s = existing.indexOf(SB_PV_START), e = existing.indexOf(SB_PV_END);
+  let base = (s !== -1 && e !== -1) ? (existing.slice(0, s) + existing.slice(e + SB_PV_END.length)) : existing;
+  base = base.replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+  try { fs.writeFileSync(fp, (base ? base + '\n' : '') + previewHeadBlock() + '\n', 'utf8'); }
+  catch (err) { console.error('[storybook] preview-head write failed', err.message); }
+}
+
+ipcMain.handle('storybook-detect', (_, { dir } = {}) => {
+  const projectDir = sbResolveDir(dir);
+  return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === path.join(__dirname, 'storybook-demo') };
+});
+
 ipcMain.handle('storybook-server-start', async (_, { dir, port = 6006 } = {}) => {
   if (sbServer) return { ok: true, url: sbServer.url, already: true };
-  const projectDir = (dir && fs.existsSync(dir)) ? dir : path.join(__dirname, 'storybook-demo');
-  const bin = path.join(projectDir, 'node_modules', '.bin', 'storybook' + (process.platform === 'win32' ? '.cmd' : ''));
-  if (!fs.existsSync(bin)) {
-    sbStatus('error', { message: 'Storybook isn’t installed in ' + projectDir + ' — scaffold it through the agent first.' });
+  const projectDir = sbResolveDir(dir);
+  if (!sbHasStorybook(projectDir)) {
+    sbStatus('error', { message: 'No Storybook found in ' + projectDir + ' — build one with your agent first.' });
     return { ok: false, error: 'no-storybook', dir: projectDir };
   }
+  ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
+  const bin = sbBin(projectDir);
   const url = `http://localhost:${port}`;
   sbStatus('starting', { url, dir: projectDir });
   let proc;
