@@ -4116,13 +4116,17 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   const propSel   = document.getElementById('ed-prop');
   const oldSw     = document.getElementById('ed-old-sw');
   const oldHex    = document.getElementById('ed-old-hex');
+  const newSw     = document.getElementById('ed-new-sw');
+  const adjustCb  = document.getElementById('ed-adjust');
+  const editor    = document.getElementById('ed-adjust-editor');
+  const newBtn    = document.getElementById('ed-new');
   const iroMount  = document.getElementById('ed-iro');
   const hexInput  = document.getElementById('ed-hex-input');
   const instr     = document.getElementById('ed-instructions');
   const sendBtn   = document.getElementById('ed-send');
   const cancelBtn = document.getElementById('ed-cancel');
 
-  let picker = null, syncing = false, sel = null;
+  let picker = null, syncing = false, sel = null, origHex = '#000000';
 
   function ensureIro(cb) {
     if (window.iro) { cb(); return; }
@@ -4133,15 +4137,15 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   function buildPicker(initial) {
     iroMount.innerHTML = '';
     picker = new iro.ColorPicker(iroMount, {
-      width: 204, color: initial || '#ffffff',
+      width: 120, color: initial || '#ffffff',
       layout: [{ component: iro.ui.Box }, { component: iro.ui.Slider, options: { sliderType: 'hue' } }],
     });
     picker.on('color:change', (color) => { if (syncing) return; onPick(color.hexString); });
   }
   function setPicker(hex) { if (!picker) return; syncing = true; try { picker.color.set(hex); } catch (_) {} syncing = false; }
   function setOld(hex) { const h = (hex || '').toUpperCase(); oldSw.style.background = h; oldHex.textContent = h; }
-  // The picker itself shows the adjusted color; keep the hex field in sync.
-  function setNew(hex) { if (document.activeElement !== hexInput) hexInput.value = (hex || '').toUpperCase(); }
+  // The picker shows the adjusted color; keep the hex field + new swatch in sync.
+  function setNew(hex) { const h = (hex || '').toUpperCase(); if (document.activeElement !== hexInput) hexInput.value = h; if (newSw) newSw.style.background = h; }
   function onPick(hex) { setNew(hex); ipcRenderer.send('eyedropper-set-color', { hex }); }
 
   function open(data) {
@@ -4159,7 +4163,10 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (data.props && data.props[ai]) propSel.value = data.props[ai].prop;
     propSel.disabled = (data.props || []).length <= 1;
     const picked = (data.pickedHex || '#000000').toUpperCase();
+    origHex = picked;
     setOld(picked); setNew(picked);
+    if (adjustCb) adjustCb.checked = false;   // default: not adjusting (editor hidden)
+    if (editor) editor.hidden = true;
     instr.value = '';
     panel.hidden = false;
     ensureIro(() => { if (!window.iro) return; if (!picker) buildPicker(picked); else setPicker(picked); setNew(picked); hexInput.value = picked; });
@@ -4179,6 +4186,13 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     setPicker(hex);   // suppresses iro change → apply manually
     onPick(hex);
   });
+  // Adjust color: reveal the picker + apply the adjusted color; unchecking reverts the page to the original.
+  adjustCb?.addEventListener('change', () => {
+    if (editor) editor.hidden = !adjustCb.checked;
+    if (adjustCb.checked) { onPick(picker ? picker.color.hexString : origHex); }
+    else { ipcRenderer.send('eyedropper-set-color', { hex: origHex }); }
+  });
+  newBtn?.addEventListener('click', () => { pickMode = 'eyedropper'; ipcRenderer.send('pick-eyedropper'); });
   linkEl.addEventListener('mouseenter', () => { if (sel && sel.selector) ipcRenderer.send('cp-highlight-target', { selector: sel.selector }); });
   linkEl.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
   sendBtn.addEventListener('click', send);
@@ -4252,9 +4266,9 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     wrap.append(el('div', 'a11y-desc', descFor(iss.cat, iss.need)));   // explanation always shown
     const note = el('textarea', 'a11y-note'); note.rows = 1; note.placeholder = placeholderFor(iss.cat);
     note.value = state[iss.idx].instruction || '';
-    note.hidden = !cb.checked;   // input only when "Fix Issue" is checked
+    if (cb.checked) note.classList.add('show');   // input slides in only when "Fix Issue" is checked
     note.addEventListener('input', () => { state[iss.idx].instruction = note.value; });
-    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; note.hidden = !cb.checked; updateCount(); });
+    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; note.classList.toggle('show', cb.checked); updateCount(); });
     head.addEventListener('mouseenter', () => ipcRenderer.send('a11y-flash', { idx: iss.idx }));
     wrap.append(note);
     return wrap;

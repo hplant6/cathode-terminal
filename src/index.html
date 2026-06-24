@@ -351,24 +351,36 @@
       <div id="eyedropper-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span id="ed-panel-title" class="tp-title">Eyedropper</span>
-          <span class="tp-sub">Targeted Element</span>
+          <div class="pp-head-text">
+            <span id="ed-panel-title" class="tp-title">Eyedropper</span>
+            <span class="tp-sub">Send a color to chat or request a color change</span>
+          </div>
+          <button id="ed-new" class="pp-new-sel">Select New Color</button>
+        </div>
+        <div id="ed-loc-bar">
+          <span class="ed-loc-label">Color selected at:</span>
+          <span id="ed-el-link" class="ed-loc-link" title=""></span>
         </div>
         <div id="ed-panel-body">
-          <span id="ed-el-link" class="ed-el-link" title=""></span>
-          <div class="ed-field">
-            <span class="ed-field-label">Property</span>
+          <div class="ed-row">
+            <span class="ed-row-label">Property</span>
             <select id="ed-prop"></select>
           </div>
-          <div class="ed-colors">
-            <div class="ed-col">
-              <span class="ed-col-title">Original color</span>
-              <div class="ed-color"><span id="ed-old-sw" class="ed-sw"></span><span id="ed-old-hex" class="ed-hex"></span></div>
+          <div class="ed-row">
+            <span class="ed-row-label">Original color</span>
+            <div class="ed-orig"><span id="ed-old-sw" class="ed-sw"></span><span id="ed-old-hex" class="ed-hex"></span></div>
+          </div>
+          <div class="ed-row ed-row-adjust">
+            <div class="ed-adjust-head">
+              <span class="ed-row-label">Adjust color</span>
+              <input id="ed-adjust" type="checkbox" class="ed-cb" />
             </div>
-            <div class="ed-col ed-col-adjust">
-              <span class="ed-col-title">Adjusted color</span>
+            <div id="ed-adjust-editor" class="ed-adjust-editor" hidden>
+              <div class="ed-adjust-fields">
+                <div class="ed-adjust-fieldrow"><span id="ed-new-sw" class="ed-sw"></span><input id="ed-hex-input" class="ed-hex-input" type="text" spellcheck="false" autocomplete="off" /></div>
+                <select id="ed-format"><option value="hex">HEX</option></select>
+              </div>
               <div id="ed-iro"></div>
-              <input id="ed-hex-input" class="ed-hex-input" type="text" spellcheck="false" autocomplete="off" />
             </div>
           </div>
         </div>

@@ -121,13 +121,13 @@ ${SHARED.selectorHelper('__a11y')}
 
     issues.forEach(function(iss, i){
       var b = document.createElement('div');
-      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid ' + iss.color + ';'
+      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid #FF5720;'
         + 'border-radius:2px;pointer-events:none;transition:background .1s;';
       var badge = document.createElement('div');
       badge.textContent = (i + 1);
-      badge.style.cssText = 'position:absolute;top:-9px;left:-2px;min-width:15px;height:15px;padding:0 3px;'
-        + 'box-sizing:border-box;background:' + iss.color + ';color:#0a0a0a;font:700 10px/15px system-ui,sans-serif;'
-        + 'text-align:center;border-radius:3px;';
+      badge.style.cssText = 'position:absolute;top:-12px;left:-4px;min-width:24px;height:24px;padding:0 5px;'
+        + 'box-sizing:border-box;background:#FF5720;color:#fff;font:700 12px/24px system-ui,sans-serif;'
+        + 'text-align:center;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
       b.appendChild(badge);
       layer.appendChild(b);
       iss.marker = b;
