@@ -139,12 +139,14 @@ function getPickerScript(mode) {
       } else {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       }
-      shape.setAttribute('fill', 'rgba(74,158,255,0.12)');
-      shape.setAttribute('stroke', '#4a9eff');
-      shape.setAttribute('stroke-width', '2');
-      shape.setAttribute('stroke-dasharray', '6,3');
+      shape.setAttribute('fill', 'rgba(255,87,32,0.10)');
+      shape.setAttribute('stroke', '#FF5720');
+      shape.setAttribute('stroke-width', '1.5');
+      shape.setAttribute('stroke-dasharray', '4,3');
       shape.setAttribute('stroke-linejoin', 'round');
-      shape.setAttribute('stroke-linecap', 'round');
+      shape.setAttribute('stroke-linecap', 'butt');
+      shape.style.animation = 'cathode-march-svg 0.6s linear infinite';   /* marching ants */
+      shape.style.filter = 'drop-shadow(0 0 6px rgba(255,87,32,0.5))';     /* orange glow */
       svg.appendChild(shape);
     });
 

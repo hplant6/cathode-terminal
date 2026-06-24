@@ -2355,28 +2355,42 @@ ipcMain.on('extract-panel-highlight', async (_, { active } = {}) => {
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
-ipcMain.on('extract-panel-send', async (_, { sel = [], mediaTypes = [], mediaDest = 'chat', instruction = '' } = {}) => {
+// Per-element extraction: each entry has its own keys/media chosen in its drawer,
+// extracted independently (scoped to that element), then merged into one message.
+ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' } = {}) => {
   const p = pendingExtract;
   pendingExtract = null;
   if (!p) { uiSend('pick-cancelled'); return; }
   const view = p.view;
-  let res = null;
-  const keys = sel.map(s => s.key);
-  try {
-    res = await view.webContents.executeJavaScript(
-      `window.__cathodePanel && window.__cathodePanel.extract(${JSON.stringify(keys)}, ${JSON.stringify(mediaTypes)}, ${JSON.stringify(mediaDest)})`);
-  } catch (e) { console.error('Extract error:', e); }
+  const extracts = [];      // { key, label: "Element — Extractor", analysis, data }
+  let assets = [], anyDownload = false;
+  const mediaTypeSet = new Set();
+  for (const pe of (perElement || [])) {
+    const keys = (pe.sel || []).map(s => s.key);
+    const mediaTypes = pe.mediaTypes || [];
+    if (!keys.length && !mediaTypes.length) continue;
+    let res = null;
+    try {
+      res = await view.webContents.executeJavaScript(
+        `window.__cathodePanel && window.__cathodePanel.extract(${Number(pe.index)}, ${JSON.stringify(keys)}, ${JSON.stringify(mediaTypes)}, ${JSON.stringify(pe.mediaDest || 'chat')})`);
+    } catch (e) { console.error('Extract error:', e); }
+    if (!res) continue;
+    (res.extracts || []).forEach(e => {
+      const meta = (pe.sel || []).find(s => s.key === e.key) || {};
+      extracts.push({ key: e.key, label: `${pe.label || 'Element'} — ${meta.label || e.key}`, analysis: meta.analysis || '', data: e.data });
+    });
+    if (res.media && res.media.assets && res.media.assets.length) {
+      assets = assets.concat(res.media.assets);
+      (res.media.types || []).forEach(t => mediaTypeSet.add(t));
+      if (res.media.dest === 'download') anyDownload = true;
+    }
+  }
   await clearPanelHighlight(view);
   uiSend('pick-cancelled');
-  if (!res) return;
-  const extracts = (res.extracts || []).map(e => {
-    const meta = sel.find(s => s.key === e.key) || {};
-    return { key: e.key, label: meta.label || e.key, analysis: meta.analysis || '', data: e.data };
-  });
-  const media = res.media || null;
-  let mediaSummary = null;
-  if (media && media.dest === 'download' && media.assets && media.assets.length) {
-    mediaSummary = await downloadMediaAssets(media.assets, view.webContents.session);
+  let media = null, mediaSummary = null;
+  if (assets.length) {
+    media = { dest: anyDownload ? 'download' : 'chat', types: [...mediaTypeSet], assets };
+    if (anyDownload) mediaSummary = await downloadMediaAssets(assets, view.webContents.session);
   }
   if (!extracts.length && !media && !instruction.trim()) return;
   const pageUrl = view.webContents.getURL();

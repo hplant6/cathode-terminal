@@ -162,7 +162,8 @@ function cathodeCombinedPage(OPTS) {
     // ── Inspect/Extract: the APP reads the live page and hands the agent
     // structured data — no parallel/agent-owned browser involved. Each entry
     // runs in the real page over the user's selection. ─────────────────────
-    function _xRoots() { return items.map(it => it.el).filter(Boolean); }
+    let _xScope = null;   // when set (per-element extract), scope extractors to these roots
+    function _xRoots() { return (_xScope || items.map(it => it.el)).filter(Boolean); }
     function _xNodes(cap) {
       const seen = new Set();
       for (const r of _xRoots()) {
@@ -185,8 +186,9 @@ function cathodeCombinedPage(OPTS) {
     const EXTRACTORS = {
       // "Extract the styling of this button so we can make something similar"
       styles() {
-        return items.filter(it => it.el).map(it => {
-          const cs = getComputedStyle(it.el);
+        return _xRoots().map(el => {
+          const it = items.find(x => x.el === el) || {};
+          const cs = getComputedStyle(el);
           const props = {};
           for (const name of CSS_PROPS) {
             const v = (cs.getPropertyValue(name) || '').trim();
@@ -194,7 +196,7 @@ function cathodeCombinedPage(OPTS) {
             if (/^(padding|margin)/.test(name) && v === '0px') continue;
             props[name] = v;
           }
-          return { selector: it.cssSelector || it.label, props };
+          return { selector: it.cssSelector || it.label || '', props };
         });
       },
       palette() {
@@ -437,21 +439,26 @@ function cathodeCombinedPage(OPTS) {
       },
       // Extract tool: run the chosen extractors / collect media over the live
       // selection (uses the helpers hoisted into this function's scope).
-      async extract(keys, mediaTypes, mediaDest) {
-        const extracts = [];
-        (keys || []).forEach((key) => {
-          let data = null;
-          try { data = EXTRACTORS[key] ? EXTRACTORS[key]() : null; }
-          catch (e) { data = { error: String((e && e.message) || e) }; }
-          extracts.push({ key, data });
-        });
-        let media = null;
-        if (mediaTypes && mediaTypes.length) {
-          const assets = collectMedia(mediaTypes);
-          if (mediaDest === 'download') await resolveBlobAssets(assets);
-          media = { dest: mediaDest || 'chat', types: mediaTypes, assets };
-        }
-        return { extracts, media };
+      // elementIndex scopes the extraction to one selected element (null = whole selection).
+      async extract(elementIndex, keys, mediaTypes, mediaDest) {
+        const prev = _xScope;
+        if (elementIndex != null && items[elementIndex] && items[elementIndex].el) _xScope = [items[elementIndex].el];
+        try {
+          const extracts = [];
+          (keys || []).forEach((key) => {
+            let data = null;
+            try { data = EXTRACTORS[key] ? EXTRACTORS[key]() : null; }
+            catch (e) { data = { error: String((e && e.message) || e) }; }
+            extracts.push({ key, data });
+          });
+          let media = null;
+          if (mediaTypes && mediaTypes.length) {
+            const assets = collectMedia(mediaTypes);
+            if (mediaDest === 'download') await resolveBlobAssets(assets);
+            media = { dest: mediaDest || 'chat', types: mediaTypes, assets };
+          }
+          return { extracts, media };
+        } finally { _xScope = prev; }
       },
       clear() {
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}

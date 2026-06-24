@@ -1636,6 +1636,42 @@ function enhanceSelect(sel) {
 }
 document.querySelectorAll('select.modal-input').forEach(enhanceSelect);
 
+// Shared tool-panel footer: drag any .tp-resize handle to size its .tp-foot
+// textarea (up → taller). One wiring for every menu that uses the shared footer.
+document.querySelectorAll('.tp-resize').forEach(handle => {
+  const ta = handle.closest('.tp-foot')?.querySelector('textarea');
+  if (!ta) return;
+  let startY = 0, startH = 0;
+  const onMove = (e) => {
+    const max = Math.round(window.innerHeight * 0.7);
+    ta.style.height = Math.max(72, Math.min(startH + (startY - e.clientY), max)) + 'px';
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+  };
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startY = e.clientY; startH = ta.getBoundingClientRect().height;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none';
+  });
+});
+
+// Escape inside any open tool menu → trigger its Cancel button (works from the
+// instructions input too, which the per-panel handlers exclude). The cancel
+// button is the footer Send's ghost sibling (so the resize "Reset" is ignored).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const panel = document.querySelector('.tool-panel:not([hidden])');
+  if (!panel) return;
+  const send = panel.querySelector('.pp-btn-primary');
+  const cancel = send && send.parentElement.querySelector('.pp-btn-ghost');
+  if (cancel) { e.preventDefault(); cancel.click(); }
+});
+
 // ── ACP chat helpers ──────────────────────────────────────────────
 function stripAnsi(str) {
   return str
@@ -3246,6 +3282,7 @@ function setPickMode(mode) {
 document.getElementById('btn-pick-box').addEventListener('click',   () => setPickMode('box'));
 document.getElementById('btn-pick-lasso').addEventListener('click', () => setPickMode('lasso'));
 document.getElementById('btn-pick-aidev').addEventListener('click', () => setPickMode('aidev'));
+document.getElementById('extract-panel-new')?.addEventListener('click', () => setPickMode('aidev'));
 document.getElementById('btn-screenshot').addEventListener('click', () => {
   if (pickMode === 'screenshot') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
   clearPickMode();
@@ -3260,6 +3297,13 @@ document.getElementById('btn-pick-resize').addEventListener('click', () => {
   pickMode = 'resize';
   applyPickCursor('resize');
   document.getElementById('btn-pick-resize').classList.add('active');
+  ipcRenderer.send('pick-resize');
+});
+// Resize panel's "New Selection" → re-arm the resize tool to pick a new element.
+document.getElementById('resize-panel-new')?.addEventListener('click', () => {
+  clearPickMode();
+  pickMode = 'resize';
+  applyPickCursor('resize');
   ipcRenderer.send('pick-resize');
 });
 
@@ -3840,27 +3884,6 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   cancelBtn.addEventListener('click', cancel);
   // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
   document.getElementById('pick-panel-new')?.addEventListener('click', () => setPickMode(lastDrawMode));
-  // Custom resize handle (upper-right of the input): drag to set the textarea height (up → taller).
-  const resizeHandle = document.getElementById('pick-panel-resize');
-  if (resizeHandle) {
-    let startY = 0, startH = 0;
-    const onMove = (e) => {
-      const max = Math.round(window.innerHeight * 0.7);
-      textarea.style.height = Math.max(72, Math.min(startH + (startY - e.clientY), max)) + 'px';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = ''; document.body.style.userSelect = '';
-    };
-    resizeHandle.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      startY = e.clientY; startH = textarea.getBoundingClientRect().height;
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none';
-    });
-  }
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
@@ -3891,7 +3914,12 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
 
   let sliding = null;   // 'w' | 'h' while the user drags a slider (don't let polling fight it)
 
-  function setText(el, nv, ov) { const d = nv - ov; el.textContent = nv + (d ? `  (${d > 0 ? '+' : ''}${d})` : ''); }
+  function setText(el, nv, ov) {
+    const d = nv - ov;
+    el.value = nv + (d ? `  (${d > 0 ? '+' : ''}${d})` : '');
+    const field = el.closest('.pp-field');
+    if (field) field.classList.toggle('selected', d !== 0);   // orange checkbox/label when changed
+  }
   function setDims(d) {
     if (!d) return;
     lastOrig = { oW: d.oW, oH: d.oH };
@@ -3954,12 +3982,9 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   if (!panel) return;
   const titleEl   = document.getElementById('extract-panel-title');
   const elsEl     = document.getElementById('extract-els');
-  const mediaEl   = document.getElementById('extract-media');
-  const dataEl    = document.getElementById('extract-data');
   const instr     = document.getElementById('extract-instructions');
   const sendBtn   = document.getElementById('extract-send');
   const cancelBtn = document.getElementById('extract-cancel');
-  const segBtns   = panel.querySelectorAll('.ext-seg-btn');
 
   const MEDIA = [
     { key: 'images', label: 'Images' },
@@ -3978,49 +4003,95 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     { key: 'a11y',       label: 'Accessibility',    analysis: 'Review the accessibility info and flag interactive elements missing accessible names or with incorrect aria.' },
   ];
 
-  const cbByKey = {};
-  function buildChecks(container, list) {
-    list.forEach(item => {
-      const row = document.createElement('label'); row.className = 'ext-row';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'ext-cb';
-      const sp = document.createElement('span'); sp.className = 'ext-label'; sp.textContent = item.label;
-      row.append(cb, sp);
-      container.appendChild(row);
-      cbByKey[item.key] = cb;
-    });
+  let rows = [];   // per element: { item, index, expanded, media:Set, data:Set, dest }
+  const ce = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const countOf = r => r.media.size + r.data.size;
+
+  function updateCounts() {
+    rows.forEach(r => { if (r.countEl) r.countEl.textContent = `${countOf(r)} Extractions`; });
+    const total = rows.reduce((a, r) => a + countOf(r), 0);
+    sendBtn.textContent = total ? `Send (${total})` : 'Send';
   }
-  buildChecks(mediaEl, MEDIA);
-  buildChecks(dataEl, DATA);
-
-  let dest = 'chat';
-  segBtns.forEach(b => b.addEventListener('click', () => {
-    dest = b.dataset.dest;
-    segBtns.forEach(x => x.classList.toggle('active', x === b));
-  }));
-
-  function open({ tool, items }) {
-    clearPickMode();
-    titleEl.textContent = tool || 'Extract';
-    elsEl.innerHTML = '';
-    (items || []).forEach((it, i) => {
-      const row = document.createElement('div'); row.className = 'ext-el';
-      const n = document.createElement('span'); n.className = 'ext-el-name'; n.textContent = it.label;
-      n.title = it.cssSelector || it.label;
-      row.appendChild(n);
-      row.addEventListener('mouseenter', () => ipcRenderer.send('extract-panel-highlight', { active: [i] }));
-      row.addEventListener('mouseleave', () => ipcRenderer.send('extract-panel-highlight', { active: [] }));
-      elsEl.appendChild(row);
+  // checkbox row bound to a Set
+  function checkRow(label, set, key) {
+    const row = ce('label', 'ext-row');
+    const cb = ce('input', 'ext-cb'); cb.type = 'checkbox'; cb.checked = set.has(key);
+    cb.addEventListener('change', () => { cb.checked ? set.add(key) : set.delete(key); updateCounts(); });
+    row.append(cb, ce('span', 'ext-label', label));
+    return row;
+  }
+  function buildBody(row, body) {
+    if (body.dataset.built) return;
+    body.dataset.built = '1';
+    const mg = ce('div', 'ext-group');
+    const mr = ce('div', 'ext-group-row'); mr.appendChild(ce('span', 'ext-group-title', 'Get Media')); mg.appendChild(mr);
+    MEDIA.forEach(m => mg.appendChild(checkRow(m.label, row.media, m.key)));
+    const destWrap = ce('div', 'ext-media-dest'); const seg = ce('div', 'ext-seg');
+    [['chat', 'Send to chat'], ['download', 'Download']].forEach(([d, lbl]) => {
+      const b = ce('button', 'ext-seg-btn' + (row.dest === d ? ' active' : ''), lbl); b.dataset.dest = d;
+      b.addEventListener('click', () => { row.dest = d; seg.querySelectorAll('.ext-seg-btn').forEach(x => x.classList.toggle('active', x === b)); });
+      seg.appendChild(b);
     });
-    Object.values(cbByKey).forEach(cb => { cb.checked = false; });
-    dest = 'chat'; segBtns.forEach(x => x.classList.toggle('active', x.dataset.dest === 'chat'));
+    destWrap.appendChild(seg); mg.appendChild(destWrap); body.appendChild(mg);
+    const dg = ce('div', 'ext-group');
+    const dr = ce('div', 'ext-group-row'); dr.appendChild(ce('span', 'ext-group-title', 'Styles and Content')); dg.appendChild(dr);
+    DATA.forEach(d => dg.appendChild(checkRow(d.label, row.data, d.key)));
+    body.appendChild(dg);
+  }
+  function render() {
+    elsEl.innerHTML = '';
+    rows.forEach(row => {
+      const drawer = ce('div', 'ext-drawer-item');
+      const head = ce('div', 'ext-el');
+      const caret = ce('span', 'pp-caret' + (row.expanded ? ' open' : ''));
+      const name = ce('span', 'pp-el-name');
+      if (row.item.descriptor) name.appendChild(ce('span', 'pp-el-desc', row.item.descriptor + ': '));
+      name.appendChild(document.createTextNode(row.item.label));
+      name.title = row.item.cssSelector || row.item.label;
+      const count = ce('span', 'pp-el-count', `${countOf(row)} Extractions`); row.countEl = count;
+      const x = ce('button', 'pp-el-x', '✕'); x.title = 'Remove';
+      head.append(caret, name, count, x);
+      const body = ce('div', 'ext-drawer-body'); body.style.display = row.expanded ? '' : 'none';
+      if (row.expanded) buildBody(row, body);
+      head.addEventListener('click', (e) => {
+        if (e.target === x) return;
+        row.expanded = !row.expanded;
+        if (row.expanded) buildBody(row, body);
+        body.style.display = row.expanded ? '' : 'none';
+        caret.classList.toggle('open', row.expanded);
+      });
+      head.addEventListener('mouseenter', () => ipcRenderer.send('extract-panel-highlight', { active: [row.index] }));
+      head.addEventListener('mouseleave', () => ipcRenderer.send('extract-panel-highlight', { active: [] }));
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rows = rows.filter(r => r !== row);
+        if (!rows.length) { cancel(); return; }
+        render();
+      });
+      drawer.append(head, body);
+      elsEl.appendChild(drawer);
+    });
+    updateCounts();
+  }
+
+  function open({ items }) {
+    clearPickMode();
+    titleEl.textContent = 'Extract Tool';
+    rows = (items || []).map((it, i) => ({ item: it, index: i, expanded: i === 0, media: new Set(), data: new Set(), dest: 'chat' }));
     instr.value = '';
+    render();
     panel.hidden = false;
   }
-  function close() { panel.hidden = true; instr.value = ''; }
+  function close() { panel.hidden = true; instr.value = ''; rows = []; }
   function send() {
-    const sel = DATA.filter(d => cbByKey[d.key].checked).map(d => ({ key: d.key, label: d.label, analysis: d.analysis }));
-    const mediaTypes = MEDIA.filter(m => cbByKey[m.key].checked).map(m => m.key);
-    ipcRenderer.send('extract-panel-send', { sel, mediaTypes, mediaDest: dest, instruction: instr.value.trim() });
+    const perElement = rows.filter(r => countOf(r) > 0).map(r => ({
+      index: r.index,
+      label: (r.item.descriptor ? r.item.descriptor + ': ' : '') + r.item.label,
+      sel: DATA.filter(d => r.data.has(d.key)).map(d => ({ key: d.key, label: d.label, analysis: d.analysis })),
+      mediaTypes: MEDIA.filter(m => r.media.has(m.key)).map(m => m.key),
+      mediaDest: r.dest,
+    }));
+    ipcRenderer.send('extract-panel-send', { perElement, instruction: instr.value.trim() });
     close();
   }
   function cancel() { ipcRenderer.send('extract-panel-cancel'); close(); }

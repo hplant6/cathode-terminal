@@ -20,7 +20,8 @@ const MARCH_OUTLINE_CSS =
   MARCH_BORDER_CSS + ';box-shadow:0 0 14px 2px rgba(255,87,32,0.275),0 0 30px 6px rgba(255,87,32,0.14)';
 
 const MARCH_KEYFRAMES =
-  '@keyframes cathode-march{from{background-position:0 0,0 100%,0 0,100% 0}to{background-position:7px 0,-7px 100%,0 -7px,100% 7px}}';
+  '@keyframes cathode-march{from{background-position:0 0,0 100%,0 0,100% 0}to{background-position:7px 0,-7px 100%,0 -7px,100% 7px}}' +
+  '@keyframes cathode-march-svg{to{stroke-dashoffset:-7}}';   /* for SVG stroke dashes (one 4+3 period) */
 
 // JS (as a string) that injects the keyframes once into the host page.
 const MARCH_KEYFRAMES_JS =

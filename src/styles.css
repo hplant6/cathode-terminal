@@ -2072,46 +2072,49 @@ html, body {
 .comp-preview-cap { padding: 6px 10px; font: 11px var(--font-mono, monospace); color: var(--text-dim); background: var(--bg-toolbar); border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .comp-preview-frame { width: 100%; height: 200px; border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); background: #fff; display: block; }
 .comp-preview-loading { position: absolute; left: 8px; right: 8px; top: 31px; bottom: 10px; display: flex; align-items: center; justify-content: center; font: 11px var(--font-ui); color: var(--text-dim); background: var(--bg-panel); }
-#comp-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#comp-instructions {
-  display: block; width: 100%; box-sizing: border-box; min-height: 60px; max-height: 160px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
-}
-#comp-instructions:focus { border-color: var(--accent-border); }
-#comp-instructions::placeholder { color: var(--text-dim); }
+/* comp footer uses shared .tp-foot / .tp-textarea */
 
 /* Extract tool panel */
-#extract-panel-body { flex: 1; overflow-y: auto; padding: 10px 14px; min-height: 0; }
+/* Extract body — element drawer (head) + design-system sections/checkboxes/toggle */
+#extract-panel-body { flex: 1; overflow-y: auto; padding: 0; min-height: 0; }
 #extract-els { display: flex; flex-direction: column; }
-.ext-el { display: flex; align-items: center; padding: 7px 8px; border-radius: var(--radius-md); cursor: default; transition: background 0.1s; }
-.ext-el:hover { background: rgba(255,255,255,0.05); }
-.ext-el-name { font: 12px var(--font-ui); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ext-group { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 6px; }
-.ext-group:first-of-type { border-top: none; }
-.ext-group-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 6px; }
-.ext-group-title { font: 700 9px var(--font-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); }
-.ext-group-note { font-size: 9px; color: var(--text-dim); }
-.ext-row { display: flex; align-items: center; gap: 9px; padding: 6px 8px; cursor: pointer; border-radius: var(--radius-md); transition: background 0.1s; }
-.ext-row:hover { background: rgba(255,255,255,0.04); }
-.ext-cb { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; width: 13px; height: 13px; margin: 0; }
-.ext-label { font: 12px var(--font-ui); color: var(--text); user-select: none; }
-.ext-media-dest { padding: 6px 8px 2px; }
-.ext-seg { display: flex; width: 100%; background: var(--bg-toolbar); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 2px; gap: 2px; }
+.ext-drawer-item { border-bottom: 1px solid var(--spec-header-bg); }
+.ext-el { display: flex; align-items: center; gap: 10px; height: 55px; padding: 0 12px; cursor: pointer; background: var(--spec-toolbar-bg); }   /* drawer head */
+.ext-el:hover { background: var(--spec-dropdown-bg); }
+.ext-el .pp-el-name { flex: 1; min-width: 0; }
+.ext-el .pp-el-count { flex-shrink: 0; margin-right: 6px; }
+.ext-drawer-body { background: var(--spec-input-bg); padding: 0 0 14px; }   /* shade-7 expanded options */
+/* section titles */
+.ext-group { margin: 0; border-top: none; padding: 0; }
+.ext-group + .ext-group { border-top: 1px solid var(--spec-toolbar-bg); }   /* shade-5 rule between toggle and styles */
+.ext-group-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 12px 7px; }
+.ext-group-title { font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
+.ext-group-note { font: 11px var(--font-mono); color: var(--spec-text-dim); }
+/* checkbox rows (shared orange square + check icon) */
+.ext-row { display: flex; align-items: center; gap: 13px; padding: 8px 12px; cursor: pointer; }
+.ext-row:hover { background: var(--spec-header-bg); }
+.ext-cb {
+  -webkit-appearance: none; appearance: none; position: relative;
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: 5px; margin: 0;
+  border: 1.5px solid transparent; background: var(--spec-structural); cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.ext-row:hover .ext-cb { border-color: #FF5720; }
+.ext-cb:checked { background: #FF5720; border-color: #FF5720; }
+.ext-cb:checked::after { content: ''; position: absolute; inset: 0; background: url('icons/check.svg') no-repeat center / 16px 14px; }
+.ext-label { font: 12px var(--font-mono); color: var(--spec-text-dim); user-select: none; }
+.ext-row:has(.ext-cb:checked) .ext-label { color: #FF5720; }   /* orange when checked */
+/* segmented toggle (Send to chat / Download) */
+.ext-media-dest { padding: 8px 12px 12px; }
+.ext-seg { display: flex; width: 100%; background: var(--spec-input-bg); border: none; border-radius: 5px; padding: 2px; gap: 2px; }   /* shade-7 track */
 #extract-panel .ext-seg-btn {
-  flex: 1; width: auto; height: 28px; background: transparent; border: none; box-shadow: none;
-  color: var(--text-dim); font: 600 11.5px var(--font-ui); border-radius: var(--radius-sm); cursor: pointer; transition: background 0.12s, color 0.12s;
+  flex: 1; width: auto; height: 30px; background: transparent; border: none; box-shadow: none;
+  color: var(--spec-text-dim); font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; border-radius: 3px; cursor: pointer; transition: background 0.12s, color 0.12s;
 }
-#extract-panel .ext-seg-btn:hover { color: var(--text); }
-#extract-panel .ext-seg-btn.active { background: var(--accent-dim); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
-#extract-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#extract-instructions {
-  display: block; width: 100%; box-sizing: border-box; min-height: 60px; max-height: 160px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
-}
-#extract-instructions:focus { border-color: var(--accent-border); }
-#extract-instructions::placeholder { color: var(--text-dim); }
+#extract-panel .ext-seg-btn:hover { color: var(--spec-text); }
+#extract-panel .ext-seg-btn.active { background: var(--spec-header-bg); color: #fff; }   /* active tab shade 6 */
+/* #extract-panel-foot / #extract-instructions now use the shared .tp-foot / .tp-textarea classes */
 
 /* Eyedropper tool panel */
 #ed-panel-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
@@ -2143,14 +2146,7 @@ html, body {
   font: 12px var(--font-mono, monospace); padding: 7px 10px; outline: none; text-align: center; letter-spacing: 0.05em;
 }
 #ed-hex-input:focus { border-color: var(--accent-border); }
-#ed-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#ed-instructions {
-  display: block; width: 100%; box-sizing: border-box; min-height: 60px; max-height: 160px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
-}
-#ed-instructions:focus { border-color: var(--accent-border); }
-#ed-instructions::placeholder { color: var(--text-dim); }
+/* ed footer uses shared .tp-foot / .tp-textarea */
 
 /* Accessibility checker panel */
 #a11y-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -2189,7 +2185,7 @@ html, body {
 }
 .a11y-note:focus { border-color: var(--accent-border); }
 .a11y-note::placeholder { color: var(--text-dim); }
-#a11y-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
+/* a11y footer uses shared .tp-foot */
 
 /* Screenshot tool panel */
 #ss-panel-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
@@ -2198,14 +2194,7 @@ html, body {
   background: var(--bg-toolbar); display: flex; align-items: center; justify-content: center; padding: 8px;
 }
 #ss-preview-img { max-width: 100%; max-height: 50vh; display: block; border-radius: 2px; }
-#ss-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#ss-instructions {
-  display: block; width: 100%; box-sizing: border-box; min-height: 64px; max-height: 200px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
-}
-#ss-instructions:focus { border-color: var(--accent-border); }
-#ss-instructions::placeholder { color: var(--text-dim); }
+/* ss footer uses shared .tp-foot / .tp-textarea */
 
 /* Draw tool panel */
 #draw-panel-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
@@ -2214,14 +2203,7 @@ html, body {
   background: var(--bg-toolbar); display: flex; align-items: center; justify-content: center; padding: 8px;
 }
 #draw-preview-img { max-width: 100%; max-height: 50vh; display: block; border-radius: 2px; }
-#draw-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#draw-instructions {
-  display: block; width: 100%; box-sizing: border-box; min-height: 64px; max-height: 200px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
-}
-#draw-instructions:focus { border-color: var(--accent-border); }
-#draw-instructions::placeholder { color: var(--text-dim); }
+/* draw footer uses shared .tp-foot / .tp-textarea */
 
 /* Chat image attachments (thumbnails + lightbox) */
 .chat-msg-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -2254,6 +2236,46 @@ html, body {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
   background: var(--spec-toolbar-bg); border-radius: var(--r-blob); overflow: hidden;   /* shade 5 */
 }
+
+/* ── Shared tool-panel shell (the box-select chrome, reusable across menus) ──
+   Opt a panel in with `.tp-framed` + a `.tp-inner` wrapper. Scoped so panels
+   not yet converted keep their original styling. */
+.tool-panel.tp-framed { inset: 0; background: var(--spec-header-bg); padding: 8px 0 8px 8px; overflow: visible; }
+.tp-inner {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--spec-toolbar-bg); border-radius: var(--r-blob); overflow: hidden;   /* shade 5 card */
+}
+/* Header: 16px title, sentence-case subtitle; row layout when there's a header button */
+.tp-framed .tp-head:has(.pp-head-text) { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+.tp-framed .tp-title { font-size: 16px; }
+.tp-framed .tp-sub { font-size: 11px; text-transform: none; font-weight: 400; letter-spacing: 0.02em; }
+/* Footer instructions input */
+.tp-foot { position: relative; flex-shrink: 0; border-top: 1px solid var(--spec-structural); padding: 0; }
+.tp-textarea {
+  display: block; width: 100%; box-sizing: border-box;
+  min-height: 72px; max-height: 70vh; resize: none;
+  background: var(--spec-input-bg); color: var(--spec-text);
+  border: none; border-radius: 0;
+  font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;   /* right clearance for the resize handle */
+}
+.tp-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 */
+/* Send bar (cancel/send) */
+.tp-inner .pp-btns {
+  display: flex; align-items: stretch; gap: 2px; min-height: 40px; margin: 0;
+  background: var(--spec-toolbar-bg); border-radius: 0 0 var(--r-blob) var(--r-blob);
+}
+.tp-inner .pp-btns .pp-btn {   /* send-bar buttons only (scoped to beat legacy .tool-panel .pp-btn) */
+  flex: 1; width: auto; height: auto; align-self: stretch; box-shadow: none;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 0;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.tp-inner .pp-btns .pp-btn-ghost { background: var(--spec-dropdown-bg); color: var(--spec-text-dim); border-radius: 0 0 0 var(--r-blob); }
+.tp-inner .pp-btns .pp-btn-ghost:hover { background: var(--spec-structural); color: var(--spec-text); }
+.tp-inner .pp-btns .pp-btn-primary { background: #4C2112; color: var(--spec-text-dim); border-radius: 0 0 var(--r-blob) 0; }
+.tp-inner .pp-btns .pp-btn-primary:hover { background: #FF5720; color: #fff; }
 
 /* Box-select header: 16px title, sentence-case subtitle, no divider above the filter row */
 #pick-panel-head { border-bottom: none; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
@@ -2321,13 +2343,13 @@ html, body {
 .pp-el-name { flex: 1; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-el-desc { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; color: var(--spec-text-dim); }   /* descriptor prefix in Geist Mono, shade 1 */
 .pp-el-count { flex-shrink: 0; margin-right: 6px; font: 11px var(--font-mono); color: var(--spec-text-dim); }   /* per-element selected-property count */
-#pick-panel .pp-el-x {
+.pp-el-x {   /* shared remove button (box-select + extract drawers) */
   width: auto; height: auto;
   border: none; background: transparent; color: var(--spec-text-dim); box-shadow: none;
   cursor: pointer; font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 4px; flex-shrink: 0;
   transition: color 0.12s;
 }
-#pick-panel .pp-el-x:hover { color: #fff; background: transparent; box-shadow: none; }
+.pp-el-x:hover { color: #fff; background: transparent; box-shadow: none; }
 .pp-drawer-body { background: var(--spec-input-bg); border-top: 1px solid var(--spec-structural); }
 .pp-css-row {
   display: flex; align-items: baseline; gap: 6px; padding: 5px 12px 5px 24px;
@@ -2365,15 +2387,15 @@ html, body {
 }
 .pp-field:hover { background: var(--spec-header-bg); }
 .pp-field.selected { background: var(--spec-header-bg); border-bottom-color: var(--spec-input-bg); }   /* active row → shade-6 fill, shade-7 bottom border */
-#pick-panel .pp-field-sel {
+.pp-field-sel {   /* shared checkbox (box-select + resize) */
   width: 24px; height: 24px; padding: 0; flex-shrink: 0; margin-right: 3px; border-radius: 5px; box-shadow: none;
   display: flex; align-items: center; justify-content: center;
   border: 1.5px solid transparent; background: var(--spec-structural); cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
 }
-#pick-panel .pp-field-sel:hover { border-color: #FF5720; }
-#pick-panel .pp-field.selected .pp-field-sel { background: #FF5720; border-color: #FF5720; }
-#pick-panel .pp-field.selected .pp-field-sel::after {
+.pp-field-sel:hover { border-color: #FF5720; }
+.pp-field.selected .pp-field-sel { background: #FF5720; border-color: #FF5720; }
+.pp-field.selected .pp-field-sel::after {
   content: ''; width: 16px; height: 14px;
   background: url('icons/check.svg') no-repeat center / contain;   /* white check */
 }
@@ -2462,14 +2484,14 @@ html, body {
 }
 #pick-panel-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 — matches the chat placeholder */
 /* Custom resize handle, upper-right of the input (replaces the native grip) */
-#pick-panel-resize {
+.tp-resize {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   width: auto; height: auto; padding: 0; box-shadow: none;
   background: transparent; border: none; color: var(--spec-text-faint);
   display: flex; align-items: center; justify-content: center; cursor: ns-resize;
   transition: color 0.12s;
 }
-#pick-panel-resize:hover { color: var(--spec-text); }
+.tp-resize:hover { color: var(--spec-text); }
 .pp-btns { display: flex; gap: 8px; margin-top: 8px; }
 
 /* Pick-panel send bar — mirrors the main chat send bar (#ui-footer) */
@@ -2501,43 +2523,44 @@ html, body {
 .tool-panel .pp-btn-primary:hover { background: #FF5720; color: #fff; border-color: #FF5720; box-shadow: none; }
 
 /* Resize panel content */
-#resize-panel-body { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
-.rz-el {
-  font: 12px var(--font-mono, monospace); color: var(--accent);
-  background: var(--accent-dim); border: 1px solid var(--accent-border); border-radius: var(--radius-md);
-  padding: 7px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+/* Resize body = a single always-open, full-height drawer (element name as title) */
+#resize-panel-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0; }
+.rz-drawer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.rz-drawer-head {
+  display: flex; align-items: center; gap: 10px; height: 55px; padding: 0 12px; flex-shrink: 0;
+  background: var(--spec-toolbar-bg); border-bottom: 1px solid var(--spec-header-bg);   /* shade 5 / shade-6 rule */
+  cursor: default;
 }
-.rz-dims { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-.rz-dim-group {
-  background: var(--bg-toolbar); border: 1px solid var(--border); border-radius: var(--radius-md);
-  padding: 10px 12px;
-}
-.rz-dim-row { display: flex; align-items: baseline; justify-content: space-between; }
-.rz-dim-label { font: 700 10px var(--font-ui); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
-.rz-dim-val { font: 600 16px var(--font-ui); color: var(--text); font-variant-numeric: tabular-nums; }
+.rz-caret-off { visibility: hidden; }   /* chevron hidden + non-interactive (drawer can't close) */
+.rz-drawer-title { flex: 1; min-width: 0; font: 600 12px var(--font-mono); color: var(--spec-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rz-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; background: var(--spec-input-bg); }   /* shade 7 */
+/* Width/Height as property rows (shared .pp-field + box-select slider look) */
+.rz-dims { display: flex; flex-direction: column; gap: 0; margin: -14px -16px 0; }   /* full-bleed past the body padding */
+.rz-field .pp-field-sel { pointer-events: none; }   /* indicator only (auto-checks when changed) */
+.rz-field .pp-field-ctrl { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .rz-slider {
-  width: 100%; height: 4px; margin: 12px 0 2px; padding: 0;
-  -webkit-appearance: none; appearance: none; background: var(--border);
-  border-radius: 3px; outline: none; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  flex: 1; min-width: 40px; height: 10px; margin: 0; padding: 0;
+  background: var(--spec-toolbar-bg); border-radius: 999px; outline: none; cursor: ew-resize;
 }
 .rz-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 14px; height: 14px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--bg-panel);
-  box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+  width: 18px; height: 30px; border-radius: 999px; cursor: grab; border: none;
+  background: var(--spec-text-faint) url('icons/drag.svg') no-repeat center / 14px;
 }
-#resize-reset { width: 100%; height: 30px; margin-top: 12px; }
-.rz-hint { margin-top: 12px; font-size: 11px; color: var(--text-dim); line-height: 1.4; }
-#resize-panel-foot { flex-shrink: 0; border-top: 1px solid var(--border); padding: 10px; }
-#resize-textarea {
-  display: block; width: 100%; box-sizing: border-box;
-  min-height: 72px; max-height: 200px; resize: vertical;
-  background: var(--bg-toolbar); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-md);
-  font: 13px/1.5 var(--font-ui); padding: 10px 12px; outline: none;
+.rz-val { flex: 0 0 auto; width: 96px; text-align: right; }   /* value display (uses .pp-ctrl-input) */
+/* Reset button — secondary button component */
+.rz-reset-btn {
+  display: block; width: 25%; height: 38px; margin: 14px 0 0 auto; box-shadow: none;   /* 25% wide, right-aligned */
+  background: var(--spec-dropdown-bg); border: none; border-radius: 6px;
+  color: var(--spec-text-dim); cursor: pointer;
+  font-family: var(--font-title); font-stretch: 112.5%; font-weight: 600; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: background 0.12s, color 0.12s;
 }
-#resize-textarea:focus { border-color: var(--accent-border); }
-#resize-textarea::placeholder { color: var(--text-dim); }
+.rz-reset-btn:hover { background: var(--spec-structural); color: var(--spec-text); }
+.rz-hint { margin-top: 14px; font-size: 11px; color: var(--spec-text-dim); line-height: 1.4; }
+/* #resize-panel-foot / #resize-textarea now use the shared .tp-foot / .tp-textarea classes */
 
 /* Color picker popover (left-column drawer) */
 #pp-colorpicker {

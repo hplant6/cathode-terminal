@@ -141,7 +141,8 @@ function getResizeScript() {
 
       box = document.createElement('div');
       box.id = '__cr_box';
-      box.style.cssText = 'position:absolute;border:1.5px solid #4a9eff;box-sizing:border-box;pointer-events:none;';
+      box.style.cssText = 'position:absolute;border:1.5px solid #FF5720;box-sizing:border-box;pointer-events:none;' +
+        'box-shadow:0 0 14px 2px rgba(255,87,32,0.45),0 0 30px 6px rgba(255,87,32,0.22);';
       hr.appendChild(box);
 
       var handles = [
@@ -153,16 +154,17 @@ function getResizeScript() {
       handles.forEach(function(def) {
         var h = document.createElement('div');
         h.dataset.h = def.id;
-        h.style.cssText = 'position:absolute;width:10px;height:10px;background:#fff;border:1.5px solid #4a9eff;' +
-          'border-radius:2px;box-sizing:border-box;pointer-events:auto;cursor:' + def.cursor + ';';
+        h.style.cssText = 'position:absolute;width:10px;height:10px;background:#fff;border:none;' +
+          'border-radius:2px;box-sizing:border-box;pointer-events:auto;cursor:' + def.cursor + ';' +
+          'box-shadow:0 0 8px 2px rgba(255,87,32,0.6);';
         h.addEventListener('mousedown', function(e) { startDrag(e, def.id); }, true);
         box.appendChild(h);
       });
 
       sizeLabel = document.createElement('div');
-      sizeLabel.style.cssText = 'position:absolute;pointer-events:none;background:#1e1e1e;border:1px solid #333;' +
-        'border-radius:4px;color:#ccc;font:11px/1.4 system-ui,sans-serif;padding:2px 7px;white-space:nowrap;' +
-        'font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.6);';
+      sizeLabel.style.cssText = 'position:absolute;pointer-events:none;background:#FF5720;border:none;' +
+        'border-radius:4px;color:#fff;font:700 11px/1.4 monospace;padding:2px 7px;white-space:nowrap;' +
+        'font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.5);';
       hr.appendChild(sizeLabel);
 
       positionAll();
