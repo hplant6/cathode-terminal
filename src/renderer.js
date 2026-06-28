@@ -45,47 +45,294 @@ const LS = {
   deviceActive: 'cathode-device-active',  // selected device name (persisted)
   sysperf:      'cathode-sysperf',         // system performance graph on/off
   sysperfView:  'cathode-sysperf-view',    // perf graph view: bars | procs
+  themeCustom:  'cathode-theme-custom',     // legacy single custom theme (migrated → themesSaved)
+  themesSaved:  'cathode-themes-saved',     // array of saved custom themes [{name,colors}]
 };
 
-// ── Theme init ────────────────────────────────────────────────────
-document.body.dataset.theme = localStorage.getItem(LS.theme) || 'minimal';
+// ── Theme engine ──────────────────────────────────────────────────
+// A theme is just a map of CSS custom-properties (the 8 shades + the
+// accent/semantic colours) written onto :root. Presets are below; the
+// user can build a "custom" theme via the theme modal. The terminal
+// (xterm) palette is fixed and not part of theming.
+const TERMINAL_THEME = {
+  background: '#131313', foreground: '#cccccc', cursor: '#4a9eff',
+  selectionBackground: 'rgba(74,158,255,0.3)',
+  black: '#1a1a1a',   brightBlack:   '#555555',
+  red: '#f44747',     brightRed:     '#f44747',
+  green: '#6a9955',   brightGreen:   '#b5cea8',
+  yellow: '#dcdcaa',  brightYellow:  '#dcdcaa',
+  blue: '#569cd6',    brightBlue:    '#9cdcfe',
+  magenta: '#c586c0', brightMagenta: '#c586c0',
+  cyan: '#4ec9b0',    brightCyan:    '#4ec9b0',
+  white: '#d4d4d4',   brightWhite:   '#ffffff',
+};
 
-const TERMINAL_THEMES = {
-  minimal: {
-    background: '#131313', foreground: '#cccccc', cursor: '#4a9eff',
-    selectionBackground: 'rgba(74,158,255,0.3)',
-    black: '#1a1a1a',   brightBlack:   '#555555',
-    red: '#f44747',     brightRed:     '#f44747',
-    green: '#6a9955',   brightGreen:   '#b5cea8',
-    yellow: '#dcdcaa',  brightYellow:  '#dcdcaa',
-    blue: '#569cd6',    brightBlue:    '#9cdcfe',
-    magenta: '#c586c0', brightMagenta: '#c586c0',
-    cyan: '#4ec9b0',    brightCyan:    '#4ec9b0',
-    white: '#d4d4d4',   brightWhite:   '#ffffff',
+// Themeable tokens in modal display order: [cssVar, label].
+const THEME_TOKENS = [
+  ['--spec-text',        'Shade 0'],
+  ['--spec-text-dim',    'Shade 1'],
+  ['--spec-text-faint',  'Shade 2'],
+  ['--spec-structural',  'Shade 3'],
+  ['--spec-dropdown-bg', 'Shade 4'],
+  ['--spec-toolbar-bg',  'Shade 5'],
+  ['--spec-header-bg',   'Shade 6'],
+  ['--spec-input-bg',    'Shade 7'],
+  ['--spec-black',       'Shade 8'],
+  ['--spec-accent',      'Accent 1'],
+  ['--spec-accent-dark', 'Accent 1 Alt'],
+  ['--spec-accent-3',    'Accent 3'],
+  ['--danger',           'Danger'],
+  ['--success',          'Success'],
+  ['--warning',          'Warning'],
+  ['--spec-graph-2',     'Graph'],
+];
+
+const THEME_PRESETS = {
+  default: {
+    '--spec-text':'#BCBCBC','--spec-text-dim':'#817E89','--spec-text-faint':'#46434D','--spec-structural':'#28262F',
+    '--spec-dropdown-bg':'#212026','--spec-toolbar-bg':'#19191C','--spec-header-bg':'#111113','--spec-input-bg':'#08090C','--spec-black':'#000000',
+    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#4A9EFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B',
   },
-  winamp: {
-    background: '#0a0a16', foreground: '#b4ff30', cursor: '#d4aa00',
-    selectionBackground: 'rgba(212,170,0,0.3)',
-    black: '#07070f',   brightBlack:   '#3a3a5a',
-    red: '#ff4444',     brightRed:     '#ff6666',
-    green: '#b4ff30',   brightGreen:   '#d4ff80',
-    yellow: '#d4aa00',  brightYellow:  '#ffd700',
-    blue: '#5555aa',    brightBlue:    '#8888cc',
-    magenta: '#cc55cc', brightMagenta: '#ee88ee',
-    cyan: '#00ff41',    brightCyan:    '#44ff88',
-    white: '#b4ff30',   brightWhite:   '#d4ff80',
+  khaki: {   // reversed: dark tan text on light backgrounds
+    '--spec-text':'#967B59','--spec-text-dim':'#A48C6D','--spec-text-faint':'#B39C81','--spec-structural':'#C1AD95',
+    '--spec-dropdown-bg':'#D0BDA8','--spec-toolbar-bg':'#DECEBC','--spec-header-bg':'#EDDED0','--spec-input-bg':'#FFFFF9','--spec-black':'#2D241A',
+    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#4A9EFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#B3681C',
   },
 };
 
+// Modal display layout — three columns. (--spec-accent appears twice: as Accent 1 and Graph 1.)
+const THEME_GROUPS = [
+  { title: 'Shades', col: 'shades', rows: [
+    ['--spec-text','Shade 0'],['--spec-text-dim','Shade 1'],['--spec-text-faint','Shade 2'],
+    ['--spec-structural','Shade 3'],['--spec-dropdown-bg','Shade 4'],['--spec-toolbar-bg','Shade 5'],
+    ['--spec-header-bg','Shade 6'],['--spec-input-bg','Shade 7'],['--spec-black','Shade 8'],
+  ]},
+  { title: 'Accent', col: 'mid', rows: [
+    ['--spec-accent','Accent 1'],['--spec-accent-dark','Accent 2'],['--spec-accent-3','Accent 3'],
+  ]},
+  { title: 'Graph', col: 'mid', rows: [
+    ['--spec-accent','Graph 1'],['--spec-graph-2','Graph 2'],
+  ]},
+  { title: 'Status', col: 'status', rows: [
+    ['--success','Success'],['--warning','Warning'],['--danger','Danger'],
+  ]},
+];
+
+// Saved custom themes: [{ name, colors }]. draftColors/draftName = working copy while editing.
+let savedThemes = (() => { try { return JSON.parse(localStorage.getItem(LS.themesSaved) || '[]'); } catch (_) { return []; } })();
+(() => {   // one-time migration of the legacy single custom theme → savedThemes
+  try {
+    const old = JSON.parse(localStorage.getItem(LS.themeCustom) || 'null');
+    if (old && !savedThemes.length) savedThemes.push({ name: 'Custom', colors: old });
+    if (old) { localStorage.setItem(LS.themesSaved, JSON.stringify(savedThemes)); localStorage.removeItem(LS.themeCustom); }
+  } catch (_) {}
+})();
+let draftColors = null, draftName = '';
+function persistThemes() { localStorage.setItem(LS.themesSaved, JSON.stringify(savedThemes)); }
+function isThemeEditable(name) { return name === 'add' || /^saved:/.test(name); }
+let sharedColorPicker = null;   // the iro picker (assigned by initPickPanel) — reused by the theme swatches
+
+let activeThemeName = localStorage.getItem(LS.theme) || 'default';
+if (activeThemeName === 'custom') activeThemeName = savedThemes.length ? 'saved:0' : 'default';
+
+// Resolve a theme name → its colour map.
+function themeColors(name) {
+  if (name === 'default' || name === 'khaki') return THEME_PRESETS[name];
+  if (isThemeEditable(name)) return draftColors || THEME_PRESETS.default;
+  return THEME_PRESETS.default;
+}
+
+// Write a colour map onto :root.
+function applyThemeColors(colors) {
+  const root = document.documentElement;
+  for (const [v] of THEME_TOKENS) if (colors[v]) root.style.setProperty(v, colors[v]);
+}
+
+// Native (Electron) menus can't take CSS, so drive their light/dark appearance
+// from the theme's background lightness (shade 7) — a light theme → light menus.
+function syncNativeMenuTheme(bgHex) {
+  let source = 'dark';
+  const m = /^#?([0-9a-fA-F]{6})$/.exec((bgHex || '').trim());
+  if (m) {
+    const n = parseInt(m[1], 16);
+    const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    source = lum > 0.5 ? 'light' : 'dark';
+  }
+  ipcRenderer.send('native-theme', source);
+}
+
+// Graph (usage / sysperf) LED ramp — themeable: dark accent → accent. Both
+// ends are orange tones, so it stays visible on dark and light backgrounds.
+function computeGraphStops() {
+  const c = themeColors(activeThemeName);
+  return [[0, c['--spec-accent'] || '#FF5720'], [1, c['--spec-graph-2'] || '#FFE16B']];
+}
+let GRAPH_STOPS = computeGraphStops();
+let _graphRaf = null;   // rAF handle for the redrawGraphs() throttle — declared here because redrawGraphs runs during the initial applyTheme() above the function's own definition
+
+// Select a preset (or 'custom') as the active theme.
 function applyTheme(name) {
-  document.body.dataset.theme = name;
+  const prev = activeThemeName;
+  if (/^saved:/.test(name) && !savedThemes[+name.split(':')[1]]) name = 'default';
+  activeThemeName = name;
   localStorage.setItem(LS.theme, name);
-  const termTheme = TERMINAL_THEMES[name] || TERMINAL_THEMES.minimal;
-  TERM_OPTS.theme = termTheme;
-  for (const s of sessions.values()) {
-    if (s.type !== 'acp' && s.term) s.term.options.theme = termTheme;
+  if (name === 'add') {
+    if (!draftColors || prev !== 'add') { draftColors = { ...THEME_PRESETS.default }; draftName = ''; }
+  } else if (/^saved:/.test(name)) {
+    const i = +name.split(':')[1];
+    draftColors = { ...savedThemes[i].colors }; draftName = savedThemes[i].name;
+  } else {
+    draftColors = null; draftName = '';
+  }
+  const colors = themeColors(name);
+  applyThemeColors(colors);
+  syncNativeMenuTheme(colors['--spec-input-bg']);
+  GRAPH_STOPS = computeGraphStops();
+  redrawGraphs();
+  if (typeof renderThemeModal === 'function') renderThemeModal();
+}
+
+applyTheme(activeThemeName);   // initial
+
+// ── Theme modal ───────────────────────────────────────────────────
+const themeModalEl = document.getElementById('theme-modal');
+
+function normHex(c) {
+  c = (c || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(c)) return c.toUpperCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(c)) return ('#' + c.slice(1).split('').map(x => x + x).join('')).toUpperCase();
+  return '#000000';
+}
+
+function renderThemeSidebar() {
+  const el = document.getElementById('theme-presets');
+  if (!el) return;
+  el.innerHTML = '';
+  const mkTitle = (t) => { const d = document.createElement('div'); d.className = 'theme-sidebar-section'; d.textContent = t; return d; };
+  const mkBtn = (name, label) => {
+    const btn = document.createElement('button');
+    btn.className = 'theme-preset' + (name === activeThemeName ? ' active' : '');
+    const CHECK = `<svg class="theme-preset-check" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3"></polyline></svg>`;
+    btn.innerHTML = `<span></span>${name === activeThemeName ? CHECK : ''}`;
+    btn.querySelector('span').textContent = label;
+    btn.addEventListener('click', () => applyTheme(name));
+    return btn;
+  };
+  el.appendChild(mkTitle('Cathode Themes'));
+  el.appendChild(mkBtn('default', 'Default'));
+  el.appendChild(mkBtn('khaki', 'Khaki'));
+  el.appendChild(mkTitle('Custom Themes'));
+  el.appendChild(mkBtn('add', 'Add Custom'));
+  savedThemes.forEach((t, i) => el.appendChild(mkBtn(`saved:${i}`, t.name)));
+}
+
+// Colour panel — read-only swatches for the presets; pickers when Custom is active.
+function renderThemePanel() {
+  const el = document.getElementById('theme-panel');
+  if (!el) return;
+  const cur = themeColors(activeThemeName);
+  const editable = isThemeEditable(activeThemeName);
+  el.classList.toggle('editable', editable);
+  const byCol = { shades: [], mid: [], status: [] };
+  for (const g of THEME_GROUPS) byCol[g.col].push(g);
+  el.innerHTML = '';
+  for (const colKey of ['shades', 'mid', 'status']) {
+    const colEl = document.createElement('div');
+    colEl.className = 'theme-col';
+    for (const g of byCol[colKey]) {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'theme-group';
+      groupEl.innerHTML = `<div class="theme-group-title">${g.title}</div>`;
+      for (const [v, label] of g.rows) {
+        const hexVal = normHex(cur[v]);
+        const row = document.createElement('div');
+        row.className = 'theme-row';
+        if (editable) {
+          row.innerHTML = `<label>${label}</label><span class="theme-circle" style="background:${hexVal}"></span><input type="text" class="theme-hex-input" value="${hexVal.slice(1)}" spellcheck="false" maxlength="6">`;
+          const sw = row.querySelector('.theme-circle');
+          const hexIn = row.querySelector('.theme-hex-input');
+          sw.addEventListener('click', () => sharedColorPicker?.open(sw, normHex(draftColors[v]), (h) => {
+            const val = normHex(h); hexIn.value = val.slice(1); setDraftColor(v, val);
+          }));
+          hexIn.addEventListener('input', () => {
+            const raw = hexIn.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6).toUpperCase();
+            hexIn.value = raw;
+            if (raw.length === 6) { const val = '#' + raw; sw.style.background = val; setDraftColor(v, val); }
+          });
+        } else {
+          row.innerHTML = `<label>${label}</label><span class="theme-circle" style="background:${hexVal}"></span><span class="theme-hex">${hexVal.slice(1)}</span>`;
+        }
+        groupEl.appendChild(row);
+      }
+      colEl.appendChild(groupEl);
+    }
+    el.appendChild(colEl);
   }
 }
+
+function renderThemeFooter() {
+  const footer = document.getElementById('theme-footer');
+  if (!footer) return;
+  const editable = isThemeEditable(activeThemeName);
+  footer.style.display = editable ? 'flex' : 'none';
+  if (!editable) { footer.innerHTML = ''; return; }
+  const saved = /^saved:/.test(activeThemeName);
+  footer.innerHTML = `<input type="text" id="theme-name-input" class="theme-name-input" placeholder="Name" spellcheck="false"><button id="theme-reset" class="modal-btn-cancel">${saved ? 'Delete' : 'Reset'}</button><button id="theme-save" class="modal-btn-confirm">${saved ? 'Update' : 'Save'}</button>`;
+  const nameIn = footer.querySelector('#theme-name-input');
+  nameIn.value = draftName;
+  nameIn.addEventListener('input', () => { draftName = nameIn.value; });
+  footer.querySelector('#theme-reset').addEventListener('click', () => { saved ? deleteSavedTheme(+activeThemeName.split(':')[1]) : resetDraft(); });
+  footer.querySelector('#theme-save').addEventListener('click', () => { saved ? updateSavedTheme(+activeThemeName.split(':')[1]) : saveDraftAsNew(); });
+}
+
+function renderThemeModal() { renderThemeSidebar(); renderThemePanel(); renderThemeFooter(); }
+
+// Editing applies live (preview); persistence happens on Save / Update.
+function setDraftColor(cssVar, value) {
+  if (!draftColors) return;
+  draftColors[cssVar] = value;
+  applyThemeColors(draftColors);
+  syncNativeMenuTheme(draftColors['--spec-input-bg']);
+  GRAPH_STOPS = computeGraphStops();
+  redrawGraphs();
+}
+function resetDraft() {
+  draftColors = { ...THEME_PRESETS.default };
+  applyThemeColors(draftColors);
+  syncNativeMenuTheme(draftColors['--spec-input-bg']);
+  GRAPH_STOPS = computeGraphStops();
+  redrawGraphs();
+  renderThemeModal();
+}
+function saveDraftAsNew() {
+  savedThemes.push({ name: (draftName || '').trim() || `Custom ${savedThemes.length + 1}`, colors: { ...draftColors } });
+  persistThemes();
+  applyTheme(`saved:${savedThemes.length - 1}`);
+}
+function updateSavedTheme(i) {
+  if (!savedThemes[i]) return;
+  savedThemes[i] = { name: (draftName || '').trim() || savedThemes[i].name, colors: { ...draftColors } };
+  persistThemes();
+  renderThemeModal();
+}
+function deleteSavedTheme(i) {
+  savedThemes.splice(i, 1);
+  persistThemes();
+  applyTheme('default');
+}
+
+function openThemeModal() { renderThemeModal(); themeModalEl?.classList.add('open'); }
+function closeThemeModal() { themeModalEl?.classList.remove('open'); }
+document.getElementById('theme-modal-close')?.addEventListener('click', closeThemeModal);
+
+// Generic modal close: any .mcp-modal-close button closes its parent modal.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('.mcp-modal-close');
+  if (!btn) return;
+  const modal = btn.closest('.modal-backdrop');
+  if (modal) modal.classList.remove('open');
+});
+themeModalEl?.addEventListener('click', (e) => { if (e.target === themeModalEl) closeThemeModal(); });
 
 // ── Pin icons ─────────────────────────────────────────────────────
 
@@ -95,7 +342,7 @@ const TERM_OPTS = {
   fontSize: 14,
   fontFamily: "'Space Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace",
   fontWeight: '400',
-  theme: TERMINAL_THEMES[localStorage.getItem(LS.theme)] || TERMINAL_THEMES.minimal,
+  theme: TERMINAL_THEME,
   scrollback: 5000,
   allowProposedApi: true,
 };
@@ -746,7 +993,8 @@ function hideFigmaTip() {
   const tip = document.createElement('div');
   tip.id = 'cathode-tip';
   document.body.appendChild(tip);
-  let cur = null;
+  let cur = null, hoverEl = null, showTimer = null;
+  const TIP_DELAY = 1000;   // 1s before a tooltip appears
 
   function place(el) {
     const r = el.getBoundingClientRect();
@@ -781,18 +1029,25 @@ function hideFigmaTip() {
   }
   function hide() { cur = null; tip.classList.remove('show'); }
 
+  function cancel() { clearTimeout(showTimer); hoverEl = null; if (cur) hide(); }
   document.addEventListener('mouseover', (e) => {
     const el = e.target.closest ? e.target.closest('[title], [data-tip]') : null;
-    if (!el || el === cur) return;
-    show(el);
+    if (el === hoverEl) return;            // still on the same (current or pending) element
+    clearTimeout(showTimer);
+    if (cur) hide();                       // moved off the visible tip
+    hoverEl = el;
+    if (el) {
+      // suppress the native tooltip immediately (title → data-tip), but delay our styled tip
+      if (el.hasAttribute('title')) { el.dataset.tip = el.getAttribute('title'); el.removeAttribute('title'); }
+      showTimer = setTimeout(() => show(el), TIP_DELAY);
+    }
   });
   document.addEventListener('mouseout', (e) => {
-    if (!cur) return;
-    if (e.relatedTarget && cur.contains(e.relatedTarget)) return;   // moving within the element
-    hide();
+    if (e.relatedTarget && hoverEl && hoverEl.contains(e.relatedTarget)) return;   // moving within the element
+    cancel();
   });
-  document.addEventListener('mousedown', hide, true);
-  window.addEventListener('scroll', hide, true);
+  document.addEventListener('mousedown', cancel, true);
+  window.addEventListener('scroll', cancel, true);
 })();
 
 (function buildFigmaMenu() {
@@ -1484,6 +1739,7 @@ document.getElementById('profiles-save').addEventListener('click', () => {
 document.getElementById('btn-manage-profiles')?.addEventListener('click', () => openProfilesModal());
 
 document.getElementById('profiles-cancel').addEventListener('click', () => profilesModalCtl.close());
+document.getElementById('profiles-close').addEventListener('click', () => profilesModalCtl.close());
 document.getElementById('profiles-install-done').addEventListener('click', () => profilesModalCtl.close());
 
 document.querySelectorAll('.profiles-tab').forEach(btn => {
@@ -1680,7 +1936,7 @@ function stripAnsi(str) {
     .replace(/[\x00-\x09\x0b-\x1f\x7f]/g, '');
 }
 
-const GRAPH_STOPS = [[0, '#FF5720'], [0.5, '#FFE16B'], [1, '#FCF2C8']];                       // usage graphs
+// GRAPH_STOPS is defined in the theme engine above (themeable accent ramp).
 function _specHx(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
 function _rgbAt(p, stops) {
   p = Math.max(0, Math.min(1, p));
@@ -1695,6 +1951,18 @@ function _rgbAt(p, stops) {
   return _specHx(stops[stops.length - 1][1]);
 }
 function graphRgbAt(p) { return _rgbAt(p, GRAPH_STOPS); }   // usage gauge/bar warm ramp
+// Repaint everything that uses the graph ramp, so theme edits show instantly.
+// Coalesced to one repaint per frame so dragging a colour picker doesn't thrash
+// the usage/sysperf innerHTML rebuilds (and the rAF defers the init-time call
+// safely past module load).
+function redrawGraphs() {
+  if (_graphRaf) return;
+  _graphRaf = requestAnimationFrame(() => {
+    _graphRaf = null;
+    try { if (_lastUsage) renderUsage(_lastUsage); } catch (_) {}
+    try { if (_lastSysperf) renderSysperfBars(_lastSysperf); } catch (_) {}
+  });
+}
 
 // Status animation controller for the domino loader.
 // start(): run the cascade. stop(): freeze each bar where the cascade left it,
@@ -2275,12 +2543,14 @@ ipcRenderer.on('devtools-layout', (_, { leftPanelWidth, devToolsWidth: dw }) => 
   layoutRefitTimer = setTimeout(() => refitSession(activeId), 80);
 });
 
-divider.addEventListener('mousedown', e => {
+// Resize is driven only by the grab grips (so hovering the toolbar tools never resizes).
+const resizeGrips = document.querySelectorAll('.resize-grip');
+resizeGrips.forEach(grip => grip.addEventListener('mousedown', e => {
   dragging = true;
-  divider.classList.add('dragging');
+  resizeGrips.forEach(g => g.classList.add('dragging'));
   leftPanel.style.transition = 'none';
   e.preventDefault();
-});
+}));
 // rAF-throttled: mousemove fires at 60–120 Hz; each un-throttled event caused
 // a style write + IPC → 4 native setBounds in main. One update per frame.
 let dragClientX = 0, dragRaf = 0;
@@ -2300,7 +2570,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', () => {
   if (!dragging) return;
   dragging = false;
-  divider.classList.remove('dragging');
+  resizeGrips.forEach(g => g.classList.remove('dragging'));
   leftPanel.style.transition = '';
   refitSession(activeId);
 });
@@ -2310,24 +2580,42 @@ const btnPanelToggle = document.getElementById('btn-panel-toggle');
 let panelCollapsed = false;
 let savedPanelWidth = null;
 
-btnPanelToggle.addEventListener('click', () => {
-  panelCollapsed = !panelCollapsed;
-  if (panelCollapsed) {
-    savedPanelWidth = leftPanel.style.width || null;
-    leftPanel.classList.add('collapsed');
+let activePane = 'browser';   // which pane fills the main area while collapsed
+
+// Enter single-pane (collapsed) mode showing `pane` ('browser' | 'chat'), or
+// pass null to return to the normal two-column split view.
+function setSinglePane(pane) {
+  if (pane) {
+    if (!panelCollapsed) savedPanelWidth = leftPanel.style.width || null;
+    panelCollapsed = true;
+    activePane = pane;
+    appRootEl.classList.add('panel-collapsed');
+    appRootEl.classList.toggle('pane-chat', pane === 'chat');
+    appRootEl.classList.toggle('pane-browser', pane === 'browser');
     btnPanelToggle.classList.add('collapsed');
-    ipcRenderer.send('split-changed', 0);
+    ipcRenderer.send('single-pane', pane);   // main positions/hides the browser view
   } else {
-    leftPanel.classList.remove('collapsed');
+    panelCollapsed = false;
+    appRootEl.classList.remove('panel-collapsed', 'pane-chat', 'pane-browser');
     btnPanelToggle.classList.remove('collapsed');
     if (savedPanelWidth) leftPanel.style.width = savedPanelWidth;
+    ipcRenderer.send('single-pane', null);
     setTimeout(() => {
       const w = leftPanel.offsetWidth;
       ipcRenderer.send('split-changed', w / appRootEl.offsetWidth);
     }, 250);
   }
   refitSession(activeId, PANEL_ANIM_MS);
-});
+}
+
+// << toggles between the split view and single-pane (browser by default).
+btnPanelToggle.addEventListener('click', () => setSinglePane(panelCollapsed ? null : 'browser'));
+// Border close buttons collapse the split view into single-pane browser.
+document.querySelectorAll('.border-close').forEach(b => b.addEventListener('click', () => setSinglePane('browser')));
+// Collapsed-strip tabs swap which pane fills the main area (full-width), staying collapsed.
+document.querySelectorAll('.cn-label').forEach(b => b.addEventListener('click', () => setSinglePane(b.dataset.pane === 'chat' ? 'chat' : 'browser')));
+// Strip "open" button (>>) returns to the original two-column split.
+document.getElementById('btn-open-strip')?.addEventListener('click', () => setSinglePane(null));
 
 // ── Settings dropdown ─────────────────────────────────────────────
 // ── Custom window controls (frameless titlebar) ──────────────────
@@ -2413,8 +2701,7 @@ ipcRenderer.on('settings-action', (_, action) => {
     case 'mcp-tools':          openMcpToolsModal?.();          break;
     case 'keyboard-shortcuts': openKeyboardShortcutsModal?.(); break;
     case 'edit-devices':       openEditDevicesModal?.();       break;
-    case 'theme-minimal': applyTheme('minimal'); break;
-    case 'theme-winamp':  applyTheme('winamp');  break;
+    case 'theme':         openThemeModal?.();    break;
     case 'new-window':    ipcRenderer.send('new-window'); break;
   }
 });
@@ -2593,6 +2880,7 @@ document.getElementById('api-key-new-value').addEventListener('keydown', e => {
   if (e.key === 'Escape') { apiKeyNewForm.style.display = 'none'; }
 });
 document.getElementById('auth-done').addEventListener('click', () => authModalCtl.close());
+document.getElementById('auth-close').addEventListener('click', () => authModalCtl.close());
 
 // ── CLAUDE.md editor modal ────────────────────────────────────────
 const claudeMdModal    = document.getElementById('claude-md-modal');
@@ -2815,6 +3103,7 @@ function activateViewTab(tabId, silent = false) {
   const isDiff      = tab.type === 'diff';
   tabBar.style.display             = isProject   ? '' : 'none';
   rightSb.style.display            = isStorybook ? 'flex' : 'none';
+  window.__renderSbTab?.();   // show/hide the Storybook instance bar for this tab (set by the sb section)
   browserPlaceholder.style.display = isProject   ? '' : 'none';
   if (codePanel) codePanel.style.display = isCode ? 'flex' : 'none';
   if (consolePanel) consolePanel.style.display = isConsole ? 'flex' : 'none';
@@ -2877,7 +3166,42 @@ function renderViewTabs() {
 renderViewTabs();
 activateViewTab(activeViewTabId, true);
 
-window.addEventListener('resize', () => { equalizeTabWidths(); updateViewTabThumb(); });
+window.addEventListener('resize', () => {
+  equalizeTabWidths(); updateViewTabThumb();
+  // Re-sync the split fraction so main re-derives the native browser view's x
+  // from the *current* left-panel width (otherwise a stale fraction drifts the
+  // view a few px off the tab bar after a window resize).
+  if (!panelCollapsed) ipcRenderer.send('split-changed', leftPanel.offsetWidth / appRootEl.offsetWidth);
+});
+
+// ── Dodge the vertical tool rail ──────────────────────────────────
+// Right-aligned chrome that the #toolbar rail can overlap shifts left only
+// while it's actually covered, and snaps back when it isn't.
+const DODGE_SELECTORS = ['.usage-cost-val', '#audit-wrap', '.notif-toggle', '#btn-ui-resize'];
+function dodgeToolbar() {
+  const toolbar = document.getElementById('toolbar');
+  const els = [];
+  DODGE_SELECTORS.forEach(sel => document.querySelectorAll(sel).forEach(el => els.push(el)));
+  els.forEach(el => { el.style.transform = ''; });            // reset → measure natural position
+  if (!toolbar || !toolbar.offsetParent) return;              // rail hidden
+  const tb = toolbar.getBoundingClientRect();
+  if (!tb.width) return;
+  const shifts = els.map(el => {
+    if (!el.offsetParent) return 0;
+    const r = el.getBoundingClientRect();
+    const vOverlap = r.bottom > tb.top && r.top < tb.bottom;  // within the rail's vertical band
+    const past = r.right - tb.left;                           // px the element reaches under the rail
+    return (vOverlap && past > 0) ? Math.ceil(past + 6) : 0;  // clear it + 6px gap
+  });
+  els.forEach((el, i) => { if (shifts[i] > 0) el.style.transform = `translateX(${-shifts[i]}px)`; });
+}
+let _dodgeRaf = null;
+function scheduleDodge() { if (_dodgeRaf) return; _dodgeRaf = requestAnimationFrame(() => { _dodgeRaf = null; dodgeToolbar(); }); }
+window.addEventListener('resize', scheduleDodge);
+document.addEventListener('scroll', scheduleDodge, true);     // any scroll container
+['left-panel', 'toolbar'].forEach(id => { const el = document.getElementById(id); if (el) new ResizeObserver(scheduleDodge).observe(el); });
+setInterval(scheduleDodge, 400);                              // catch-all for content-driven layout shifts
+scheduleDodge();
 
 document.getElementById('right-panel-tabs').addEventListener('contextmenu', e => {
   e.preventDefault();
@@ -2893,8 +3217,6 @@ let nextTabId   = 1;
 
 // ── Working File empty state ──────────────────────────────────────
 const wfEmpty    = document.getElementById('wf-empty');
-const wfUrl      = document.getElementById('wf-url');
-const wfCloneRow = document.getElementById('wf-clone-row');
 const wfRepo     = document.getElementById('wf-repo');
 
 function projectTabActive() {
@@ -2906,10 +3228,12 @@ function browserIsBlank() {
   const url = t ? t.url : '';
   return !url || url === 'about:blank';
 }
+let _wfWasEmpty = false;
 function updateWfEmpty() {
   const empty = projectTabActive() && browserIsBlank();
   wfEmpty.classList.toggle('visible', empty);
-  if (!empty) wfCloneRow.classList.remove('visible');
+  if (empty && !_wfWasEmpty) renderRecentList();   // populate the recents list when the empty state appears
+  _wfWasEmpty = empty;
   // Nothing loaded → the pick tools have nothing to act on: show them inactive.
   document.getElementById('toolbar')?.classList.toggle('tools-inactive', empty);
   ipcRenderer.send('set-browser-empty', empty);
@@ -2922,30 +3246,91 @@ function sendToAgent(text) {
   sendUiMessage();
 }
 
-function wfOpen() {
-  const v = wfUrl.value.trim();
-  if (!v) { wfUrl.focus(); return; }
-  ipcRenderer.send('browser-navigate', v);
+// "From a folder" — list detected local projects (package.json in the home dir) and run one.
+function listDevProjects() {
+  try {
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const entries = fs.readdirSync(os.homedir(), { withFileTypes: true });
+    const out = [];
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.')) continue;
+      const dir = path.join(os.homedir(), e.name);
+      try { const pkg = path.join(dir, 'package.json'); if (fs.existsSync(pkg)) out.push({ name: e.name, path: dir, mtime: fs.statSync(pkg).mtimeMs }); } catch (_) {}
+    }
+    out.sort((a, b) => b.mtime - a.mtime);
+    return out;
+  } catch (_) { return []; }   // never let a slow/odd home dir break module load
 }
-document.getElementById('wf-go').addEventListener('click', wfOpen);
-wfUrl.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfOpen(); } });
+function startDevServer(dir) {
+  sendToAgent(`Start the local dev server for the project at "${dir}". Detect the project type (Node/Vite/Next/etc.) and the correct dev command, pick a free localhost port, start it, and reply with the exact http://localhost:<port> URL so I can open it in the Working File. Just start it — don't ask me to confirm the folder.`);
+}
 
-document.getElementById('wf-serve').addEventListener('click', () => {
-  wfCloneRow.classList.remove('visible');
-  sendToAgent("I want to run a local dev server and view it here in the Working File. First, ask me which repository or project folder you should use. Once I've told you, start that project's dev server on a free, open localhost port and reply with the exact http://localhost:<port> URL so I can open it.");
+const wfPromptIn   = document.getElementById('wf-prompt-in');
+const wfFigmaIn    = document.getElementById('wf-figma-in');
+const wfRecentList = document.getElementById('wf-recent-list');
+
+// Folder tab — scrollable list of detected recent projects.
+function renderRecentList() {
+  wfRecentList.innerHTML = '';
+  const projects = listDevProjects();
+  if (!projects.length) {
+    const empty = document.createElement('div');
+    empty.className = 'wf-recent-empty';
+    empty.textContent = 'No projects found in your home folder — use Browse to pick one.';
+    wfRecentList.appendChild(empty);
+    return;
+  }
+  projects.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'wf-recent-item';
+    btn.textContent = p.path;
+    btn.title = p.path;
+    btn.addEventListener('click', () => startDevServer(p.path));
+    wfRecentList.appendChild(btn);
+  });
+}
+document.getElementById('wf-browse').addEventListener('click', async () => {
+  const dir = await ipcRenderer.invoke('show-folder-dialog');
+  if (dir) startDevServer(dir);
 });
-document.getElementById('wf-clone').addEventListener('click', () => {
-  wfCloneRow.classList.add('visible');
-  wfRepo.focus();
-});
+
+// Tab switching — folder is the default; show one panel at a time.
+const wfTabs   = Array.from(document.querySelectorAll('.wf-tab'));
+const wfPanels = Array.from(document.querySelectorAll('.wf-tabpanel'));
+function setWfTab(name) {
+  wfTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  wfPanels.forEach(p => { p.hidden = p.dataset.panel !== name; });
+  if (name === 'folder') renderRecentList();
+  else if (name === 'prompt') wfPromptIn.focus();
+  else if (name === 'figma') wfFigmaIn.focus();
+  else if (name === 'repo') wfRepo.focus();
+}
+wfTabs.forEach(t => t.addEventListener('click', () => setWfTab(t.dataset.tab)));
+
+// Build actions (prompt / figma / repo) — each fires a complete task.
+function wfPromptGo() {
+  const v = wfPromptIn.value.trim();
+  if (!v) { wfPromptIn.focus(); return; }
+  sendToAgent(`Build a new web app: ${v}. Use the Cathode design system / Storybook components where they fit, scaffold it (a Vite + React app is fine), start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Working File. Just build and run it — don't ask me to confirm.`);
+  wfPromptIn.value = '';
+}
+function wfFigmaGo() {
+  const v = wfFigmaIn.value.trim();
+  if (!v) { wfFigmaIn.focus(); return; }
+  sendToAgent(`Build a web app from this Figma design: ${v}. Use the Figma MCP to read the frames, recreate them with the Cathode design system / Storybook components, start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Working File.`);
+  wfFigmaIn.value = '';
+}
 function wfCloneGo() {
   const repo = wfRepo.value.trim();
   if (!repo) { wfRepo.focus(); return; }
   sendToAgent(`Clone the repository at ${repo} into my project folder, install its dependencies, and start its dev server on a free, open localhost port. When it's running, reply with the exact http://localhost:<port> URL so I can open it here in the Working File.`);
   wfRepo.value = '';
-  wfCloneRow.classList.remove('visible');
 }
+document.getElementById('wf-prompt-go').addEventListener('click', wfPromptGo);
+document.getElementById('wf-figma-go').addEventListener('click', wfFigmaGo);
 document.getElementById('wf-clone-go').addEventListener('click', wfCloneGo);
+wfPromptIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfPromptGo(); } });
+wfFigmaIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfFigmaGo(); } });
 wfRepo.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfCloneGo(); } });
 
 function createTab(url = '') {
@@ -3837,6 +4222,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     }
     return { open, hide };
   })();
+  sharedColorPicker = colorPicker;   // expose for the theme-modal swatches
 
   // ── open / close / send / cancel ──────────────────────────────
   function open(items, tool) {
@@ -4578,7 +4964,8 @@ function growPanel(el, open) {
   apply();
 })();
 
-ipcRenderer.on('sysperf', (_, m) => {
+let _lastSysperf = null;
+function renderSysperfBars(m) {
   const set = (key, val) => {
     const bar = document.getElementById(`sysperf-${key}-bar`);
     const pct = document.getElementById(`sysperf-${key}-pct`);
@@ -4590,7 +4977,8 @@ ipcRenderer.on('sysperf', (_, m) => {
     pct.textContent = v + '%';
   };
   set('cpu', m && m.cpu); set('ram', m && m.ram); set('gpu', m && m.gpu);
-});
+}
+ipcRenderer.on('sysperf', (_, m) => { _lastSysperf = m; renderSysperfBars(m); });
 
 // Route a message to the active session — chat (ACP) or PTY. The single
 // sending path for tools, audits, and the composer. `display` is what the
@@ -5168,6 +5556,9 @@ function buildAuditMenu() {
   function updateAddSelect() {
     const prev = addSel.value;
     addSel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = 'Select a Tab';
+    addSel.appendChild(ph);
     BUILTIN_OPTIONS.forEach(o => {
       const opt = document.createElement('option');
       opt.value = o.value;
@@ -5198,7 +5589,7 @@ function buildAuditMenu() {
         ${isUrl
           ? `<span class="tabs-modal-row-url" title="${esc(tab.url || '')}">${esc(tab.url || '')}</span>`
           : `<span class="tabs-modal-row-badge">${esc(tab.type)}</span>`}
-        <button class="tabs-modal-remove" title="Remove">✕</button>
+        <button class="tabs-modal-remove" title="Remove">${DELETE_ICON_SVG}</button>
       `;
       row.draggable = true;
 
@@ -5238,14 +5629,11 @@ function buildAuditMenu() {
   }
 
   function updateAddBtn() {
-    if (addSel.value === 'url') {
-      const ready = !!(addLabelIn.value.trim() && addUrlIn.value.trim());
-      addBtn.disabled = !ready;
-      addBtn.classList.toggle('ready', ready);
-    } else {
-      addBtn.disabled = false;
-      addBtn.classList.add('ready');
-    }
+    const ready = addSel.value === 'url'
+      ? !!(addLabelIn.value.trim() && addUrlIn.value.trim())
+      : !!addSel.value;                 // false for the "Select a Tab" placeholder
+    addBtn.disabled = !ready;
+    addBtn.classList.remove('ready');   // static → hover only; no perpetual orange
   }
 
   addSel.addEventListener('change', () => {
@@ -6054,26 +6442,37 @@ function sbContextText(cfg) {
   return `[Design System] Before making any UI changes, reference the Storybook at ${cfg.value}. Use its design tokens, component APIs, and visual styles to ensure consistency with the existing design system.`;
 }
 
-function renderSbConnected() {
-  document.getElementById('sb-setup').style.display     = 'none';
-  document.getElementById('sb-connected').style.display = 'flex';
-  document.getElementById('sb-conn-val').textContent    = sbConfig.value;
-  document.getElementById('sb-auto-conn').checked       = sbConfig.autoInject;
-  document.getElementById('sb-preview-text').textContent = sbContextText(sbConfig);
-  document.getElementById('sb-preview').style.display = sbConfig.autoInject ? '' : 'none';
-  const filesEl = document.getElementById('sb-memory-files');
-  if (filesEl) {
-    filesEl.textContent = `${sbConfig.projectDir || 'Home folder (global)'}  —  CLAUDE.md · AGENTS.md · GEMINI.md`;
-  }
-  const disc = document.getElementById('sb-disconnect');
-  if (disc) disc.textContent = sbConfig.managed ? 'Stop Storybook' : 'Disconnect';   // managed → Stop kills the server
-}
+// Storybook instance registry (mirrored from main); the bar + live view ARE the
+// connected surface now, so #sb-connected is retired.
+let sbInstances = [], sbActiveId = null, sbSetupOpen = false;
 
-function renderSbSetup() {
-  document.getElementById('sb-setup').style.display     = 'flex';
+function onStorybookTab() { const t = tabsConfig.find(t => t.id === activeViewTabId); return !!t && t.type === 'storybook'; }
+
+function renderSbTab() {
+  const here     = onStorybookTab();
+  const hasLive  = sbInstances.length > 0;
+  const showSetup = sbSetupOpen || !hasLive;
+  const bar = document.getElementById('sb-bar');
+  if (bar) bar.hidden = !(here && hasLive && !showSetup);
+  document.getElementById('sb-setup').style.display     = (here && showSetup) ? 'flex' : 'none';
   document.getElementById('sb-connected').style.display = 'none';
-  detectStorybook();
+  const back = document.getElementById('sb-back');
+  if (back) back.hidden = !hasLive;
+  if (here && hasLive && !showSetup) renderSbBar();
+  ipcRenderer.send('storybook-setup-open', here ? showSetup : false);   // suppress the native view while setup is up
 }
+function renderSbBar() {
+  const a = sbInstances.find(i => i.id === sbActiveId) || sbInstances[0];
+  if (!a) return;
+  const dot = document.getElementById('sb-bar-dot');
+  const label = document.getElementById('sb-bar-label');
+  if (dot) dot.className = 'sb-bar-dot' + (a.status === 'starting' ? ' starting' : a.status === 'error' ? ' error' : '');
+  if (label) label.textContent = `${a.label || 'Storybook'} · :${a.port}` + (sbInstances.length > 1 ? `  (${sbInstances.length})` : '') + (a.managed ? '' : ' · external');
+}
+window.__renderSbTab = renderSbTab;
+
+function renderSbConnected() { sbSetupOpen = false; renderSbTab(); }
+function renderSbSetup()     { sbSetupOpen = true;  renderSbTab(); detectStorybook(); }
 
 // Step 5: detect whether the chosen folder (or the bundled demo) already has a
 // Storybook, and guide the user toward Start vs Build.
@@ -6095,13 +6494,24 @@ function sbNotifyMain() {
   else          ipcRenderer.send('storybook-disconnect');
 }
 
-// Init — restore live view if URL was previously connected
+// Init — re-adopt the remembered Storybook only if it's actually still running.
 ipcRenderer.send('set-project-dir', { dir: (sbConfig && sbConfig.projectDir) || '' });
-if (sbConfig) {
-  if (sbConfig.projectDir) document.getElementById('sb-folder').value = sbConfig.projectDir;
-  renderSbConnected();
-  sbNotifyMain();
-} else renderSbSetup();
+if (sbConfig && sbConfig.projectDir) document.getElementById('sb-folder').value = sbConfig.projectDir;
+(async () => {
+  try {   // sync any already-running instances (e.g. after a renderer-only reload)
+    const { instances, activeId } = await ipcRenderer.invoke('storybook-list');
+    sbInstances = instances || []; sbActiveId = activeId;
+  } catch (_) {}
+  if (sbInstances.length) { renderSbTab(); return; }
+  const m = sbConfig && /:(\d+)/.exec(sbConfig.value || '');
+  if (m) {   // re-adopt the remembered Storybook only if it's actually still up
+    try {
+      const { found } = await ipcRenderer.invoke('storybook-scan');
+      if ((found || []).some(f => f.port === +m[1])) { await ipcRenderer.invoke('storybook-adopt', { port: +m[1] }); return; }
+    } catch (_) {}
+  }
+  renderSbSetup();
+})();
 
 document.getElementById('sb-folder-pick').addEventListener('click', async () => {
   const dir = await ipcRenderer.invoke('show-folder-dialog');
@@ -6123,8 +6533,9 @@ document.getElementById('sb-connect').addEventListener('click', async () => {
   // Point future sessions at the project dir, then write the memory files there
   ipcRenderer.send('set-project-dir', { dir });
   await ipcRenderer.invoke('storybook-write-memory', { url });
-  renderSbConnected();
-  sbNotifyMain();
+  const m = /:(\d+)/.exec(url);
+  if (m) await ipcRenderer.invoke('storybook-adopt', { port: +m[1] });   // adopt into the registry → bar/view
+  sbSetupOpen = false; renderSbTab();
   updateComponentPickerBtn?.();
 });
 
@@ -6215,6 +6626,27 @@ document.getElementById('sb-manual-toggle')?.addEventListener('click', () => {
   if (m) m.hidden = !m.hidden;
 });
 document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stopPropagation());
+
+// ── Storybook instance bar ──
+document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-switcher'));
+document.getElementById('sb-bar-new')?.addEventListener('click', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
+document.getElementById('sb-bar-reload')?.addEventListener('click', () => ipcRenderer.invoke('storybook-reload'));
+document.getElementById('sb-bar-external')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-external', {}));
+document.getElementById('sb-bar-stop')?.addEventListener('click', () => ipcRenderer.invoke('storybook-server-stop', { id: sbActiveId }));
+document.getElementById('sb-back')?.addEventListener('click', () => { sbSetupOpen = false; renderSbTab(); });
+
+ipcRenderer.on('storybook-instances', (_, { instances, activeId } = {}) => {
+  sbInstances = instances || [];
+  sbActiveId  = activeId;
+  const active = sbInstances.find(i => i.active);
+  if (active) {   // keep the component picker pointed at the active instance
+    sbConfig = Object.assign(sbConfig || { autoInject: true, projectDir: '' }, { value: active.url, managed: active.managed });
+    localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
+  }
+  renderSbTab();
+  updateComponentPickerBtn?.();
+});
+ipcRenderer.on('storybook-show-setup', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
 
 // ── Storybook component picker panel (left column) ───────────────
 // Ported from the old separate component-picker window. The renderer already

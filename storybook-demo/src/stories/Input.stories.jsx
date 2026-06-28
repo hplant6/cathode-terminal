@@ -14,3 +14,4 @@ export const Disabled       = { args: { label: 'Read-only', defaultValue: 'conne
 export const WithPrefix     = { args: { label: 'URL', prefix: 'https://', placeholder: 'app.example.com' } };
 export const WithSuffix     = { args: { label: 'Port', placeholder: '6006', suffix: 'TCP' } };
 export const Password       = { args: { label: 'Secret Key', type: 'password', placeholder: 'Enter secret...' } };
+export const Dark           = { args: { label: 'Command', variant: 'dark', placeholder: 'e.g. claude', defaultValue: 'claude' } };   // address-bar style: shade-7 fill, shade-3 border

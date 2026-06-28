@@ -10,6 +10,7 @@ export function Input({
   defaultValue = '',
   prefix,
   suffix,
+  variant = 'default',   // 'default' (shade-3 fill) | 'dark' (address-bar: shade-7 fill, shade-3 border, → shade-5 on focus)
 }) {
   const [value, setValue] = useState(defaultValue);
   const [focused, setFocused] = useState(false);
@@ -17,8 +18,12 @@ export function Input({
   const borderColor = error
     ? 'var(--danger)'
     : focused
-    ? 'var(--accent)'
-    : 'var(--border)';
+    ? 'var(--spec-text-dim)'   // shade 1
+    : 'var(--border)';         // shade 3
+  // dark = address-bar style: shade-7 fill that deepens to shade 5 on focus
+  const bg = variant === 'dark'
+    ? (focused ? 'var(--spec-toolbar-bg)' : 'var(--spec-input-bg)')
+    : 'var(--bg-input)';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '280px' }}>
@@ -30,7 +35,7 @@ export function Input({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        background: 'var(--bg-input)',
+        background: bg,
         border: `1px solid ${borderColor}`,
         borderRadius: 'var(--radius-md)',
         transition: 'border-color 0.15s',

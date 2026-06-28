@@ -91,6 +91,7 @@ const customViews  = new Map(); // url → WebContentsView
 
 const TOOLBAR_HEIGHT    = 46;
 const TABBAR_HEIGHT     = 46;   /* browser chrome bar height (matches #tab-bar in styles.css) */
+const SB_BAR_HEIGHT     = 40;   /* Storybook instance bar height (matches #sb-bar in styles.css) */
 const POPUP_BAR_HEIGHT  = 36;
 
 // Safe send to the main renderer — async handlers can outlive the window.
@@ -128,6 +129,10 @@ function repositionAll() {
 }
 
 let splitFraction = 0.4;
+// Single-pane (collapsed) mode: null = normal split; 'browser' = browser fills
+// the main area beside the left strip; 'chat' = chat fills it, browser hidden.
+let singlePane = null;
+const STRIP_W = 50;   // single-pane left strip width (must match the CSS divider width)
 // ── Shortcut handler ─────────────────────────────────────────────
 // Attach before-input-event to any WebContentsView webContents so
 // shortcuts work no matter which panel currently holds keyboard focus.
@@ -440,7 +445,7 @@ function getPopupBounds() {
   // Subtract the DevTools panel like every other layout fn — previously this
   // ignored it, so popups mis-centered while DevTools was open.
   const availW    = winW - devToolsWidth;
-  const rightX    = Math.round(availW * splitFraction) + 6;
+  const rightX    = Math.round(availW * splitFraction) + 10;
   const rightW    = availW - rightX;
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
   const availH    = winH - topOffset;
@@ -576,10 +581,14 @@ function repositionRightPanelView() {
   }
   const [winW, winH] = mainWindow.getContentSize();
   const availW = winW - devToolsWidth;
-  const rightX = Math.round(availW * splitFraction) + 6;
+  const rightX = Math.round(availW * splitFraction) + 11;   // +1 = right-column left inset
   const onBounds = { x: rightX, y: TOOLBAR_HEIGHT, width: availW - rightX, height: winH - TOOLBAR_HEIGHT };
   if (figmaView)     figmaView.setBounds(rightPanelMode === 'figma'         ? onBounds : offscreen);
-  if (storybookView) storybookView.setBounds(rightPanelMode === 'storybook' ? onBounds : offscreen);
+  // Storybook reserves a top strip for the instance bar (#sb-bar) when a Storybook is active.
+  const sbY = TOOLBAR_HEIGHT + (activeSbId ? SB_BAR_HEIGHT : 0);
+  const sbBounds = { x: rightX, y: sbY, width: availW - rightX, height: winH - sbY };
+  const sbVisible = rightPanelMode === 'storybook' && activeSbId && !sbSetupOpen;   // setup overlay suppresses the view
+  if (storybookView) storybookView.setBounds(sbVisible ? sbBounds : offscreen);
   for (const [url, view] of customViews) view.setBounds(rightPanelMode === 'url:' + url ? onBounds : offscreen);
 }
 
@@ -756,7 +765,28 @@ ipcMain.on('storybook-disconnect', () => {
 // answers, then hand the live URL to the existing storybookView + component
 // picker. The child is detached (its own process group) so the whole build
 // tree can be torn down on stop / quit.
-let sbServer = null;   // { proc, port, url, dir, log }
+// Multiple managed/adopted Storybooks live in a registry; one WebContentsView
+// shows the active one. The bar (renderer) renders from `storybook-instances`.
+const sbServers = new Map();   // id → { id, proc, port, url, dir, label, status, log, managed }
+let activeSbId = null, sbSeq = 0, sbSetupOpen = false;
+
+function sbLabel(dir) { return !dir ? '' : (dir === SB_DEMO_DIR ? 'Demo' : (path.basename(dir.replace(/[\\/]+$/, '')) || 'Storybook')); }
+function sbSerialize() {
+  return [...sbServers.values()].map(s => ({ id: s.id, port: s.port, url: s.url, label: s.label, status: s.status, managed: s.managed, active: s.id === activeSbId }));
+}
+function emitInstances() { uiSend('storybook-instances', { instances: sbSerialize(), activeId: activeSbId }); }
+function setActiveStorybook(id) {
+  const inst = sbServers.get(id);
+  if (!inst) return;
+  activeSbId = id;
+  createStorybookView(inst.url);   // single view, (re)loads the active instance
+  emitInstances();
+}
+function pickActiveOrHide() {
+  const next = [...sbServers.values()].find(s => s.status === 'ready');
+  if (next) setActiveStorybook(next.id);
+  else { destroyStorybookView(); activeSbId = null; emitInstances(); }
+}
 
 const nodeNet = require('net');   // Node's net (Electron's `net` above is the Chromium client)
 const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'storybook-demo') : path.join(__dirname, 'storybook-demo');
@@ -779,25 +809,28 @@ function findFreePort(start, tries = 30) {
 
 // Persist the managed PID so a crashed run can be reaped next launch — guarded by
 // the owning app's PID, so another *live* instance's server is never touched.
-function writeSbState() { try { fs.writeFileSync(sbStateFile(), JSON.stringify({ sbPid: sbServer.proc.pid, appPid: process.pid, port: sbServer.port }), 'utf8'); } catch (_) {} }
+function writeSbState() {
+  const managed = [...sbServers.values()].filter(s => s.managed && s.proc).map(s => ({ sbPid: s.proc.pid, port: s.port }));
+  try { managed.length ? fs.writeFileSync(sbStateFile(), JSON.stringify({ appPid: process.pid, managed }), 'utf8') : clearSbState(); } catch (_) {}
+}
 function clearSbState() { try { fs.unlinkSync(sbStateFile()); } catch (_) {} }
 function reapOrphanStorybook() {
   let st; try { st = JSON.parse(fs.readFileSync(sbStateFile(), 'utf8')); } catch (_) { return; }
-  if (!st || !st.sbPid) return clearSbState();
+  if (!st || !Array.isArray(st.managed)) return clearSbState();
   let appAlive = false; try { process.kill(st.appPid, 0); appAlive = true; } catch (_) {}
-  if (appAlive) return;   // another running instance still owns it — leave it alone
-  try { process.kill(-st.sbPid, 'SIGTERM'); } catch (_) { try { process.kill(st.sbPid, 'SIGTERM'); } catch (_) {} }
+  if (appAlive) return;   // another running instance still owns them — leave them alone
+  for (const m of st.managed) { try { process.kill(-m.sbPid, 'SIGTERM'); } catch (_) { try { process.kill(m.sbPid, 'SIGTERM'); } catch (_) {} } }
   clearSbState();
 }
 
 function sbStatus(state, extra = {}) { uiSend('storybook-server-status', { state, ...extra }); }
 
-function pollStorybookReady(url, tries = 150) {
+function pollInstanceReady(inst, tries = 150) {
   return new Promise((resolve) => {
     let n = 0;
     const tick = () => {
-      if (!sbServer) return resolve(false);            // stopped while waiting
-      const req = http.get(url + '/iframe.html', (res) => {
+      if (!sbServers.has(inst.id)) return resolve(false);   // stopped while waiting
+      const req = http.get(inst.url + '/iframe.html', (res) => {
         res.resume();
         if (res.statusCode && res.statusCode < 500) return resolve(true);
         retry();
@@ -810,12 +843,17 @@ function pollStorybookReady(url, tries = 150) {
   });
 }
 
-function stopStorybookServer() {
-  if (!sbServer) return;
-  const proc = sbServer.proc;
-  sbServer = null;
-  clearSbState();
-  try { process.kill(-proc.pid, 'SIGTERM'); } catch (_) { try { proc.kill(); } catch (_) {} }
+function stopInstance(id) {
+  const inst = sbServers.get(id);
+  if (!inst) return;
+  sbServers.delete(id);
+  if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) { try { inst.proc.kill(); } catch (_) {} } }
+  writeSbState();
+  if (activeSbId === id) pickActiveOrHide(); else emitInstances();
+}
+function stopAllStorybook() {
+  for (const inst of sbServers.values()) { if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) {} } }
+  sbServers.clear(); activeSbId = null; clearSbState();
 }
 
 // Resolve the working dir (empty → bundled demo) + detect an installed Storybook.
@@ -859,45 +897,98 @@ ipcMain.handle('storybook-detect', (_, { dir } = {}) => {
 });
 
 ipcMain.handle('storybook-server-start', async (_, { dir, port } = {}) => {
-  if (sbServer) return { ok: true, url: sbServer.url, already: true };
   const projectDir = sbResolveDir(dir);
+  for (const s of sbServers.values()) { if (s.dir === projectDir) { setActiveStorybook(s.id); return { ok: true, url: s.url, already: true }; } }   // already running this dir
   if (!sbHasStorybook(projectDir)) {
     sbStatus('error', { message: 'No Storybook found in ' + projectDir + ' — build one with your agent first.' });
     return { ok: false, error: 'no-storybook', dir: projectDir };
   }
   ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
-  const bin = sbBin(projectDir);
   const usePort = port || await findFreePort(6006);   // step 6: don't get blocked by a busy 6006
   const url = `http://localhost:${usePort}`;
+  const id  = 'sb' + (++sbSeq);
+  const inst = { id, proc: null, port: usePort, url, dir: projectDir, label: sbLabel(projectDir), status: 'starting', log: '', managed: true };
+  sbServers.set(id, inst);
+  emitInstances();
   sbStatus('starting', { url, dir: projectDir });
   let proc;
   try {
-    proc = spawn(bin, ['dev', '-p', String(usePort), '--ci'], {
+    proc = spawn(sbBin(projectDir), ['dev', '-p', String(usePort), '--ci'], {
       cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, BROWSER: 'none' },
     });
   } catch (e) {
-    sbServer = null; sbStatus('error', { message: e.message });
+    sbServers.delete(id); emitInstances(); sbStatus('error', { message: e.message });
     return { ok: false, error: e.message };
   }
-  sbServer = { proc, port: usePort, url, dir: projectDir, log: '' };
-  writeSbState();
-  const onLog = (d) => { if (sbServer) sbServer.log = (sbServer.log + d).slice(-4000); };   // rolling tail for diagnosis
+  inst.proc = proc; writeSbState();
+  const onLog = (d) => { inst.log = (inst.log + d).slice(-4000); };   // rolling tail for diagnosis
   if (proc.stdout) proc.stdout.on('data', onLog);
   if (proc.stderr) proc.stderr.on('data', onLog);
-  proc.on('exit', (code) => { if (sbServer && sbServer.proc === proc) { const log = sbServer.log; sbServer = null; clearSbState(); sbStatus('stopped', { code, log: tailLines(log, 8) }); } });
+  proc.on('exit', (code) => {
+    if (!sbServers.has(id)) return;
+    sbServers.delete(id); writeSbState();
+    sbStatus('stopped', { code, log: tailLines(inst.log, 8) });
+    if (activeSbId === id) pickActiveOrHide(); else emitInstances();
+  });
 
-  const ready = await pollStorybookReady(url);
-  if (!sbServer) return { ok: false, error: 'stopped' };            // stopped during startup
-  if (!ready) { const log = sbServer.log; stopStorybookServer(); sbStatus('error', { message: 'Storybook didn’t come up on ' + url + '.', log: tailLines(log, 8) }); return { ok: false, error: 'timeout' }; }
-  createStorybookView(url);                                          // auto-connect the live view
+  const ready = await pollInstanceReady(inst);
+  if (!sbServers.has(id)) return { ok: false, error: 'stopped' };            // stopped during startup
+  if (!ready) { stopInstance(id); sbStatus('error', { message: 'Storybook didn’t come up on ' + url + '.', log: tailLines(inst.log, 8) }); return { ok: false, error: 'timeout' }; }
+  inst.status = 'ready';
+  setActiveStorybook(id);                                            // auto-connect the live view
   sbStatus('ready', { url, dir: projectDir });
   return { ok: true, url };
 });
 
-ipcMain.handle('storybook-server-stop', () => { stopStorybookServer(); sbStatus('stopped', {}); return { ok: true }; });
+ipcMain.handle('storybook-server-stop', (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
+ipcMain.handle('storybook-switch',        (_, { id } = {}) => { setActiveStorybook(id); const inst = sbServers.get(id); return { ok: !!inst, url: inst && inst.url }; });
+ipcMain.handle('storybook-list',          () => ({ instances: sbSerialize(), activeId: activeSbId }));
+ipcMain.handle('storybook-reload',        () => { if (storybookView && !storybookView.webContents.isDestroyed()) storybookView.webContents.reload(); return { ok: true }; });
+ipcMain.handle('storybook-open-external', (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url); return { ok: true }; });
 
-app.on('before-quit', stopStorybookServer);
+// Detect Storybooks the app didn't start (scan common ports), then adopt one.
+function scanPorts(known) {
+  const ports = Array.from({ length: 11 }, (_, i) => 6006 + i).filter(p => !known.has(p));
+  return Promise.all(ports.map(port => new Promise((res) => {
+    const req = http.get(`http://localhost:${port}/iframe.html`, (r) => { r.resume(); res(r.statusCode && r.statusCode < 500 ? { port, url: `http://localhost:${port}` } : null); });
+    req.on('error', () => res(null));
+    req.setTimeout(800, () => { req.destroy(); res(null); });
+  }))).then(rs => rs.filter(Boolean));
+}
+function adoptPort(port) {
+  for (const s of sbServers.values()) if (s.port === port) { setActiveStorybook(s.id); return s; }
+  const id = 'sb' + (++sbSeq);
+  const inst = { id, proc: null, port, url: `http://localhost:${port}`, dir: '', label: 'Port ' + port, status: 'ready', log: '', managed: false };
+  sbServers.set(id, inst);
+  setActiveStorybook(id);
+  return inst;
+}
+ipcMain.handle('storybook-scan',  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
+ipcMain.handle('storybook-adopt', (_, { port } = {}) => { const i = adoptPort(port); return { ok: true, id: i.id, url: i.url }; });
+
+// Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
+ipcMain.handle('storybook-open-switcher', async () => {
+  const items = [...sbServers.values()].map(s => ({
+    label: `${s.label}  ·  :${s.port}${s.managed ? '' : '  (external)'}`,
+    type: 'checkbox', checked: s.id === activeSbId, click: () => setActiveStorybook(s.id),
+  }));
+  if (items.length) items.push({ type: 'separator' });
+  items.push({ label: 'New Storybook…', click: () => uiSend('storybook-show-setup') });
+  items.push({ label: 'Detect running Storybooks…', click: async () => {
+    const found = await scanPorts(new Set([...sbServers.values()].map(s => s.port)));
+    const tmpl = found.length ? found.map(f => ({ label: `Adopt Storybook on :${f.port}`, click: () => adoptPort(f.port) }))
+                              : [{ label: 'No other running Storybooks found', enabled: false }];
+    Menu.buildFromTemplate(tmpl).popup({ window: mainWindow });
+  }});
+  Menu.buildFromTemplate(items).popup({ window: mainWindow });
+  return { ok: true };
+});
+
+// Setup panel shown over the view (add/manage) → suppress the native view while open.
+ipcMain.on('storybook-setup-open', (_, open) => { sbSetupOpen = !!open; repositionRightPanelView(); });
+
+app.on('before-quit', stopAllStorybook);
 
 // ── Storybook agent-memory files ──────────────────────────────────
 // Write a clearly-delimited managed block into each model's memory file
@@ -988,7 +1079,8 @@ function repositionBrowserView(overrideFraction) {
   if (resizingDevice) { browserView.setBounds(OFFSCREEN_BOUNDS); return; }
   // browserEmpty → the project URL is blank; hide the view so the HTML empty
   // state in #browser-placeholder shows through.
-  if (modalOpen || rightPanelMode !== 'project' || browserEmpty) {
+  // single-pane chat → the chat fills the main area; hide the browser entirely.
+  if (modalOpen || rightPanelMode !== 'project' || browserEmpty || singlePane === 'chat') {
     browserView.setBounds(OFFSCREEN_BOUNDS);
     uiSend('device-view-bounds', null);   // hide the resize handles
     return;
@@ -999,8 +1091,10 @@ function repositionBrowserView(overrideFraction) {
   const leftW   = Math.round(availW * fraction);
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
   const PAD     = 10;   // frame inset (right/bottom) — matches #right-panel padding (left flush)
-  const rightX  = leftW + 6;
-  const panelW = (availW - (leftW + 6)) - PAD, panelH = (winH - topOffset) - PAD;
+  // single-pane browser → the browser sits right of the fixed left strip;
+  // otherwise it follows the split (left-panel width + 10px divider).
+  const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + 11);   // +1 = right-column left inset (matches #right-panel padding-left)
+  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD;
 
   if (deviceEmulation) {
     // Device emulation: viewport centered horizontally, top-anchored (like
@@ -1086,8 +1180,10 @@ async function spawnPty(id, command = 'claude') {
 }
 
 // ── IPC: terminal ─────────────────────────────────────────────────
-ipcMain.on('pty-input',   (_, { id, data })       => { if (ptyProcesses[id]) ptyProcesses[id].write(data); });
-ipcMain.on('pty-resize',  (_, { id, cols, rows })  => { if (ptyProcesses[id]) ptyProcesses[id].resize(cols, rows); });
+ipcMain.on('pty-input',   (_, { id, data })       => { const p = ptyProcesses[id]; if (p) { try { p.write(data); } catch (_) {} } });
+// node-pty throws synchronously if the pty has already exited (e.g. a refit fires
+// after the process ended) — swallow it so it doesn't crash the main process.
+ipcMain.on('pty-resize',  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
 ipcMain.on('pty-spawn',   (_, { id, command })     => spawnPty(id, command));
 ipcMain.on('pty-kill',    (_, { id })              => {
   killPty(id);
@@ -1782,6 +1878,18 @@ ipcMain.on('split-changed', (_, fraction) => {
   repositionAll();
   broadcastLayout();
 });
+
+// Single-pane (collapsed) mode toggle: 'browser' | 'chat' | null (normal split).
+ipcMain.on('single-pane', (_, mode) => {
+  singlePane = (mode === 'browser' || mode === 'chat') ? mode : null;
+  repositionAll();
+  broadcastLayout();
+});
+
+// Native menus can't take CSS — match their light/dark appearance to the theme.
+ipcMain.on('native-theme', (_, source) => {
+  if (source === 'light' || source === 'dark') nativeTheme.themeSource = source;
+});
 ipcMain.on('renderer-ready', () => { repositionBrowserView(); broadcastLayout(); });
 
 
@@ -2247,15 +2355,11 @@ ipcMain.on('show-settings-menu', (_, pos) => {
     { type: 'separator' },
     { label: 'Authentication',     click: act('auth') },
     { label: 'Manage LLMs',        click: act('manage-llms') },
-    { label: 'Theme', submenu: [
-      { label: 'Minimal', click: act('theme-minimal') },
-      { label: 'Winamp',  click: act('theme-winamp') },
-    ] },
+    { label: 'Color Themes',       click: act('theme') },
     { label: 'Audit Prompts',      click: act('audit-prompts') },
     { label: 'Edit Tabs',          click: act('edit-tabs') },
     { label: 'MCP Tool Tokens',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
-    { label: 'Renderer DevTools',  click: () => mainWindow.webContents.openDevTools({ mode: 'detach' }) },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },

@@ -16,9 +16,12 @@ export function Badge({ label, variant = 'default', dot = false }) {
       alignItems: 'center',
       gap: '5px',
       padding: '2px 8px',
-      borderRadius: 'var(--radius-pill)',
+      borderRadius: '3px',
       fontSize: '11px',
-      fontWeight: 600,
+      fontFamily: 'var(--font-mono)',   // Geist Mono
+      fontWeight: 900,                  // Black
+      textTransform: 'uppercase',
+      letterSpacing: '0.02em',
       ...s,
     }}>
       {dot && (

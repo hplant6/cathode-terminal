@@ -24,15 +24,10 @@
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="7" cy="7" r="4.25"/><path d="M10.25 10.25L16.25 16.25"/><path d="M7 5v4M5 7h4" opacity=".4"/></g></svg>
         Switch LLM API Key
       </button>
-      <div class="sm-item sm-has-sub" id="sm-theme">
+      <button class="sm-item" id="sm-theme">
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="9" cy="9" r="7.25"/><path d="M9 1.75v2M9 14.25v2M1.75 9h2M14.25 9h2" opacity=".4"/><circle cx="9" cy="9" r="2.75"/></g></svg>
-        <span>Theme</span>
-        <svg class="sm-chevron" width="10" height="10" viewBox="0 0 18 18" fill="none"><path d="M6.75 4.5L11.25 9L6.75 13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div class="sm-submenu">
-          <button class="sm-item sm-sub-item" id="sm-theme-minimal">Minimal</button>
-          <button class="sm-item sm-sub-item" id="sm-theme-winamp">Winamp</button>
-        </div>
-      </div>
+        <span>Theme…</span>
+      </button>
       <div class="sm-sep"></div>
       <button class="sm-item" id="sm-new-window">
         <svg width="15" height="15" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" fill="none"><rect x="1.75" y="4.75" width="10.5" height="8.5" rx="1.5"/><path d="M5.75 4.75V3.25A1.5 1.5 0 0 1 7.25 1.75h7.5a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H13.25" opacity=".5"/></g></svg>
@@ -507,7 +502,18 @@
 
     <!-- DIVIDER (contains toggle — travels with drag handle) -->
     <div id="divider">
+      <!-- Collapsed-state vertical labels (shown only when the panel is collapsed) -->
+      <div id="collapsed-nav">
+        <button class="cn-label" data-pane="chat" title="Show chat full-width"><span>CHAT</span></button>
+        <button class="cn-label" data-pane="browser" title="Show browser full-width"><span>BROWSER</span></button>
+      </div>
+      <div id="tool-rail">
+      <div class="rail-dots"></div>
+      <div class="resize-grip"></div>
+      <button class="border-close"><svg viewBox="0 0 16 17" width="11" height="11" fill="none"><path d="M7.33344 12.5141L3.55566 8.50022L7.33344 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5556 12.5141L7.77783 8.50022L11.5556 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="resize-grip resize-grip-sm"></div>
       <div id="toolbar">
+        <button id="btn-open-strip" class="collapsed-open" title="Reopen panels"><svg viewBox="0 0 16 17" width="11" height="11" fill="none"><path d="M7.33344 12.5141L3.55566 8.50022L7.33344 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5556 12.5141L7.77783 8.50022L11.5556 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div id="project-tools">
           <button id="btn-pick-box"       class="pick-btn" title="Box select element (Alt+B)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></button>
           <button id="btn-pick-lasso"     class="pick-btn" title="Lasso select element (Alt+L)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9,13.75c-2.059,0-2.212-1.591-1.961-2.197,.314-.759,1.204-1.448,3.18-1.272,2.826,.252,4.464,4.406-.469,6.469" data-color="color-2"></path><ellipse cx="9" cy="8" rx="6.75" ry="5.75"></ellipse></g></svg></button>
@@ -519,6 +525,10 @@
         <button id="btn-pick-a11y" class="pick-btn" title="Accessibility &amp; contrast check — flag WCAG issues, send to chat (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></button>
         <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
         <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
+      </div>
+      <div class="resize-grip resize-grip-sm"></div>
+      <button class="border-close"><svg viewBox="0 0 16 17" width="11" height="11" fill="none"><path d="M7.33344 12.5141L3.55566 8.50022L7.33344 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5556 12.5141L7.77783 8.50022L11.5556 4.48633" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="resize-grip"></div>
       </div>
       <button id="btn-panel-toggle" title="Toggle panel">
         <svg class="panel-icon-open" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6.5" width="5" height="18" rx="2.5" fill="currentColor"/></svg>
@@ -542,11 +552,26 @@
         <button id="btn-devtools" title="Toggle DevTools"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.25 13.25L1.75 9L5.25 4.75"></path><path d="M12.75 13.25L16.25 9L12.75 4.75"></path><path d="M7.75 13.25L10.25 4.75"></path></g></svg></button>
       </div>
 
+      <!-- STORYBOOK BAR: active instance + switcher + per-instance controls (storybook mode, live) -->
+      <div id="sb-bar" hidden>
+        <button id="sb-bar-switch" class="sb-bar-chip" title="Switch Storybook">
+          <span id="sb-bar-dot" class="sb-bar-dot"></span>
+          <span id="sb-bar-label" class="sb-bar-label"></span>
+          <svg class="sb-bar-caret" viewBox="0 0 10 10" width="10" height="10" fill="none"><polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="sb-bar-spacer"></div>
+        <button id="sb-bar-new" class="sb-bar-btn" title="Add / build a Storybook"><svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M9 3.75v10.5M3.75 9h10.5"/></svg></button>
+        <button id="sb-bar-reload" class="sb-bar-btn" title="Reload"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.75v3.5h-3.5"/><path d="M3.5 13.25v-3.5h3.5"/><path d="M14.13 8.25a5.25 5.25 0 0 0-9.4-2.06L3.5 8.25"/><path d="M3.87 9.75a5.25 5.25 0 0 0 9.4 2.06L14.5 9.75"/></svg></button>
+        <button id="sb-bar-external" class="sb-bar-btn" title="Open in browser"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3.75h3.75V7.5"/><path d="M14.25 3.75l-6 6"/><path d="M13.25 10.5v2.75a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5v-7a1.5 1.5 0 0 1 1.5-1.5h2.75"/></svg></button>
+        <button id="sb-bar-stop" class="sb-bar-btn sb-bar-stop" title="Stop this Storybook"><svg viewBox="0 0 18 18" width="12" height="12" fill="currentColor"><rect x="3" y="3" width="12" height="12" rx="2"/></svg></button>
+      </div>
+
       <div id="right-storybook">
 
         <!-- Setup state -->
         <div id="sb-setup">
           <div class="sb-inner">
+            <button id="sb-back" class="sb-back-btn" hidden>← Back to Storybook</button>
             <svg class="sb-hero-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
               <rect x="6" y="8" width="36" height="5" rx="2.5" fill="currentColor" opacity=".25"/>
               <rect x="6" y="18" width="36" height="5" rx="2.5" fill="currentColor" opacity=".45"/>
@@ -625,35 +650,65 @@
       <div id="browser-placeholder">
         <div id="wf-empty">
           <div class="wf-empty-inner">
-            <svg class="wf-hero" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="9" cy="9" r="7.25"/><circle cx="9" cy="9" r="3.25"/><circle cx="9" cy="9" r="0.6" fill="currentColor" stroke="none"/>
-            </svg>
             <h2 class="wf-title">Target a project to work on</h2>
             <p class="wf-desc">Point the Working File at a <strong>live site</strong> or a <strong>local dev server</strong> — then use the tools and your agent to inspect, edit, and iterate on it.</p>
 
-            <div class="wf-url-row">
-              <input id="wf-url" type="text" placeholder="https://example.com   ·   localhost:3000" spellcheck="false" />
-              <button id="wf-go">Open</button>
+            <div class="wf-or"><span>Start a dev server</span></div>
+
+            <div class="wf-tabs" role="tablist">
+              <button class="wf-tab active" data-tab="folder">
+                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></svg>
+                <span>From a folder</span>
+              </button>
+              <button class="wf-tab" data-tab="prompt">
+                <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M5.68341 3.0149L4.42041 2.5939L3.99941 1.3309C3.86241 0.922902 3.18741 0.922902 3.05041 1.3309L2.62941 2.5939L1.36641 3.0149C1.16241 3.0829 1.02441 3.2739 1.02441 3.4889C1.02441 3.7039 1.16241 3.8949 1.36641 3.9629L2.62941 4.3839L3.05041 5.6469C3.11841 5.8509 3.31041 5.9889 3.52541 5.9889C3.74041 5.9889 3.93141 5.8509 4.00041 5.6469L4.42141 4.3839L5.68441 3.9629C5.88841 3.8949 6.02641 3.7039 6.02641 3.4889C6.02641 3.2739 5.88741 3.0829 5.68341 3.0149Z"/><path d="M9.52539 2.07471C9.81254 2.07473 10.0711 2.25012 10.1768 2.51709L11.9756 7.07275L16.5332 8.87354C16.8002 8.97921 16.9756 9.23774 16.9756 9.5249C16.9756 9.81207 16.8002 10.0706 16.5332 10.1763L11.9756 11.9761L10.1768 16.5327C10.0711 16.7997 9.81254 16.9751 9.52539 16.9751C9.23823 16.9751 8.9797 16.7997 8.87402 16.5327L7.07227 11.9771L2.51758 10.1763C2.25058 10.0706 2.0752 9.81207 2.0752 9.5249C2.0752 9.23774 2.25058 8.97921 2.51758 8.87354L7.07227 7.07178L8.87402 2.51709L8.9209 2.42139C9.04502 2.20901 9.27417 2.07471 9.52539 2.07471ZM8.26367 7.86963C8.19252 8.04943 8.04992 8.19203 7.87012 8.26318L4.67969 9.5249L7.87012 10.7866L7.99707 10.853C8.1164 10.9315 8.21028 11.0452 8.26367 11.1802L9.52441 14.3696L10.7861 11.1802C10.8573 11.0004 10.9999 10.8578 11.1797 10.7866L14.3701 9.5249L11.1797 8.26318C10.9999 8.19203 10.8573 8.04943 10.7861 7.86963L9.52441 4.6792L8.26367 7.86963Z"/></svg>
+                <span>From a prompt</span>
+              </button>
+              <button class="wf-tab" data-tab="figma">
+                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/><path d="M2.5 6.5h13"/><path d="M6.5 6.5v9"/></svg>
+                <span>From Figma</span>
+              </button>
+              <button class="wf-tab" data-tab="repo">
+                <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.2998 12.25V8.75C8.2998 8.3634 8.6134 8.0498 9 8.0498C9.3866 8.0498 9.7002 8.3634 9.7002 8.75V12.25C9.7002 12.6366 9.3866 12.9502 9 12.9502C8.6134 12.9502 8.2998 12.6366 8.2998 12.25Z"/><path d="M4.0498 6.75V5.75C4.0498 5.3634 4.3634 5.0498 4.75 5.0498C5.1366 5.0498 5.4502 5.3634 5.4502 5.75V6.75C5.4502 7.4684 6.0316 8.0498 6.75 8.0498H11.25C11.9684 8.0498 12.5498 7.4684 12.5498 6.75V5.75C12.5498 5.3634 12.8634 5.0498 13.25 5.0498C13.6366 5.0498 13.9502 5.3634 13.9502 5.75V6.75C13.9502 8.2416 12.7416 9.4502 11.25 9.4502H6.75C5.2584 9.4502 4.0498 8.2416 4.0498 6.75Z"/><path d="M6.0498 3.75C6.0498 3.03203 5.46797 2.4502 4.75 2.4502C4.03203 2.4502 3.4502 3.03203 3.4502 3.75C3.4502 4.46797 4.03203 5.0498 4.75 5.0498C5.46797 5.0498 6.0498 4.46797 6.0498 3.75ZM7.4502 3.75C7.4502 5.24117 6.24117 6.4502 4.75 6.4502C3.25883 6.4502 2.0498 5.24117 2.0498 3.75C2.0498 2.25883 3.25883 1.0498 4.75 1.0498C6.24117 1.0498 7.4502 2.25883 7.4502 3.75Z"/><path d="M14.5498 3.75C14.5498 3.03203 13.968 2.4502 13.25 2.4502C12.532 2.4502 11.9502 3.03203 11.9502 3.75C11.9502 4.46797 12.532 5.0498 13.25 5.0498C13.968 5.0498 14.5498 4.46797 14.5498 3.75ZM15.9502 3.75C15.9502 5.24117 14.7412 6.4502 13.25 6.4502C11.7588 6.4502 10.5498 5.24117 10.5498 3.75C10.5498 2.25883 11.7588 1.0498 13.25 1.0498C14.7412 1.0498 15.9502 2.25883 15.9502 3.75Z"/><path d="M10.2998 14.25C10.2998 13.532 9.71797 12.9502 9 12.9502C8.28203 12.9502 7.7002 13.532 7.7002 14.25C7.7002 14.968 8.28203 15.5498 9 15.5498C9.71797 15.5498 10.2998 14.968 10.2998 14.25ZM11.7002 14.25C11.7002 15.7412 10.4912 16.9502 9 16.9502C7.50883 16.9502 6.2998 15.7412 6.2998 14.25C6.2998 12.7588 7.50883 11.5498 9 11.5498C10.4912 11.5498 11.7002 12.7588 11.7002 14.25Z"/></svg>
+                <span>From a repo</span>
+              </button>
             </div>
 
-            <div class="wf-or"><span>or have your agent set it up</span></div>
-
-            <div class="wf-actions">
-              <button class="wf-action" id="wf-clone">
-                <svg viewBox="0 0 18 18" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="4" r="2"/><circle cx="5" cy="14" r="2"/><circle cx="13" cy="9" r="2"/><path d="M5 6v6"/><path d="M5 9h4a2 2 0 0 0 2-2V6"/></svg>
-                <span class="wf-action-title">Pull down a repo</span>
-                <span class="wf-action-sub">Clone a Git repo, install, and run it</span>
-              </button>
-              <button class="wf-action" id="wf-serve">
-                <svg viewBox="0 0 18 18" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.25" y="3" width="13.5" height="5" rx="1.5"/><rect x="2.25" y="10" width="13.5" height="5" rx="1.5"/><circle cx="5" cy="5.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="5" cy="12.5" r="0.6" fill="currentColor" stroke="none"/></svg>
-                <span class="wf-action-title">Start a dev server</span>
-                <span class="wf-action-sub">Spin it up on a free localhost port</span>
-              </button>
-            </div>
-
-            <div id="wf-clone-row" class="wf-clone-row">
-              <input id="wf-repo" type="text" placeholder="https://github.com/owner/repo.git" spellcheck="false" />
-              <button id="wf-clone-go">Clone &amp; run</button>
+            <div class="wf-panel">
+              <div class="wf-tabpanel" data-panel="folder">
+                <div class="wf-headline">pick a local project and run it.</div>
+                <div class="wf-folder-cols">
+                  <div class="wf-folder-recent">
+                    <div class="wf-col-label">Select a recent project</div>
+                    <div class="wf-recent-list" id="wf-recent-list"></div>
+                  </div>
+                  <div class="wf-folder-browse">
+                    <div class="wf-col-label">Or select a folder</div>
+                    <button class="wf-browse-btn" id="wf-browse">Browse</button>
+                  </div>
+                </div>
+              </div>
+              <div class="wf-tabpanel" data-panel="prompt" hidden>
+                <div class="wf-headline">describe it and generate it</div>
+                <div class="wf-panel-form">
+                  <input id="wf-prompt-in" type="text" placeholder="Describe the app to build…" spellcheck="false" />
+                  <button id="wf-prompt-go">Generate</button>
+                </div>
+              </div>
+              <div class="wf-tabpanel" data-panel="figma" hidden>
+                <div class="wf-headline">build it from a Figma frame</div>
+                <div class="wf-panel-form">
+                  <input id="wf-figma-in" type="text" placeholder="Paste a Figma file or frame link" spellcheck="false" />
+                  <button id="wf-figma-go">Build</button>
+                </div>
+              </div>
+              <div class="wf-tabpanel" data-panel="repo" hidden>
+                <div class="wf-headline">clone a repo and run it</div>
+                <div class="wf-panel-form">
+                  <input id="wf-repo" type="text" placeholder="https://github.com/owner/repo.git" spellcheck="false" />
+                  <button id="wf-clone-go">Clone &amp; run</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -757,6 +812,7 @@
   <!-- Custom Devices modal -->
   <div id="devices-modal" class="modal-backdrop">
     <div class="modal-box" id="devices-box">
+      <button class="mcp-modal-close" id="devices-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Custom Devices</div>
       <p class="modal-desc">Add your own viewport sizes. Built-in presets always appear in the dropdown.</p>
       <div id="devices-list"></div>
@@ -776,6 +832,7 @@
   <!-- Audit Prompts modal -->
   <div id="audit-prompts-modal" class="modal-backdrop">
     <div class="modal-box" id="audit-prompts-box">
+      <button class="mcp-modal-close" id="audit-prompts-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Audit Prompts</div>
       <p class="modal-desc">Edit, add, or remove prompts. Changes take effect immediately in the Audit menu.</p>
       <div id="audit-prompts-list"></div>
@@ -790,6 +847,7 @@
   <!-- API Key modal -->
   <div id="api-key-modal" class="modal-backdrop">
     <div class="modal-box">
+      <button class="mcp-modal-close" id="api-key-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Switch LLM API Key</div>
       <p class="modal-desc">Enter your new API key. It will be saved for this session and stored locally.</p>
       <input id="api-key-input" type="password" class="modal-input" placeholder="sk-ant-..." spellcheck="false" />
@@ -797,6 +855,21 @@
         <button class="modal-btn-cancel" id="api-key-cancel">Cancel</button>
         <button class="modal-btn-confirm" id="api-key-confirm">Save Key</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Theme modal -->
+  <div id="theme-modal" class="modal-backdrop">
+    <div class="modal-box" id="theme-modal-box">
+      <button id="theme-modal-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Color Themes</div>
+      <div id="theme-modal-body">
+        <div id="theme-sidebar">
+          <div id="theme-presets"></div>
+        </div>
+        <div id="theme-panel"></div>
+      </div>
+      <div id="theme-footer" style="display:none"></div>
     </div>
   </div>
 
@@ -853,6 +926,7 @@
   <!-- Edit Tabs modal -->
   <div id="tabs-modal" class="modal-backdrop">
     <div class="modal-box" id="tabs-modal-box">
+      <button class="mcp-modal-close" id="tabs-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Edit Tabs</div>
       <p class="modal-desc">Reorder, remove, or add tabs to the right panel.</p>
       <div id="tabs-modal-list"></div>
@@ -995,6 +1069,7 @@
   <!-- Session Profiles modal -->
   <div id="profiles-modal" class="modal-backdrop">
     <div class="modal-box" id="profiles-modal-box">
+      <button class="mcp-modal-close" id="profiles-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Manage LLMs</div>
       <div class="profiles-tabs">
         <button class="profiles-tab active" data-tab="mine">My active LLM Models</button>
@@ -1023,6 +1098,7 @@
   <!-- Authentication modal -->
   <div id="auth-modal" class="modal-backdrop">
     <div class="modal-box" id="auth-modal-box">
+      <button class="mcp-modal-close" id="auth-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Authentication</div>
 
       <div class="auth-section">
@@ -1054,6 +1130,7 @@
   <!-- CLAUDE.md editor modal -->
   <div id="claude-md-modal" class="modal-backdrop">
     <div class="modal-box" id="claude-md-modal-box">
+      <button class="mcp-modal-close" id="claude-md-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title" id="claude-md-title">Edit CLAUDE.md</div>
       <p class="modal-desc" id="claude-md-desc">Instructions for Claude Code — written to its <code>CLAUDE.md</code>.</p>
       <textarea id="claude-md-textarea" class="claude-md-textarea" spellcheck="false" placeholder="# Agent Instructions&#10;&#10;Write instructions here…"></textarea>
@@ -1072,7 +1149,7 @@
           <div id="onb-title">Welcome to Cathode Terminal</div>
           <div id="onb-subtitle">Get the prerequisites installed, then learn what each tool does.</div>
         </div>
-        <button id="onb-close" title="Close">✕</button>
+        <button id="onb-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
       </div>
       <div id="onb-tabs">
         <div class="onb-seg">
