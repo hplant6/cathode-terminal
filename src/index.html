@@ -158,6 +158,14 @@
           </button>
           <button id="btn-ui-attach" title="Attach file"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg></button>
           <button id="btn-ui-attach-folder" title="Attach folder"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></g></svg></button>
+          <div id="persona-wrap">
+            <button id="btn-persona" title="Agent persona — focuses the agent's perspective on the next message">
+              <svg class="persona-glyph" viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9.79973 16.25V13.75C9.79986 13.3635 10.1134 13.0498 10.4999 13.0498H12.1386C12.8202 13.0498 13.3859 12.5241 13.4355 11.8438L13.5478 10.3008L13.5615 10.2022C13.6104 9.97724 13.7685 9.7882 13.9863 9.7012L14.6415 9.43948L13.6894 8.16995C13.5987 8.04885 13.5497 7.90134 13.5497 7.75003C13.5496 4.44988 10.5345 1.85289 7.09954 2.57034C5.10624 2.98649 3.4883 4.60576 3.07122 6.59866C2.5447 9.11728 3.8081 11.3876 5.82219 12.4346C6.05394 12.5551 6.20012 12.7945 6.20012 13.0557V16.25C6.20012 16.6366 5.88643 16.9501 5.49993 16.9502C5.11333 16.9502 4.79973 16.6366 4.79973 16.25V13.4629C2.4869 12.0659 1.07032 9.32402 1.70012 6.31155C2.2311 3.77475 4.27502 1.73021 6.81341 1.20023C11.0503 0.315263 14.7979 3.45251 14.9423 7.50784L16.3095 9.33011C16.4402 9.50436 16.4826 9.72977 16.4238 9.93948C16.3649 10.1491 16.2119 10.3196 16.0097 10.4004L14.912 10.8379L14.832 11.9453C14.7292 13.3567 13.5548 14.4502 12.1386 14.4502H11.2001V16.25C11.2001 16.6366 10.8864 16.9501 10.4999 16.9502C10.1133 16.9502 9.79973 16.6366 9.79973 16.25Z"/><path d="M11.4997 8.00027C11.9139 8.00027 12.2497 7.66449 12.2497 7.25027C12.2497 6.83606 11.9139 6.50027 11.4997 6.50027C11.0855 6.50027 10.7497 6.83606 10.7497 7.25027C10.7497 7.66449 11.0855 8.00027 11.4997 8.00027Z"/></svg>
+              <span id="btn-persona-label">Persona</span>
+              <svg class="persona-caret" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div id="persona-menu"></div>
+          </div>
           <div id="model-wrap" style="display:none">
             <button id="btn-model" title="Switch model (restarts session)">
               <span id="btn-model-label">Model</span>
@@ -555,15 +563,15 @@
       <!-- STORYBOOK BAR: active instance + switcher + per-instance controls (storybook mode, live) -->
       <div id="sb-bar" hidden>
         <button id="sb-bar-switch" class="sb-bar-chip" title="Switch Storybook">
+          <span class="sb-bar-prefix">Storybook</span>
           <span id="sb-bar-dot" class="sb-bar-dot"></span>
           <span id="sb-bar-label" class="sb-bar-label"></span>
           <svg class="sb-bar-caret" viewBox="0 0 10 10" width="10" height="10" fill="none"><polyline points="2,3.5 5,6.5 8,3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="sb-bar-spacer"></div>
-        <button id="sb-bar-new" class="sb-bar-btn" title="Add / build a Storybook"><svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M9 3.75v10.5M3.75 9h10.5"/></svg></button>
-        <button id="sb-bar-reload" class="sb-bar-btn" title="Reload"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.75v3.5h-3.5"/><path d="M3.5 13.25v-3.5h3.5"/><path d="M14.13 8.25a5.25 5.25 0 0 0-9.4-2.06L3.5 8.25"/><path d="M3.87 9.75a5.25 5.25 0 0 0 9.4 2.06L14.5 9.75"/></svg></button>
-        <button id="sb-bar-external" class="sb-bar-btn" title="Open in browser"><svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3.75h3.75V7.5"/><path d="M14.25 3.75l-6 6"/><path d="M13.25 10.5v2.75a1.5 1.5 0 0 1-1.5 1.5h-7a1.5 1.5 0 0 1-1.5-1.5v-7a1.5 1.5 0 0 1 1.5-1.5h2.75"/></svg></button>
-        <button id="sb-bar-stop" class="sb-bar-btn sb-bar-stop" title="Stop this Storybook"><svg viewBox="0 0 18 18" width="12" height="12" fill="currentColor"><rect x="3" y="3" width="12" height="12" rx="2"/></svg></button>
+        <button id="sb-bar-new" class="sb-bar-btn" title="Add / build a Storybook"><svg viewBox="0 0 18 18" width="15" height="15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.2002 14.75V3.25C8.2002 2.80817 8.55817 2.4502 9 2.4502C9.44183 2.4502 9.7998 2.80817 9.7998 3.25V14.75C9.7998 15.1918 9.44183 15.5498 9 15.5498C8.55817 15.5498 8.2002 15.1918 8.2002 14.75Z"/><path d="M14.75 8.2002C15.1918 8.2002 15.5498 8.55817 15.5498 9C15.5498 9.44183 15.1918 9.7998 14.75 9.7998H3.25C2.80817 9.7998 2.4502 9.44183 2.4502 9C2.4502 8.55817 2.80817 8.2002 3.25 8.2002H14.75Z"/></svg></button>
+        <button id="sb-bar-reload" class="sb-bar-btn" title="Reload"><svg viewBox="0 0 18 18" width="15" height="15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.4848 9C15.4848 5.3826 12.5524 2.4502 8.93496 2.4502C6.19775 2.45021 3.85143 4.12921 2.87246 6.51562C2.72573 6.87329 2.31704 7.04419 1.95937 6.89746C1.60171 6.75073 1.43081 6.34204 1.57754 5.98438C2.76456 3.09083 5.6102 1.04982 8.93496 1.0498C13.3256 1.0498 16.8852 4.6094 16.8852 9C16.8852 13.3906 13.3256 16.9502 8.93496 16.9502C6.19864 16.9502 3.7847 15.5674 2.35586 13.4648C2.13862 13.1451 2.2218 12.7095 2.5414 12.4922C2.86117 12.2749 3.29678 12.358 3.51406 12.6777C4.69323 14.4129 6.68147 15.5498 8.93496 15.5498C12.5524 15.5498 15.4848 12.6174 15.4848 9Z"/><path d="M1.7193 2.61163C2.10211 2.55879 2.45533 2.82646 2.50836 3.20929L2.81989 5.46027L5.07086 5.14972C5.45382 5.09678 5.80698 5.36442 5.85993 5.74738C5.91275 6.13014 5.64595 6.48333 5.26325 6.53644L2.31891 6.94367C1.93603 6.9966 1.58289 6.72887 1.52985 6.34601L1.12164 3.4007C1.0688 3.01789 1.33647 2.66467 1.7193 2.61163Z"/></svg></button>
+        <button id="sb-bar-kebab" class="sb-bar-btn" title="More actions"><svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor"><circle cx="9" cy="3.6" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="9" cy="14.4" r="1.5"/></svg></button>
       </div>
 
       <div id="right-storybook">
@@ -770,7 +778,7 @@
           </div>
           <div id="console-actions">
             <span id="console-count"></span>
-            <button id="console-send-errors" title="Send all errors &amp; failed requests to chat">Send errors</button>
+            <button id="console-send-errors" title="Send all errors &amp; failed requests to the agent">Send errors to agent</button>
             <button id="console-clear" title="Clear console">Clear</button>
           </div>
         </div>

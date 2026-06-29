@@ -91,7 +91,7 @@ const customViews  = new Map(); // url → WebContentsView
 
 const TOOLBAR_HEIGHT    = 46;
 const TABBAR_HEIGHT     = 46;   /* browser chrome bar height (matches #tab-bar in styles.css) */
-const SB_BAR_HEIGHT     = 40;   /* Storybook instance bar height (matches #sb-bar in styles.css) */
+const SB_BAR_HEIGHT     = 46;   /* Storybook instance bar height (matches #sb-bar in styles.css) */
 const POPUP_BAR_HEIGHT  = 36;
 
 // Safe send to the main renderer — async handlers can outlive the window.
@@ -349,6 +349,9 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   mainWindow.contentView.addChildView(browserView);
+  // Rounded container: 22px corners on the native browser view (Electron 35+).
+  // Guarded so an older build just stays square instead of throwing.
+  if (typeof browserView.setBorderRadius === 'function') browserView.setBorderRadius(22);
   attachConsoleCapture();
   browserView.webContents.loadURL(loadLastURL()).catch(() => {});
 
@@ -551,6 +554,8 @@ ipcMain.on('close-inline-popup', () => closeInlinePopup());
 function createPanelView(url) {
   const view = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false } });
   mainWindow.contentView.addChildView(view);
+  // Rounded container, matching the browser view (Figma / Storybook / URL pop-outs).
+  if (typeof view.setBorderRadius === 'function') view.setBorderRadius(22);
   attachShortcutHandler(view.webContents);
   view.webContents.loadURL(url).catch(() => {});
   return view;
@@ -582,11 +587,12 @@ function repositionRightPanelView() {
   const [winW, winH] = mainWindow.getContentSize();
   const availW = winW - devToolsWidth;
   const rightX = Math.round(availW * splitFraction) + 11;   // +1 = right-column left inset
-  const onBounds = { x: rightX, y: TOOLBAR_HEIGHT, width: availW - rightX, height: winH - TOOLBAR_HEIGHT };
+  const PAD = 8;   // rounded-container inset (top/right/bottom; left flush) — matches the browser view
+  const onBounds = { x: rightX, y: TOOLBAR_HEIGHT + PAD, width: (availW - rightX) - PAD, height: (winH - TOOLBAR_HEIGHT) - PAD * 2 };
   if (figmaView)     figmaView.setBounds(rightPanelMode === 'figma'         ? onBounds : offscreen);
   // Storybook reserves a top strip for the instance bar (#sb-bar) when a Storybook is active.
   const sbY = TOOLBAR_HEIGHT + (activeSbId ? SB_BAR_HEIGHT : 0);
-  const sbBounds = { x: rightX, y: sbY, width: availW - rightX, height: winH - sbY };
+  const sbBounds = { x: rightX, y: sbY, width: (availW - rightX) - PAD, height: (winH - sbY) - PAD };   /* top connects to the sb-bar; 8px right/bottom */
   const sbVisible = rightPanelMode === 'storybook' && activeSbId && !sbSetupOpen;   // setup overlay suppresses the view
   if (storybookView) storybookView.setBounds(sbVisible ? sbBounds : offscreen);
   for (const [url, view] of customViews) view.setBounds(rightPanelMode === 'url:' + url ? onBounds : offscreen);
@@ -742,6 +748,9 @@ function createStorybookView(url) {
     return;
   }
   storybookView = createPanelView(url);
+  // Storybook connects to the sb-bar at the top, so square its corners (setBorderRadius
+  // is all-or-nothing — can't round just the bottom). createPanelView set it to 22.
+  if (typeof storybookView.setBorderRadius === 'function') storybookView.setBorderRadius(0);
   repositionRightPanelView();
 }
 
@@ -975,12 +984,6 @@ ipcMain.handle('storybook-open-switcher', async () => {
   }));
   if (items.length) items.push({ type: 'separator' });
   items.push({ label: 'New Storybook…', click: () => uiSend('storybook-show-setup') });
-  items.push({ label: 'Detect running Storybooks…', click: async () => {
-    const found = await scanPorts(new Set([...sbServers.values()].map(s => s.port)));
-    const tmpl = found.length ? found.map(f => ({ label: `Adopt Storybook on :${f.port}`, click: () => adoptPort(f.port) }))
-                              : [{ label: 'No other running Storybooks found', enabled: false }];
-    Menu.buildFromTemplate(tmpl).popup({ window: mainWindow });
-  }});
   Menu.buildFromTemplate(items).popup({ window: mainWindow });
   return { ok: true };
 });
@@ -1090,11 +1093,12 @@ function repositionBrowserView(overrideFraction) {
   const availW  = winW - devToolsWidth;
   const leftW   = Math.round(availW * fraction);
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
-  const PAD     = 10;   // frame inset (right/bottom) — matches #right-panel padding (left flush)
+  const PAD     = 8;   // rounded-container inset (top/right/bottom; left flush)
   // single-pane browser → the browser sits right of the fixed left strip;
   // otherwise it follows the split (left-panel width + 10px divider).
   const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + 11);   // +1 = right-column left inset (matches #right-panel padding-left)
-  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD;
+  const panelY = topOffset + PAD;   // 8px top inset
+  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD * 2;
 
   if (deviceEmulation) {
     // Device emulation: viewport centered horizontally, top-anchored (like
@@ -1106,13 +1110,13 @@ function repositionBrowserView(overrideFraction) {
     const w = deviceEmulation.fit ? maxW : Math.min(deviceEmulation.width,  maxW);
     const h = deviceEmulation.fit ? maxH : Math.min(deviceEmulation.height, maxH);
     const x = rightX + Math.round((panelW - w) / 2);   // centered horizontally
-    const y = topOffset;                               // top-anchored
+    const y = panelY;                                  // top-anchored (8px inset)
     browserView.setBounds({ x, y, width: w, height: h });
-    uiSend('device-view-bounds', { x, y, width: w, height: h, panelW, panelH, panelX: rightX, panelY: topOffset });
+    uiSend('device-view-bounds', { x, y, width: w, height: h, panelW, panelH, panelX: rightX, panelY });
     return;
   }
   // No emulation → fill the panel, no handles
-  browserView.setBounds({ x: rightX, y: topOffset, width: panelW, height: panelH });
+  browserView.setBounds({ x: rightX, y: panelY, width: panelW, height: panelH });
   uiSend('device-view-bounds', null);
 }
 
@@ -2365,6 +2369,21 @@ ipcMain.on('show-settings-menu', (_, pos) => {
     { label: 'New Window',         click: act('new-window') },
   ]);
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
+});
+
+ipcMain.on('show-sb-bar-menu', (_, { x, y } = {}) => {
+  const menu = Menu.buildFromTemplate([
+    { label: 'Open in browser', click: () => uiSend('sb-bar-menu-action', 'external') },
+    { label: 'Detect running Storybooks…', click: async () => {
+      const found = await scanPorts(new Set([...sbServers.values()].map(s => s.port)));
+      const tmpl = found.length ? found.map(f => ({ label: `Adopt Storybook on :${f.port}`, click: () => adoptPort(f.port) }))
+                                : [{ label: 'No other running Storybooks found', enabled: false }];
+      Menu.buildFromTemplate(tmpl).popup({ window: mainWindow });
+    }},
+    { type: 'separator' },
+    { label: 'Stop Storybook',  click: () => uiSend('sb-bar-menu-action', 'stop') },
+  ]);
+  menu.popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
 });
 
 ipcMain.on('show-tab-settings-menu', (_, { x, y, agent } = {}) => {

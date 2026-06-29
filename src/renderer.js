@@ -915,6 +915,60 @@ document.addEventListener('click', (e) => {
   btnModel.classList.remove('active');
 });
 
+// ── Agent persona (composer) ──────────────────────────────────────
+// A per-message "lens": the chosen persona's preamble is prepended to the
+// agent-facing text on send (see sendUiMessage). Nothing is written to disk —
+// switching is instant, per-task, and leaves no residue in CLAUDE.md.
+const PERSONAS = {
+  qa:       { label: 'QA',           desc: 'Edge cases, tests, regressions',     preamble: 'Approach this as a meticulous QA engineer. Before treating anything as done, hunt for edge cases, missing or weak test coverage, regressions, and unhandled error paths, and pin down the acceptance criteria. Call out what could break and exactly how you would verify it.' },
+  dev:      { label: 'Seasoned Dev', desc: 'Maintainability, architecture',      preamble: 'Approach this as a seasoned software engineer. Weigh maintainability, architecture, and long-term tradeoffs, and prefer simple, idiomatic solutions over clever ones. Name the technical debt, failure modes, and the alternatives you are choosing between, and justify the call.' },
+  designer: { label: 'Designer',     desc: 'UX, visual consistency, a11y',        preamble: 'Approach this as a product designer. Judge the work against user experience, visual consistency with the existing design system / Storybook tokens, spacing and hierarchy, and accessibility. Flag anything that feels off, inconsistent, or hard to use.' },
+  enduser:  { label: 'End User',     desc: 'Plain-language, does it actually work', preamble: 'Approach this as a non-technical end user. React to whether it actually works and is easy to understand: where is the friction, what is confusing, and what would make you give up? Use plain language and avoid jargon.' },
+  secops:   { label: 'SecOps',       desc: 'Threat model, secrets, least-priv',   preamble: 'Approach this as a security engineer (SecOps). Threat-model first: before functionality, scrutinise secrets handling, input validation, authentication/authorisation and least-privilege, and the attack surface. Assume inputs are hostile and call out how this could be abused.' },
+};
+let activePersona = null;   // null = Default (no lens)
+const personaWrap  = document.getElementById('persona-wrap');
+const btnPersona   = document.getElementById('btn-persona');
+const personaLabel = document.getElementById('btn-persona-label');
+const personaMenu  = document.getElementById('persona-menu');
+function renderPersonaMenu() {
+  personaMenu.innerHTML = '';
+  const mkItem = (key, label, desc) => {
+    const item = document.createElement('div');
+    item.className = 'persona-item' + (activePersona === key ? ' selected' : '');
+    const l = document.createElement('span'); l.className = 'persona-item-label'; l.textContent = label;
+    const d = document.createElement('span'); d.className = 'persona-item-desc';  d.textContent = desc;
+    item.append(l, d);
+    item.addEventListener('click', () => {
+      selectPersona(key);
+      personaMenu.classList.remove('open');
+      btnPersona.classList.remove('open');
+    });
+    personaMenu.appendChild(item);
+  };
+  mkItem(null, 'Default', 'No persona — the agent’s normal behaviour');
+  Object.entries(PERSONAS).forEach(([key, p]) => mkItem(key, p.label, p.desc));
+}
+function selectPersona(key) {
+  activePersona = (key && PERSONAS[key]) ? key : null;
+  personaLabel.textContent = activePersona ? PERSONAS[activePersona].label : 'Persona';
+  btnPersona.classList.toggle('has-persona', !!activePersona);
+  renderPersonaMenu();
+}
+btnPersona.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = personaMenu.classList.toggle('open');
+  btnPersona.classList.toggle('open', open);
+  if (open) renderPersonaMenu();
+});
+document.addEventListener('click', (e) => {
+  if (!personaMenu.classList.contains('open')) return;
+  if (personaWrap.contains(e.target)) return;
+  personaMenu.classList.remove('open');
+  btnPersona.classList.remove('open');
+});
+renderPersonaMenu();
+
 // ── Figma quick actions (composer) ────────────────────────────────
 // Shown only when a `figma` MCP server is connected. Selecting an action
 // drops a chip into the composer; on send, the chip's instruction is
@@ -3068,25 +3122,33 @@ function setProjectToolsVisible(visible, animate) {
   gsap.killTweensOf([projectToolsEl, ...btns]);
 
   if (!animate) {
-    gsap.set(projectToolsEl, visible ? { clearProps: 'width' } : { width: 0 });
-    gsap.set(btns,           visible ? { clearProps: 'opacity' } : { opacity: 0 });
+    if (visible) {
+      projectToolsEl.style.display = '';
+      gsap.set(projectToolsEl, { clearProps: 'height,overflow' });
+      gsap.set(btns, { clearProps: 'opacity' });
+    } else {
+      gsap.set(projectToolsEl, { height: 0, overflow: 'hidden' });
+      gsap.set(btns, { opacity: 0 });
+      projectToolsEl.style.display = 'none';   // fully out of the column → no reserved gap
+    }
     return;
   }
 
   if (visible) {
-    // Measure natural width synchronously: clear constraint → read → restore before next paint
-    gsap.set(projectToolsEl, { clearProps: 'width' });
-    const naturalW = projectToolsEl.offsetWidth;
-    gsap.set(projectToolsEl, { width: 0 });
+    // Measure natural height synchronously: clear constraint → read → restore before next paint
+    projectToolsEl.style.display = '';
+    gsap.set(projectToolsEl, { clearProps: 'height' });
+    const naturalH = projectToolsEl.offsetHeight;
+    gsap.set(projectToolsEl, { height: 0, overflow: 'hidden' });
 
-    gsap.timeline()
+    gsap.timeline({ onComplete: () => gsap.set(projectToolsEl, { clearProps: 'height,overflow' }) })
       .set(btns, { opacity: 0 })
-      .to(projectToolsEl, { width: naturalW, duration: 0.22, ease: 'power2.out' })
+      .to(projectToolsEl, { height: naturalH, duration: 0.22, ease: 'power2.out' })
       .to(btns, { opacity: 1, duration: 0.18, ease: 'power1.in' });
   } else {
-    gsap.timeline()
+    gsap.timeline({ onComplete: () => { projectToolsEl.style.display = 'none'; } })
       .to(btns, { opacity: 0, duration: 0.09, ease: 'power1.out' })
-      .to(projectToolsEl, { width: 0, duration: 0.14, ease: 'power2.in' });
+      .to(projectToolsEl, { height: 0, overflow: 'hidden', duration: 0.14, ease: 'power2.in' });
   }
 }
 
@@ -3113,6 +3175,9 @@ function activateViewTab(tabId, silent = false) {
   // the page tools apply — hide every always-visible pick tool there.
   // `disabled` also blocks their Alt-hotkeys.
   const noPageTools = isCode || isConsole || isDiff;
+  // No live page → hide the whole tool rail (not just its buttons), so the divider
+  // grips close the gap and the corner fillets vanish. Covers Code, Console & Changes.
+  document.getElementById('toolbar')?.classList.toggle('no-page-tools', noPageTools);
   document.querySelectorAll('#toolbar > .pick-btn').forEach(b => {
     b.style.display = noPageTools ? 'none' : '';
     b.disabled = noPageTools;
@@ -6351,9 +6416,12 @@ function sendUiMessage() {
     : raw;
   if (shownAttachText) display = (display.trim() ? display + '\n' : '') + shownAttachText;
 
-  const text = (sbConfig && sbConfig.autoInject)
+  let text = (sbConfig && sbConfig.autoInject)
     ? sbContextText(sbConfig) + '\n\n' + body
     : body;
+  // Persona lens: prepend the active persona's framing to the agent-facing text
+  // only — the chat `display` stays clean (the dropdown shows which lens is on).
+  if (activePersona && PERSONAS[activePersona]) text = PERSONAS[activePersona].preamble + '\n\n' + text;
   routeToActiveSession(text, display, images, { figma, attach });
   clearFigmaChips();
   clearAttachChips();
@@ -6631,8 +6699,14 @@ document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stop
 document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-switcher'));
 document.getElementById('sb-bar-new')?.addEventListener('click', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
 document.getElementById('sb-bar-reload')?.addEventListener('click', () => ipcRenderer.invoke('storybook-reload'));
-document.getElementById('sb-bar-external')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-external', {}));
-document.getElementById('sb-bar-stop')?.addEventListener('click', () => ipcRenderer.invoke('storybook-server-stop', { id: sbActiveId }));
+document.getElementById('sb-bar-kebab')?.addEventListener('click', (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  ipcRenderer.send('show-sb-bar-menu', { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
+});
+ipcRenderer.on('sb-bar-menu-action', (_, action) => {
+  if (action === 'external') ipcRenderer.invoke('storybook-open-external', {});
+  else if (action === 'stop') ipcRenderer.invoke('storybook-server-stop', { id: sbActiveId });
+});
 document.getElementById('sb-back')?.addEventListener('click', () => { sbSetupOpen = false; renderSbTab(); });
 
 ipcRenderer.on('storybook-instances', (_, { instances, activeId } = {}) => {
