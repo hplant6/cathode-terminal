@@ -3299,10 +3299,10 @@ html, body {
 .sb-fw-combo .sb-fw-toggle {
   flex: 0 0 36px; width: 36px; height: 36px; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--btn-hover); border: none; border-radius: 0 var(--radius-md) var(--radius-md) 0; cursor: pointer;   /* joined to the input, rounded outer edge */
+  background: var(--spec-input-bg); border: none; border-radius: 0 var(--radius-md) var(--radius-md) 0; cursor: pointer;   /* same as the input's background */
   color: var(--text); transition: background 0.12s;
 }
-.sb-fw-combo .sb-fw-toggle:hover { background: var(--btn-hover); }   /* stay gray — override the form's orange button:hover */
+.sb-fw-combo .sb-fw-toggle:hover { background: var(--spec-input-bg); }   /* stay gray — override the form's orange button:hover */
 .sb-fw-toggle svg { transition: transform 0.12s; }
 .sb-fw-combo.open .sb-fw-toggle svg { transform: rotate(180deg); }
 .sb-fw-menu {
