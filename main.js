@@ -48,10 +48,17 @@ function saveScale(sf) {
 const savedScale = readSavedScale();
 if (savedScale > 1) app.commandLine.appendSwitch('force-device-scale-factor', String(savedScale));
 
+// The Chrome DevTools Protocol powers the in-app DevTools panel, but it's also a
+// standing RCE + secret-exfil channel: any local process can Runtime.evaluate
+// against the node-integrated main window (process.env, child_process). Only open
+// it in dev builds (or with an explicit opt-in); never ship it in a packaged app.
 const DEVTOOLS_PORT = 19222;
-app.commandLine.appendSwitch('remote-debugging-port', String(DEVTOOLS_PORT));
-app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
-app.commandLine.appendSwitch('remote-allow-origins', `http://127.0.0.1:${DEVTOOLS_PORT}`);
+const REMOTE_DEBUG = !app.isPackaged || process.env.CATHODE_REMOTE_DEBUG === '1';
+if (REMOTE_DEBUG) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(DEVTOOLS_PORT));
+  app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+  app.commandLine.appendSwitch('remote-allow-origins', `http://127.0.0.1:${DEVTOOLS_PORT}`);
+}
 
 // ── Persistent browser URL ────────────────────────────────────────
 function getStateFile() {
@@ -473,9 +480,16 @@ function getPopupBounds() {
 }
 
 // Return the registrable domain (e.g. "kindo.ai" from "app.kindo.ai")
+// Registrable domain for the auth-popup "returned home" heuristic. Keeps three
+// labels for common two-level public suffixes (co.uk, com.au…) so unrelated
+// *.co.uk sites aren't collapsed to the same root. Not PSL-complete — an unknown
+// suffix just degrades to the old two-label behavior.
+const TWO_LEVEL_TLDS = new Set(['co.uk','org.uk','gov.uk','ac.uk','com.au','net.au','org.au','co.jp','co.nz','co.za','com.br','co.in']);
 function rootDomain(hostname) {
   const parts = hostname.split('.');
-  return parts.length > 2 ? parts.slice(-2).join('.') : hostname;
+  if (parts.length <= 2) return hostname;
+  const lastTwo = parts.slice(-2).join('.');
+  return TWO_LEVEL_TLDS.has(lastTwo) ? parts.slice(-3).join('.') : lastTwo;
 }
 
 function openInlinePopup(url) {
@@ -503,6 +517,9 @@ function openInlinePopup(url) {
     // nodeIntegration required: popup bar uses ipcRenderer to close/communicate
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
+  // Node-integrated → never let it navigate away from or open windows beyond its bundled file.
+  popupBarView.webContents.on('will-navigate', (e, navUrl) => { if (!navUrl.startsWith('file://')) e.preventDefault(); });
+  popupBarView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: POPUP_BAR_HEIGHT });
   popupBarView.webContents.loadFile(path.join(__dirname, 'src', 'popup-bar.html'));
   popupBarView.webContents.once('did-finish-load', () => {
@@ -964,7 +981,6 @@ ipcMain.handle('storybook-server-start', async (_, { dir, port } = {}) => {
 });
 
 ipcMain.handle('storybook-server-stop', (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
-ipcMain.handle('storybook-switch',        (_, { id } = {}) => { setActiveStorybook(id); const inst = sbServers.get(id); return { ok: !!inst, url: inst && inst.url }; });
 ipcMain.handle('storybook-list',          () => ({ instances: sbSerialize(), activeId: activeSbId }));
 ipcMain.handle('storybook-reload',        () => { if (storybookView && !storybookView.webContents.isDestroyed()) storybookView.webContents.reload(); return { ok: true }; });
 ipcMain.handle('storybook-open-external', (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url); return { ok: true }; });
@@ -1558,68 +1574,6 @@ ipcMain.on('acp-kill', (_, { id } = {}) => {
   acpSessions.delete(id);
 });
 
-// ── IPC: stream-json chat ─────────────────────────────────────────
-let claudeChatProc    = null;
-let claudeChatSession = null;   // session_id from last init event — used for --resume
-let claudeChatBuf     = '';     // incomplete JSON line buffer
-
-function spawnClaudeChat(text) {
-  if (claudeChatProc) {
-    safeKill(claudeChatProc);
-    claudeChatProc = null;
-  }
-  claudeChatBuf = '';
-
-  // Write the message to a temp file so we don't need to shell-escape it.
-  const msgFile = path.join(os.tmpdir(), 'cathode-claude-msg.txt');
-  fs.writeFileSync(msgFile, text, 'utf8');
-  // Convert the temp path to one the *nix env can read (WSL: C:\… → /mnt/c/…).
-  const wslPath = platform.toNixPath(msgFile);
-
-  const sessionArg = claudeChatSession ? `--resume ${claudeChatSession}` : '';
-  const cmd = `claude --output-format stream-json ${sessionArg} -p "$(cat '${wslPath}')"`;
-
-  claudeChatProc = platform.nixSpawn(['bash', '-lic', cmd], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  claudeChatProc.stdout.on('data', (chunk) => {
-    claudeChatBuf += chunk.toString('utf8');
-    const lines = claudeChatBuf.split('\n');
-    claudeChatBuf = lines.pop() ?? '';
-    if (claudeChatBuf.length > 1048576) claudeChatBuf = '';   // drop a pathological line with no newline (malformed stream)
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const event = JSON.parse(trimmed);
-        // session_id is interpolated into a shell command (--resume) below, so
-        // only accept a strict token — never trust agent output into a shell.
-        if (event.type === 'system' && event.subtype === 'init' && /^[A-Za-z0-9_-]{1,128}$/.test(event.session_id || '')) {
-          claudeChatSession = event.session_id;
-        }
-        uiSend('claude-chat-event', event);
-      } catch (_) { /* non-JSON startup lines (e.g. bash profile output) — ignore */ }
-    }
-  });
-
-  claudeChatProc.stderr.on('data', () => {}); // suppress stderr noise
-
-  claudeChatProc.on('exit', (code) => {
-    claudeChatProc = null;
-    uiSend('claude-chat-done', { code: code ?? 0 });
-  });
-}
-
-ipcMain.on('claude-chat-send',   (_, { text } = {}) => spawnClaudeChat(text));
-ipcMain.on('claude-chat-cancel', () => {
-  if (claudeChatProc) {
-    safeKill(claudeChatProc);
-    claudeChatProc = null;
-  }
-  uiSend('claude-chat-done', { code: -1, cancelled: true });
-});
-
 // ── IPC: usage (parsed from Claude local transcripts) ─────────────
 let _claudeConfigDirPromise = null;   // cached async resolution (was sync — blocked the UI)
 function claudeConfigDir() {
@@ -1641,7 +1595,6 @@ function usagePricing(model) {
   if (m.includes('haiku')) return { in: 0.8, out: 4,  cacheWrite: 1,     cacheRead: 0.08 };
   return { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 };  // sonnet default
 }
-function usageWindow(_model) { return 200000; }
 
 // Transcript usage is fully async + incrementally cached. These files live on
 // \\wsl.localhost, where every sync FS call is a blocking network round-trip
@@ -1749,7 +1702,7 @@ async function computeUsage(file) {
   return {
     model: c.model,
     contextTokens: c.lastCtx,
-    contextWindow: usageWindow(c.model),
+    contextWindow: 200_000,   // every current Claude model is 200k; revisit if a 1M-context variant is added
     inputTokens: c.inT, outputTokens: c.outT, cacheCreate: c.cc, cacheRead: c.cr,
     totalTokens: c.inT + c.outT + c.cc + c.cr,
     costUsd,
@@ -2002,10 +1955,8 @@ function buildMcpAddCmd(agent, entry, hasToken) {
     parts.push(entry.url);
     if (entry.authHeader && hasToken) parts.push('-H', `${entry.authHeader}: ${TOK}`);
   }
-  return parts.map(shq).join(' ').replace(TOK, `'"$CATHODE_MCP_SECRET"'`);
+  return parts.map(shq).join(' ').replaceAll(TOK, `'"$CATHODE_MCP_SECRET"'`);
 }
-
-ipcMain.handle('mcp-agents', async () => (await detectMcpAgents()).map(a => ({ key: a.key, label: a.label })));
 
 ipcMain.handle('clipboard-read', () => { try { return clipboard.readText(); } catch (_) { return ''; } });
 
@@ -2112,7 +2063,7 @@ ipcMain.handle('pick-image-file', async () => {
 // currentProjectDir comes back from the folder dialog as a Windows path
 // (UNC \\wsl.localhost\... for WSL folders, C:\... for Windows), so Node fs
 // reads it directly — no WSL round-trip needed.
-const CODE_HEAVY_DIRS = new Set(['node_modules', '.git', '.next', 'dist', 'build', '.cache', '__pycache__', '.venv', 'venv', '.svn', '.hg']);
+const CODE_HEAVY_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '.cache', '__pycache__', '.venv', 'venv', '.svn', '.hg']);   // .git is dropped earlier by the explicit name filter
 const CODE_MAX_BYTES  = 2 * 1024 * 1024;
 
 function codeSafeJoin(rel) {
@@ -2397,16 +2348,6 @@ ipcMain.on('show-sb-bar-menu', (_, { x, y } = {}) => {
     { label: 'Stop Storybook',  click: () => uiSend('sb-bar-menu-action', 'stop') },
   ]);
   menu.popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
-});
-
-ipcMain.on('show-tab-settings-menu', (_, { x, y, agent } = {}) => {
-  const memFile = (AGENT_MEMORY[agent] || {}).file || 'AGENTS.md';
-  const tpl = [
-    { label: `Edit ${memFile}`, click: () => uiSend('edit-agent-memory', agent || 'claude') },
-  ];
-  // The Authentication modal is Claude-OAuth-specific — only meaningful there.
-  if (agent === 'claude') tpl.push({ label: 'Authentication', click: () => uiSend('settings-action', 'auth') });
-  Menu.buildFromTemplate(tpl).popup({ window: mainWindow, x, y });
 });
 
 ipcMain.handle('auth-status-read', async () => {
@@ -2972,7 +2913,6 @@ ipcMain.on('eyedropper-cancel', async () => {
   uiSend('pick-cancelled');
 });
 
-// ── IPC: accessibility / contrast checker ─────────────────────────
 // ── IPC: accessibility checker (left-column panel) ────────────────
 // The scan + page markers stay on the page; the results list (drawers, live
 // color editing, notes) lives in the column via window.__cathodeA11y.
@@ -3034,42 +2974,6 @@ ipcMain.on('a11y-cancel', async () => {
   pendingA11y = null;
 });
 
-// ── Component picker window ───────────────────────────────────────
-let pickerWindow = null;
-
-ipcMain.on('open-component-picker', (_, { target, sbUrl } = {}) => {
-  if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
-
-  const [wx, wy] = mainWindow.getPosition();
-  const [ww, wh] = mainWindow.getSize();
-  const pw = 760, ph = 600;   // narrow lasso-style popup on the left + preview flyout area on the right
-
-  pickerWindow = new BrowserWindow({
-    x: wx + Math.round((ww - pw) / 2),
-    y: wy + Math.round((wh - ph) / 2),
-    width: pw, height: ph,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    parent: mainWindow,
-    show: false,
-    webPreferences: { nodeIntegration: true, contextIsolation: false },
-  });
-
-  pickerWindow.loadFile(path.join(__dirname, 'src/component-picker.html'));
-
-  pickerWindow.webContents.once('did-finish-load', () => {
-    pickerWindow.webContents.send('picker-init', { target, sbUrl });
-    pickerWindow.show();
-  });
-
-  pickerWindow.on('closed', () => {
-    pickerWindow = null;
-    clearCpHighlight();
-    uiSend('pick-cancelled');
-  });
-});
-
 // Hover the "Selected location" link → outline that element on the live page
 function clearCpHighlight() {
   const view = getActivePickView();
@@ -3092,15 +2996,6 @@ ipcMain.on('cp-highlight-target', (_, { selector } = {}) => {
   view.webContents.executeJavaScript(js).catch(() => {});
 });
 ipcMain.on('cp-clear-target-highlight', () => clearCpHighlight());
-
-ipcMain.on('component-picker-result', (_, msg) => {
-  uiSend('pick-send-to-session', msg);
-  if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
-});
-
-ipcMain.on('component-picker-cancel', () => {
-  if (pickerWindow && !pickerWindow.isDestroyed()) pickerWindow.close();
-});
 
 // ── IPC: component picker ─────────────────────────────────────────
 ipcMain.on('pick-component', async () => {
@@ -3161,7 +3056,6 @@ ipcMain.on('pick-component', async () => {
   }
 });
 
-// ── Source-first message formatter ───────────────────────────────
 // ── Media download (Extract tool) ─────────────────────────────────
 // Bytes are fetched main-side via Electron net (no page CORS; carries the
 // view's session cookies). inline SVG / data: / blob-b64 are written directly.

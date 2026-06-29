@@ -18,7 +18,7 @@ function attachCanvasRenderer(term) {
   if (!CanvasAddon) return;
   try { term.loadAddon(new CanvasAddon()); } catch (_) {}
 }
-const { trashIcon, eyeIcon, chevronRightIcon } = require('./icons');
+const { trashIcon, eyeIcon } = require('./icons');
 
 // HTML-escape for any text interpolated into innerHTML templates (escapes
 // quotes too, so it is safe in attribute values). The ONLY escaping helper —
@@ -355,7 +355,6 @@ const PTY_MODEL_SWITCH_SETTLE_MS = 1300; // PTY has no "ready" signal — confir
 // ── PTY Sessions ──────────────────────────────────────────────────
 const ptySessionsEl = document.getElementById('pty-sessions');
 const ptyTabsEl     = document.getElementById('pty-tabs-container');
-// chat log / status removed
 const sessions      = new Map(); // id → { name, term, fitAddon, el, ro }
 let activeId        = null;
 let nextId          = 1;
@@ -416,9 +415,6 @@ function createSession(name, command, acp) {
   ipcRenderer.send('pty-spawn', { id, command: cmd });
   sessions.set(id, {
     name: sName, command: cmd, term, fitAddon, el, termEl, ro,
-    claudeLines: [], seenBulletTexts: new Set(), trackedLines: new Set(),
-    chatTurnLine: Number.MAX_SAFE_INTEGER, rawLineBuffer: '', rawBulletFlag: false,
-    chatMsgs: [], chatAiEl: null, chatDebounce: null, msgSent: false, headerShown: false,
   });
   switchSession(id);
   return id;
@@ -561,44 +557,13 @@ function syncSvt(s) {
   requestAnimationFrame(updateSvtThumb);
 }
 
-// ── Model selector ────────────────────────────────────────────────
-const modelWrap  = document.getElementById('model-wrap');
-const btnModel   = document.getElementById('btn-model');
-const modelLabel = document.getElementById('btn-model-label');
-const modelMenu  = document.getElementById('model-menu');
-
-function currentModelLabel(s, key) {
-  const cat = MODEL_CATALOG[key];
-  if (!cat) return 'Model';
-  const sel = cat.models.find(m => m.id === (s.model || ''));
-  return sel ? sel.label : (cat.models[0] ? cat.models[0].label : 'Model');
-}
-
-function renderModelSelector() {
+// Model selection lives in the session-tab kebab (see selectModel); this only
+// seeds a session's default model on first render — the old top-bar selector
+// (#model-wrap) is gone.
+function ensureSessionModel() {
   const s = sessions.get(activeId);
   const key = sessionToolKey(s);
-  if (!s || !key) { modelWrap.style.display = 'none'; return; }
-  modelWrap.style.display = 'none';   // model selector relocated to the session-tab kebab
-  if (s.model === undefined) s.model = MODEL_CATALOG[key].models[0]?.id ?? '';
-  const lbl = currentModelLabel(s, key);
-  modelLabel.textContent = lbl === 'Model' ? 'Model' : 'Model: ' + lbl;
-
-  modelMenu.innerHTML = '';
-  MODEL_CATALOG[key].models.forEach(m => {
-    const item = document.createElement('div');
-    item.className = 'model-item' + (m.id === (s.model || '') ? ' selected' : '');
-    item.innerHTML =
-      `<svg class="model-check" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3"></polyline></svg>` +
-      `<span class="model-item-label"></span>`;
-    item.querySelector('.model-item-label').textContent = m.label;
-    item.addEventListener('click', () => {
-      modelMenu.classList.remove('open');
-      btnModel.classList.remove('active');
-      if (m.id === (s.model || '')) return;
-      selectModel(m.id);
-    });
-    modelMenu.appendChild(item);
-  });
+  if (s && key && s.model === undefined) s.model = MODEL_CATALOG[key].models[0]?.id ?? '';
 }
 
 // ── Toasts ────────────────────────────────────────────────────────
@@ -651,7 +616,7 @@ function selectModel(modelId) {
     // PTY has no clean "ready" signal — confirm shortly after relaunch.
     setTimeout(() => finishModelSwitch(s), PTY_MODEL_SWITCH_SETTLE_MS);
   }
-  renderModelSelector();
+  ensureSessionModel();
 }
 
 // Dismiss the "switching…" toast and flash a brief confirmation
@@ -775,10 +740,10 @@ function gaugeSvg(pct) {
   return `<svg class="gauge" viewBox="0 0 80 48" preserveAspectRatio="xMidYMid meet">${ticks}<text class="g-pct" x="40" y="43">${Math.round(pct)}%</text></svg>`;
 }
 
-function usageMiniItem(labelHtml, pct, sub, color) {
+function usageMiniItem(labelHtml, pct, sub) {
   return `<div class="usage-mini-item">
     <div class="umi-main">
-      ${gaugeSvg(pct, color)}
+      ${gaugeSvg(pct)}
       <div class="umi-text">
         <div class="umi-label">${labelHtml}</div>
         <div class="umi-sub">${sub || ''}</div>
@@ -827,7 +792,7 @@ function renderUsage({ ctx, lim, isClaude }) {
     : '';
 
   usageBody.innerHTML = (usageMini
-    ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub, m.color)).join('')}</div>`
+    ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub)).join('')}</div>`
     : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow;
 }
 
@@ -902,18 +867,6 @@ function setUsageOpen(open) {
 }
 
 btnUsage.addEventListener('click', () => setUsageOpen(!usageOpen));
-
-btnModel.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const open = modelMenu.classList.toggle('open');
-  btnModel.classList.toggle('active', open);
-});
-document.addEventListener('click', (e) => {
-  if (!modelMenu.classList.contains('open')) return;
-  if (modelWrap.contains(e.target)) return;
-  modelMenu.classList.remove('open');
-  btnModel.classList.remove('active');
-});
 
 // ── Agent persona (composer) ──────────────────────────────────────
 // A per-message "lens": the chosen persona's preamble is prepended to the
@@ -1358,7 +1311,7 @@ function switchSession(id) {
   ipcRenderer.send('set-active-pty', { id });
   refitSession(id);
   syncSvt(s);
-  renderModelSelector();
+  ensureSessionModel();
   refreshUsage();
   renderPtyTabs();
 }
@@ -1421,47 +1374,9 @@ function startRename(nameEl, id) {
   });
 }
 
-const SPINNER_RE  = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/;
-// Strips CSI (ESC [ … letter), OSC (ESC ] … BEL or ST), and 2-char ESC sequences.
-// Used only for ● detection; xterm.js gets the original bytes for rendering.
-const ANSI_STRIP_RE = /\x1b(?:\[[0-9;?]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|.)/g;
-
 ipcRenderer.on('pty-output', (_, { id, data }) => {
   const s = sessions.get(id);
-  if (!s) return;
-  if (s.type === 'acp') {
-    s.term.write(data);
-    return;
-  }
-
-  /* ── Chat-from-terminal detection (disabled — pivoted to stream-json) ──
-  {
-    const stripped = data.replace(ANSI_STRIP_RE, '');
-    const lines = (s.rawLineBuffer + stripped).split('\n');
-    s.rawLineBuffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const segs = line.split('\r');
-      let content = '';
-      for (let i = segs.length - 1; i >= 0; i--) {
-        if (segs[i]) { content = segs[i]; break; }
-      }
-      const trimmed = content.trimStart();
-      if (trimmed.startsWith('●') || trimmed.startsWith('•')) {
-        s.rawBulletFlag = true;
-        break;
-      }
-    }
-  }
-  ── end disabled block ── */
-
-  s.term.write(data, () => {
-    /* disabled: if (s.rawBulletFlag) {
-      s.rawBulletFlag = false;
-      if (scanBufferForBullets(id)) updateChatAi(id);
-    } */
-    const hasBullet  = data.includes('●') || data.includes('•');
-    const hasSpinner = SPINNER_RE.test(data);
-  });
+  if (s) s.term.write(data);
 });
 
 
@@ -1617,7 +1532,6 @@ const profilesModal    = document.getElementById('profiles-modal');
 const profilesList     = document.getElementById('profiles-list');
 
 const DELETE_ICON_SVG = trashIcon(15);
-const AP_CHEVRON_SVG  = chevronRightIcon(11);
 
 function addProfileCard(name = '', command = '', startExpanded = false, profileId = '') {
   const card = document.createElement('div');
@@ -1857,6 +1771,11 @@ document.querySelectorAll('.profiles-tab').forEach(btn => {
 // backdrop closes (unless disabled), open/close just toggle `.open`. Native
 // views are hidden by the document-level observer above — do NOT send
 // browser-view-hide/show or modal-overlay manually from modal code.
+// One shared Escape handler drives every wired modal — each close() self-guards on
+// .open, so this matches the old per-modal listeners without N permanent handlers.
+const _modalClosers = new Set();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _modalClosers.forEach(c => c()); });
+
 function wireModal(modal, { backdropClose = true, onClose } = {}) {
   const close = () => {
     if (!modal.classList.contains('open')) return;
@@ -1864,9 +1783,7 @@ function wireModal(modal, { backdropClose = true, onClose } = {}) {
     onClose?.();
   };
   if (backdropClose) modal.addEventListener('click', e => { if (e.target === modal) close(); });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && modal.classList.contains('open')) close();
-  });
+  _modalClosers.add(close);
   return { open: () => modal.classList.add('open'), close };
 }
 
@@ -2219,10 +2136,6 @@ function renderAcpBanner(s, version, model, cwd) {
   s._bannerCollecting = true;
 }
 
-function acpRawLog(_s, _text) {
-  // No-op: terminal view is now a real PTY (xterm); text log replaced.
-}
-
 // Figma timestamp format, e.g. "6/15/2026 6:23AM"
 function formatMsgTime(d) {
   const date = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
@@ -2357,7 +2270,6 @@ function acpAddUserMsg(s, text, images = [], chips = null) {
   const body   = isObj ? (text.body   || '') : (text || '');
   const detail = isObj ? (text.detail || '') : '';
   const label  = isObj ? (text.label  || 'Details') : '';
-  acpRawLog(s, `\n> ${body}${detail ? '\n' + detail : ''}\n\n`);
   const el = document.createElement('div');
   el.className = 'acp-msg user';
   if (chips) { const w = buildChatChips(chips.figma, chips.attach); if (w) el.appendChild(w); }
@@ -2406,7 +2318,6 @@ function acpAppendChunk(s, text, messageId) {
   // Append only the new chunk — reassigning the full accumulated text made
   // long responses O(n²) (full re-serialize + reflow per chunk).
   s.streamTextEl.appendChild(document.createTextNode(text));
-  acpRawLog(s, text);
   acpScrollEnd(s);
 }
 
@@ -2446,10 +2357,8 @@ function acpAddToolCard(s, update) {
   });
 
   s.msgsEl.appendChild(card);
-  acpRawLog(s, `\n[${name}]\n`);
-  if (update.content?.type === 'text') acpRawLog(s, stripAnsi(update.content.text));
   acpScrollEnd(s);
-  s.toolCards.set(update.toolCallId, { card, statusEl, bodyEl });
+  if (update.toolCallId) s.toolCards.set(update.toolCallId, { card, statusEl, bodyEl });   // don't track id-less cards (a later id-less update would otherwise match a stale entry)
 }
 
 function acpUpdateToolCard(s, update) {
@@ -2465,7 +2374,6 @@ function acpUpdateToolCard(s, update) {
     const text = stripAnsi(update.content.text);
     tc.bodyEl.appendChild(document.createTextNode(text));   // append, don't reassign (O(n²))
     tc.bodyEl.scrollTop = tc.bodyEl.scrollHeight;
-    acpRawLog(s, text);
   }
 }
 
@@ -2495,7 +2403,6 @@ ipcRenderer.on('acp-installing', (_, { id }) => {
   const s = acpSession(id);
   if (!s) return;
   acpSetStatus(s, 'installing');
-  acpRawLog(s, '⬇ Installing adapter (one-time setup)…\n');
   const el = document.createElement('div');
   el.className = 'acp-msg assistant';
   el.dataset.installLog = 'true';
@@ -2512,7 +2419,6 @@ ipcRenderer.on('acp-install-progress', (_, { id, text }) => {
   const s = sessions.get(id);
   if (!s || s.type !== 'acp' || !s._installEl) return;
   s._installEl.appendChild(document.createTextNode(text));
-  acpRawLog(s, text);
   acpScrollEnd(s);
 });
 
@@ -2537,13 +2443,13 @@ ipcRenderer.on('acp-update', (_, { id, update }) => {
 
 ipcRenderer.on('acp-done', (_, { id }) => {
   const s = sessions.get(id);
-  if (s?.type === 'acp') { acpFinalizeStream(s); acpRawLog(s, '\n'); acpSetStatus(s, 'ready'); }
+  if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'ready'); }
   if (id === activeId) refreshUsage();  // update usage after each reply (panel re-reads only if open)
 });
 
 ipcRenderer.on('acp-closed', (_, { id }) => {
   const s = sessions.get(id);
-  if (s?.type === 'acp') { acpFinalizeStream(s); acpRawLog(s, '\n[Session ended]\n'); acpSetStatus(s, 'closed'); }
+  if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'closed'); }
 });
 
 ipcRenderer.on('acp-error', (_, { id, message }) => {
@@ -2551,7 +2457,6 @@ ipcRenderer.on('acp-error', (_, { id, message }) => {
   if (!s) return;
   if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; s._pendingModelLabel = null; }
   acpFinalizeStream(s);
-  acpRawLog(s, `\nError: ${message}\n`);
   acpSetStatus(s, 'error');
   const el = document.createElement('div');
   el.className = 'acp-msg error';
@@ -2565,7 +2470,6 @@ ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
   if (!s) return;
   acpFinalizeStream(s);
   const label = toolCall?.title || toolCall?.input?.command || 'tool';
-  acpRawLog(s, `▶ ${label}\n`);
   const el = document.createElement('div');
   el.className = 'acp-approved';
   el.textContent = `▶ ${label}`;
@@ -2576,7 +2480,6 @@ ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
 ipcRenderer.on('acp-term-create', (_, { id, termId, title }) => {
   const s = acpSession(id);
   if (!s) return;
-  acpRawLog(s, `\n[terminal: ${title || termId}]\n`);
   acpAddTermCard(s, { termId, title });
 });
 
@@ -2609,9 +2512,6 @@ ipcRenderer.on('acp-term-release', (_, { id, termId }) => {
 
 // Boot first session
 createSession();
-
-function scanBufferForBullets(_id) { return false; }
-function updateChatAi(_id) {}
 
 // ── Divider drag ──────────────────────────────────────────────────
 const divider   = document.getElementById('divider');
@@ -3405,8 +3305,7 @@ function updateWfEmpty() {
   ipcRenderer.send('set-browser-empty', empty);
 }
 
-// Hand a task to the active agent (fills the composer, ready to review + send)
-// Send a task straight to the active agent
+// Send a task straight to the active agent (fills + sends the composer immediately)
 function sendToAgent(text) {
   uiTextarea.value = text;
   sendUiMessage();
@@ -5213,7 +5112,7 @@ ipcRenderer.on('update-available', (_, { behind }) => {
   let entries = [];
   let filter = 'all';
   const LC = { error: '#ef4444', warn: '#f59e0b', info: '#4a9eff', debug: '#777', log: '#bbb' };
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const shortSrc = (s) => { try { const u = new URL(s); return (u.pathname.split('/').pop() || u.hostname); } catch (_) { return String(s).split('/').pop() || s; } };
 
   function matches(e) {
@@ -6470,7 +6369,9 @@ uiTextarea.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.preventDefault(); interruptActiveSession(); return; }
 
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUiMessage(); return; }
-  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+  // Ctrl+1–9 = pick a presented option. Only when the composer is empty, so it
+  // can't silently overwrite + send a draft the user was typing.
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9' && !uiTextarea.value.trim()) {
     e.preventDefault(); uiTextarea.value = e.key; sendUiMessage(); return;
   }
   // History: arrow up at very start, arrow down at very end
@@ -7393,7 +7294,6 @@ let openOnboarding = null;
     return parts[parts.length - 1] || p;
   }
 
-  const CHEV = chevronRightIcon(12);
   const FOLDER = `<svg class="code-ico" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 5.25c0-.69.56-1.25 1.25-1.25h2.4c.4 0 .78.19 1.02.51l.66.88h5.92c.69 0 1.25.56 1.25 1.25v6.36c0 .69-.56 1.25-1.25 1.25H4c-.69 0-1.25-.56-1.25-1.25V5.25Z"/></svg>`;
   const FILE = `<svg class="code-ico" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.25 1.75H5c-.69 0-1.25.56-1.25 1.25v12c0 .69.56 1.25 1.25 1.25h8c.69 0 1.25-.56 1.25-1.25V5.75l-4-4Z"/><path d="M10 1.9V6h4.1"/></svg>`;
 

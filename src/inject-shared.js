@@ -2,8 +2,8 @@
 // Each export is page-side code (runs in the browsed page, not in Node); they're
 // interpolated into the tools' template-literal scripts, e.g.
 //   `... ${require('./inject-shared').colorHelpers} ...`
-// This is the single source of truth for helpers that were copy-pasted across
-// eyedropper / a11y / resize / combined inject scripts.
+// Centralizes the page-side helpers reused across the inject scripts (a11y,
+// resize, eyedropper, popup) so the same code isn't copy-pasted per tool.
 
 // WCAG-style color + contrast helpers.
 //   parseRGB → { r, g, b, a } | null  (null only for no-match / <3 components;

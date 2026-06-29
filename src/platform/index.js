@@ -272,7 +272,6 @@ function readRealScale() {
 }
 
 module.exports = {
-  PLATFORM, IS_WIN, IS_MAC, IS_LINUX, LOGIN_SHELL,
   homeDir,
   nixFileArgs, cmdFileArgs, toNixPath, claudeConfigDirArgs,
   nixExecFile, nixExecInput, nixSpawn, cmdSpawn,
