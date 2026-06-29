@@ -354,6 +354,18 @@ function createWindow() {
   if (typeof browserView.setBorderRadius === 'function') browserView.setBorderRadius(22);
   attachConsoleCapture();
   browserView.webContents.loadURL(loadLastURL()).catch(() => {});
+  // Style the Working File page's scrollbar to match the app — shade 7 track + arrow buttons, shade 4 thumb/arrows
+  const WF_SCROLLBAR_CSS = [
+    '::-webkit-scrollbar { width: 16px; height: 16px; }',
+    '::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: #08090C; }',
+    '::-webkit-scrollbar-thumb { background: #212026; }',
+    "::-webkit-scrollbar-button:single-button { background: #08090C; display: block; height: 16px; width: 16px; background-repeat: no-repeat; background-position: center; background-size: 8px; }",
+    "::-webkit-scrollbar-button:single-button:vertical:decrement { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,8 6,5 9,8'/></svg>\"); }",
+    "::-webkit-scrollbar-button:single-button:vertical:increment { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,5 6,8 9,5'/></svg>\"); }",
+    "::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='8,3 5,6 8,9'/></svg>\"); }",
+    "::-webkit-scrollbar-button:single-button:horizontal:increment { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='5,3 8,6 5,9'/></svg>\"); }",
+  ].join('\n');
+  browserView.webContents.on('did-finish-load', () => { browserView.webContents.insertCSS(WF_SCROLLBAR_CSS).catch(() => {}); });
 
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();
@@ -578,7 +590,7 @@ function destroyCustomView(url) {
 function repositionRightPanelView() {
   if (!mainWindow) return;
   const offscreen = OFFSCREEN_BOUNDS;
-  if (modalOpen) {
+  if (modalOpen || singlePane === 'chat') {   // chat fills the main area → hide every right-panel view
     if (figmaView)    figmaView.setBounds(offscreen);
     if (storybookView) storybookView.setBounds(offscreen);
     for (const view of customViews.values()) view.setBounds(offscreen);
@@ -586,7 +598,8 @@ function repositionRightPanelView() {
   }
   const [winW, winH] = mainWindow.getContentSize();
   const availW = winW - devToolsWidth;
-  const rightX = Math.round(availW * splitFraction) + 11;   // +1 = right-column left inset
+  // collapsed (single-pane) → the active view fills from the left strip; otherwise the split position
+  const rightX = singlePane === 'browser' ? (STRIP_W + 1) : (Math.round(availW * splitFraction) + 11);
   const PAD = 8;   // rounded-container inset (top/right/bottom; left flush) — matches the browser view
   const onBounds = { x: rightX, y: TOOLBAR_HEIGHT + PAD, width: (availW - rightX) - PAD, height: (winH - TOOLBAR_HEIGHT) - PAD * 2 };
   if (figmaView)     figmaView.setBounds(rightPanelMode === 'figma'         ? onBounds : offscreen);

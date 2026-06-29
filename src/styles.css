@@ -459,9 +459,9 @@ html, body {
   cursor: pointer;
   padding: 0;
   transition: transform 0.18s ease, color 0.15s;
-  transform: rotate(0deg);
+  transform: rotate(-90deg);
 }
-.ap-card.expanded .ap-chevron { transform: rotate(90deg); color: var(--spec-text); }   /* white */
+.ap-card.expanded .ap-chevron { transform: rotate(0deg); color: var(--spec-text); }   /* white */
 .ap-card:not(.expanded) .ap-card-body { display: none; }
 .ap-card-name {
   flex: 1;
@@ -1165,7 +1165,7 @@ html, body {
   font-family: var(--font-title);       /* Zalando SemiExpanded, UPPER */
   font-stretch: 112.5%;                 /* button UA reset drops this → must set explicitly for SemiExpanded */
   font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--spec-structural);        /* inactive text → shade 3 */
+  color: var(--spec-text-faint);        /* inactive text → shade 2 */
   cursor: pointer;
   transition: color 0.18s;
 }
@@ -1287,10 +1287,23 @@ html, body {
   display: flex; align-items: center; gap: 6px;
 }
 .acp-msg-detail > summary::-webkit-details-marker { display: none; }
-.acp-msg-detail > summary::before { content: '▸'; color: var(--spec-text-faint); transition: transform 0.12s, color 0.12s; display: inline-block; }
-.acp-msg-detail[open] > summary::before { transform: rotate(90deg); }
+/* ── Standard chevron — single asset (icons/chevron.svg, points down ⌄), recolored via background ──
+   Convention: dropdowns point down (flip 180° on open); drawers/rows point right (rotate -90°) → down (0°) on open. */
+.ui-chev {
+  display: inline-block; flex-shrink: 0; width: 10px; height: 10px; background: currentColor;
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / contain;
+          mask: url('icons/chevron.svg') no-repeat center / contain;
+  transition: transform 0.14s ease;
+}
+.acp-msg-detail > summary::before {
+  content: ''; display: inline-block; flex-shrink: 0; width: 10px; height: 10px; background: var(--spec-text-faint);
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / contain;
+          mask: url('icons/chevron.svg') no-repeat center / contain;
+  transform: rotate(-90deg); transition: transform 0.12s, background 0.12s;
+}
+.acp-msg-detail[open] > summary::before { transform: rotate(0deg); }
 .acp-msg-detail > summary:hover { color: var(--spec-text); }
-.acp-msg-detail > summary:hover::before { color: var(--spec-accent); }   /* triangle → orange on hover */
+.acp-msg-detail > summary:hover::before { background: var(--spec-accent); }   /* chevron → orange on hover */
 .acp-msg-detail > pre {
   margin: 0; padding: 12px 18px; border-top: 1px solid var(--spec-header-bg);   /* shade 6 — divider under the label */
   font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--spec-text-dim);
@@ -1459,10 +1472,11 @@ html, body {
 .acp-status > * { position: relative; z-index: 1; }
 /* Working state → the bar becomes a "Stop Agent" click target (Esc still works too) */
 .acp-status.working { cursor: pointer; }
-.acp-status .acp-status-stop { display: none; color: var(--spec-accent); }
+.acp-status .acp-status-stop { display: none; align-items: center; gap: 5px; color: var(--spec-accent); }
+.acp-status .acp-status-stop svg { flex-shrink: 0; }
 .acp-status.working:hover .acp-status-text,
 .acp-status.working:hover .acp-status-spec { display: none; }
-.acp-status.working:hover .acp-status-stop { display: inline; }
+.acp-status.working:hover .acp-status-stop { display: inline-flex; }
 /* Notification-sound toggle — right-aligned, clear of the floating toolbar */
 .notif-toggle {
   margin-left: auto;
@@ -1656,7 +1670,7 @@ html, body {
   padding: 5px 14px; cursor: pointer;
   font-family: var(--font-title); font-stretch: 112.5%;
   font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--spec-structural);        /* shade 3 — inactive */
+  color: var(--spec-text-faint);        /* shade 2 — inactive */
   transition: color 0.18s;
 }
 .profiles-tab:hover, .profiles-tab.active { color: var(--spec-text-dim); }   /* shade 1 — lit */
@@ -1980,8 +1994,8 @@ html, body {
 .tab-settings-item:hover { background: var(--spec-toolbar-bg); }   /* shade 5 */
 .tab-settings-item.selected { color: var(--spec-accent); }        /* current model */
 .tab-settings-parent { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.tab-settings-chev { color: var(--spec-text-faint); transition: transform 0.12s; }
-.tab-settings-parent.open .tab-settings-chev { transform: rotate(90deg); }
+.tab-settings-chev { color: var(--spec-text-faint); transition: transform 0.12s; transform: rotate(-90deg); }
+.tab-settings-parent.open .tab-settings-chev { transform: rotate(0deg); }
 .tab-settings-submenu { display: flex; flex-direction: column; }
 .tab-settings-submenu[hidden] { display: none; }
 .tab-settings-sub { padding-left: 26px; font-size: 11.5px; }      /* indented model rows */
@@ -2971,7 +2985,7 @@ html, body {
 #collapsed-nav { display: none; }
 /* ── single-pane (collapsed) mode: the divider becomes the fixed left strip; chat OR browser fills the main area ── */
 .panel-collapsed #divider { order: -1; width: 50px; }                              /* strip pinned leftmost */
-.panel-collapsed.pane-browser #left-panel  { width: 0; min-width: 0; overflow: hidden; }
+.panel-collapsed.pane-browser #left-panel  { width: 0; min-width: 0; overflow: hidden; padding: 0; border-right-width: 0; }   /* zero padding+border so the column is truly 0 (HTML panels sit flush to the strip) */
 .panel-collapsed.pane-browser #right-panel { flex: 1; }                             /* browser fills the main area */
 .panel-collapsed.pane-chat    #left-panel  { flex: 1 1 auto; width: auto; min-width: 0; }  /* chat fills the main area */
 .panel-collapsed.pane-chat    #right-panel { flex: 0 0 0; width: 0; min-width: 0; overflow: hidden; }
@@ -2979,6 +2993,7 @@ html, body {
 /* tools: bare icons, centered (h + v) in the strip */
 .panel-collapsed #tool-rail { top: 390px; left: 0; right: 0; align-items: center; justify-content: center; }   /* centered in the 50px strip, below the tabs */
 .panel-collapsed #toolbar { margin: 0; padding: 4px 0; background: none; box-shadow: none; border-radius: 0; }
+.panel-collapsed #toolbar.no-page-tools { display: flex; }   /* keep the reopen (>>) button in the collapsed strip even on Changes/Console/Code (their pick-tools are already hidden individually) */
 /* open (reopen panels) button — only in the collapsed strip, above the tools */
 .collapsed-open { display: none; }
 .panel-collapsed .collapsed-open {
@@ -3303,8 +3318,8 @@ html, body {
   color: var(--text); transition: background 0.12s;
 }
 .sb-fw-combo .sb-fw-toggle:hover { background: var(--spec-input-bg); }   /* stay gray — override the form's orange button:hover */
-.sb-fw-toggle svg { transition: transform 0.12s; }
-.sb-fw-combo.open .sb-fw-toggle svg { transform: rotate(180deg); }
+.sb-fw-toggle .ui-chev { transition: transform 0.12s; }
+.sb-fw-combo.open .sb-fw-toggle .ui-chev { transform: rotate(180deg); }
 .sb-fw-menu {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50;
   background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
@@ -3532,8 +3547,8 @@ button:active { background: var(--btn-active); }
   letter-spacing: 0.06em; text-transform: uppercase; color: #fff;   /* title white */
 }
 .sb-settings > summary::-webkit-details-marker { display: none; }
-.sb-settings-chev { color: var(--spec-text-dim); transition: transform 0.12s; flex-shrink: 0; }   /* shade 1 */
-.sb-settings[open] .sb-settings-chev { transform: rotate(90deg); }
+.sb-settings-chev { color: var(--spec-text-dim); transition: transform 0.12s; flex-shrink: 0; transform: rotate(-90deg); }   /* shade 1, right when closed */
+.sb-settings[open] .sb-settings-chev { transform: rotate(0deg); }
 .sb-settings-body { padding: 0; display: flex; flex-direction: column; text-align: left; border-top: 1px solid var(--spec-structural); }
 .sb-settings-body > * { padding: 16px 24px; }
 .sb-settings-body > * + * { border-top: 1px solid var(--spec-structural); }   /* 1px divider, shade 3 (1 lighter than the shade-4 fill) between items */
@@ -3821,7 +3836,7 @@ button:active { background: var(--btn-active); }
   font-family: var(--font-title); font-size: 9px; font-weight: 600;
   font-stretch: 112.5%;                 /* button UA reset drops this → set explicitly for SemiExpanded */
   letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--spec-structural); cursor: pointer;
+  color: var(--spec-text-faint); cursor: pointer;
   transition: color 0.18s;
 }
 .sysperf-view-btn:hover  { background: transparent; color: var(--spec-text-dim); }
@@ -4390,7 +4405,7 @@ button:active { background: var(--btn-active); }
   background: transparent; border: none; border-radius: 3px;
   font-family: var(--font-title); font-stretch: 112.5%; font-size: 9px; font-weight: 600;
   letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--spec-structural);   /* shade 3 — inactive */
+  color: var(--spec-text-faint);   /* shade 2 — inactive */
   cursor: pointer; transition: background 0.18s, color 0.18s;
 }
 .console-filter:hover { color: var(--spec-text-dim); }                                   /* shade 1 */
@@ -4594,9 +4609,9 @@ button:active { background: var(--btn-active); }
 .code-chev {
   width: 12px; height: 12px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-dim); transition: transform 0.15s;
+  color: var(--text-dim); transition: transform 0.15s; transform: rotate(-90deg);
 }
-.code-row.expanded .code-chev { transform: rotate(90deg); }
+.code-row.expanded .code-chev { transform: rotate(0deg); }
 .code-ico { flex-shrink: 0; opacity: 0.85; }
 .code-dir > .code-ico { color: var(--accent); opacity: 0.9; }
 .code-row-name { overflow: hidden; text-overflow: ellipsis; }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // "small text toggle tabs" (Figma) — a sliding switch.
-// A shade-7 thumb slides under the active option; inactive labels are shade 3
+// A shade-7 thumb slides under the active option; inactive labels are shade 2
 // and brighten to shade 1 on hover. Labels render in Zalando SemiExpanded
 // uppercase. Works with 2+ options.
 export function TextToggle({ options = [], defaultValue, onChange }) {
@@ -61,7 +61,7 @@ export function TextToggle({ options = [], defaultValue, onChange }) {
               fontWeight: 600,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
-              color: lit ? 'var(--spec-text-dim)' : 'var(--spec-structural)',
+              color: lit ? 'var(--spec-text-dim)' : 'var(--spec-text-faint)',
               transition: 'color 0.18s',
             }}
           >

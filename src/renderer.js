@@ -473,7 +473,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   // clicking anywhere on the bar then stops it. See .acp-status.working in styles.css.
   const stopEl = document.createElement('span');
   stopEl.className = 'acp-status-stop';
-  stopEl.textContent = 'Stop Agent';
+  stopEl.innerHTML = '<svg viewBox="0 0 18 18" width="13" height="13" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M10.2921 7.99951V2.74951C10.2921 2.44757 10.0432 2.19971 9.74234 2.19971C9.44148 2.19971 9.19254 2.44757 9.19254 2.74951V7.99951C9.19254 8.38611 8.87894 8.69971 8.49234 8.69971C8.10574 8.69971 7.79214 8.38611 7.79214 7.99951V2.74951C7.79214 1.67146 8.6712 0.799316 9.74234 0.799316C10.8135 0.799316 11.6925 1.67146 11.6925 2.74951V7.99951C11.6925 8.38611 11.3789 8.69971 10.9923 8.69971C10.6057 8.69971 10.2921 8.38611 10.2921 7.99951Z"/><path d="M12.7921 7.99951V3.99951C12.7921 3.69757 12.5432 3.44971 12.2423 3.44971C11.9415 3.44971 11.6925 3.69757 11.6925 3.99951V7.99951C11.6925 8.38611 11.3789 8.69971 10.9923 8.69971C10.6057 8.69971 10.2921 8.38611 10.2921 7.99951V3.99951C10.2921 2.92146 11.1712 2.04932 12.2423 2.04932C13.3135 2.04932 14.1925 2.92146 14.1925 3.99951V7.99951C14.1925 8.38611 13.8789 8.69971 13.4923 8.69971C13.1057 8.69971 12.7921 8.38611 12.7921 7.99951Z"/><path d="M7.7925 7.99951V3.99951C7.7925 3.69768 7.54339 3.4499 7.24269 3.44971C6.94183 3.44971 6.69191 3.69757 6.69191 3.99951V11.4644C6.69191 11.7628 6.50326 12.0289 6.22121 12.1265C5.9392 12.2239 5.62623 12.1316 5.44191 11.897L3.67336 9.64502C3.48722 9.40776 3.13918 9.36597 2.90187 9.55225C2.70148 9.70959 2.60746 9.99648 2.85109 10.3833L4.80519 13.3892L4.9966 13.6636C5.99261 15.003 7.56744 15.8003 9.24855 15.8003H10.9937C13.3679 15.8001 15.2935 13.8748 15.2935 11.5005V5.49951C15.2935 5.19768 15.0444 4.94988 14.7437 4.94971C14.4428 4.94971 14.1929 5.19757 14.1929 5.49951V7.99951C14.1929 8.386 13.8801 8.69953 13.4937 8.69971C13.1071 8.69971 12.7935 8.38611 12.7935 7.99951V5.49951C12.7935 4.42146 13.6725 3.54932 14.7437 3.54932C15.8147 3.54949 16.6929 4.42156 16.6929 5.49951V11.5005C16.6929 14.648 14.1411 17.2005 10.9937 17.2007H9.24855C6.98161 17.2007 4.86749 16.0535 3.63136 14.1519L1.6714 11.1382L1.66554 11.1294C1.12341 10.2683 1.15727 9.14126 2.03664 8.45068C2.87901 7.78927 4.10792 7.93192 4.77394 8.77979H4.77492L5.2925 9.43896V3.99951C5.2925 2.92146 6.17155 2.04932 7.24269 2.04932C8.31368 2.0495 9.19191 2.92157 9.19191 3.99951V7.99951C9.19191 8.386 8.87913 8.69952 8.49269 8.69971C8.10609 8.69971 7.7925 8.38611 7.7925 7.99951Z"/></svg>Stop Agent';
 
   statusEl.appendChild(specEl);
   statusEl.appendChild(statusTextEl);
@@ -1625,7 +1625,7 @@ function addProfileCard(name = '', command = '', startExpanded = false, profileI
   card.dataset.profileId = profileId;   // identity survives deletions/reordering
   card.innerHTML = `
     <div class="ap-card-row">
-      <button class="ap-chevron" title="Expand">${AP_CHEVRON_SVG}</button>
+      <button class="ap-chevron" title="Expand"><span class="ui-chev"></span></button>
       <span class="ap-card-name">${escHtml(name) || '<em>Untitled</em>'}</span>
       <button class="ap-delete" title="Remove">${DELETE_ICON_SVG}</button>
     </div>
@@ -1885,7 +1885,7 @@ function enhanceSelect(sel) {
 
   const btn = document.createElement('div');
   btn.className = 'ct-select-btn';
-  btn.innerHTML = `<span class="ct-select-label"></span><svg class="ct-select-chev" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4.5 6,8.5 10,4.5"></polyline></svg>`;
+  btn.innerHTML = `<span class="ct-select-label"></span><span class="ui-chev ct-select-chev"></span>`;
   const labelEl = btn.querySelector('.ct-select-label');
   const menu = document.createElement('div');
   menu.className = 'ct-select-menu';
@@ -2627,7 +2627,7 @@ let currentDevToolsWidth = 0;
 let layoutRefitTimer = null;
 ipcRenderer.on('devtools-layout', (_, { leftPanelWidth, devToolsWidth: dw }) => {
   currentDevToolsWidth = dw;
-  leftPanel.style.width = leftPanelWidth + 'px';
+  if (!panelCollapsed) leftPanel.style.width = leftPanelWidth + 'px';   // collapsed → let CSS keep the column at 0 (don't re-apply the split width)
   devtoolsPlaceholderEl.style.width = dw + 'px';
   clearTimeout(layoutRefitTimer);
   layoutRefitTimer = setTimeout(() => refitSession(activeId), 80);
@@ -2679,6 +2679,7 @@ function setSinglePane(pane) {
     if (!panelCollapsed) savedPanelWidth = leftPanel.style.width || null;
     panelCollapsed = true;
     activePane = pane;
+    leftPanel.style.width = '';   // drop the inline split width so the CSS can collapse the column (HTML panels then fill)
     appRootEl.classList.add('panel-collapsed');
     appRootEl.classList.toggle('pane-chat', pane === 'chat');
     appRootEl.classList.toggle('pane-browser', pane === 'browser');
@@ -3041,7 +3042,7 @@ function openTabSettingsMenu(btn, s) {
     const cur = s.model || (MODEL_CATALOG[mKey].models[0]?.id || '');
     const parent = document.createElement('div');
     parent.className = 'tab-settings-item tab-settings-parent';
-    parent.innerHTML = `<span>Model</span><span class="tab-settings-chev">›</span>`;
+    parent.innerHTML = `<span>Model</span><span class="tab-settings-chev ui-chev"></span>`;
     const sub = document.createElement('div');
     sub.className = 'tab-settings-submenu';
     sub.hidden = true;
@@ -3255,6 +3256,9 @@ function activateViewTab(tabId, silent = false) {
   if (!tab) return;
   document.querySelectorAll('.view-tab').forEach(b => b.classList.toggle('active', b.dataset.view === tabId));
   updateViewTabThumb();
+  // collapsed-strip right-panel label follows the active tab (was hardcoded "BROWSER")
+  const cnRight = document.querySelector('.cn-label[data-pane="browser"] span');
+  if (cnRight) cnRight.textContent = (tab.label || tabId).toUpperCase();
   const isProject   = tab.type === 'project';
   const isStorybook = tab.type === 'storybook';
   const isCode      = tab.type === 'code';
@@ -5646,7 +5650,7 @@ function buildAuditMenu() {
     card.className = 'ap-card' + (expanded ? ' expanded' : '');
     card.innerHTML = `
       <div class="ap-card-row">
-        <span class="ap-chevron">${chevronRightIcon(14)}</span>
+        <span class="ap-chevron"><span class="ui-chev"></span></span>
         <span class="ap-card-name"></span>
         <button class="ap-delete" title="Remove prompt">${trashIcon(15)}</button>
       </div>
@@ -7482,7 +7486,7 @@ let openOnboarding = null;
       const row = document.createElement('div');
       row.className = 'code-row code-' + entry.type + (entry.ignored ? ' code-ignored' : '');
       row.style.paddingLeft = (8 + depth * 13) + 'px';
-      row.innerHTML = (isDir ? `<span class="code-chev">${CHEV}</span>${FOLDER}`
+      row.innerHTML = (isDir ? `<span class="code-chev"><span class="ui-chev"></span></span>${FOLDER}`
                              : `<span class="code-chev"></span>${FILE}`)
                     + `<span class="code-row-name"></span>`;
       row.querySelector('.code-row-name').textContent = entry.name;
