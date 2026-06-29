@@ -578,7 +578,7 @@ function renderModelSelector() {
   const s = sessions.get(activeId);
   const key = sessionToolKey(s);
   if (!s || !key) { modelWrap.style.display = 'none'; return; }
-  modelWrap.style.display = '';
+  modelWrap.style.display = 'none';   // model selector relocated to the session-tab kebab
   if (s.model === undefined) s.model = MODEL_CATALOG[key].models[0]?.id ?? '';
   const lbl = currentModelLabel(s, key);
   modelLabel.textContent = lbl === 'Model' ? 'Model' : 'Model: ' + lbl;
@@ -1047,12 +1047,19 @@ function hideFigmaTip() {
   const tip = document.createElement('div');
   tip.id = 'cathode-tip';
   document.body.appendChild(tip);
-  let cur = null, hoverEl = null, showTimer = null;
+  let cur = null, hoverEl = null, showTimer = null, mx = 0, my = 0;
   const TIP_DELAY = 1000;   // 1s before a tooltip appears
 
   function place(el) {
-    const r = el.getBoundingClientRect();
     const tr = tip.getBoundingClientRect();
+    if (el.hasAttribute('data-tip-now')) {   // long-description tips track the cursor, not the (wide) element
+      const cl = Math.max(6, Math.min(mx - tr.width / 2, window.innerWidth - tr.width - 6));
+      let ct = my - tr.height - 14;
+      if (ct < 6) ct = my + 18;
+      tip.style.left = Math.round(cl) + 'px'; tip.style.top = Math.round(ct) + 'px';
+      return;
+    }
+    const r = el.getBoundingClientRect();
     let left = r.left + (r.width - tr.width) / 2;
     left = Math.max(6, Math.min(left, window.innerWidth - tr.width - 6));
     let top = r.top - tr.height - 8;
@@ -1061,7 +1068,7 @@ function hideFigmaTip() {
     // so a tip drifting over it gets hidden). Shift left of the view when it would overlap.
     const rp = document.getElementById('right-panel');
     const tb = document.getElementById('tab-bar');
-    if (rp) {
+    if (rp && !rp.contains(el)) {   // elements inside the right panel are HTML overlays — no native view to dodge
       const rpr = rp.getBoundingClientRect();
       const nativeTop = tb ? tb.getBoundingClientRect().bottom : rpr.top;
       if (top + tr.height > nativeTop && left + tr.width > rpr.left - 4) {
@@ -1084,7 +1091,12 @@ function hideFigmaTip() {
   function hide() { cur = null; tip.classList.remove('show'); }
 
   function cancel() { clearTimeout(showTimer); hoverEl = null; if (cur) hide(); }
+  document.addEventListener('mousemove', (e) => {
+    mx = e.clientX; my = e.clientY;
+    if (cur && cur.hasAttribute && cur.hasAttribute('data-tip-now')) place(cur);   // follow the cursor
+  });
   document.addEventListener('mouseover', (e) => {
+    mx = e.clientX; my = e.clientY;
     const el = e.target.closest ? e.target.closest('[title], [data-tip]') : null;
     if (el === hoverEl) return;            // still on the same (current or pending) element
     clearTimeout(showTimer);
@@ -1093,7 +1105,8 @@ function hideFigmaTip() {
     if (el) {
       // suppress the native tooltip immediately (title → data-tip), but delay our styled tip
       if (el.hasAttribute('title')) { el.dataset.tip = el.getAttribute('title'); el.removeAttribute('title'); }
-      showTimer = setTimeout(() => show(el), TIP_DELAY);
+      const delay = el.hasAttribute('data-tip-now') ? 0 : TIP_DELAY;   // no delay for long-description tips
+      showTimer = setTimeout(() => show(el), delay);
     }
   });
   document.addEventListener('mouseout', (e) => {
@@ -1373,8 +1386,7 @@ function renderPtyTabs() {
     settingsBtn.innerHTML = `<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
     settingsBtn.addEventListener('click', e => {
       e.stopPropagation();
-      const rect = settingsBtn.getBoundingClientRect();
-      ipcRenderer.send('show-tab-settings-menu', { x: Math.round(rect.left), y: Math.round(rect.bottom + 4), agent: sessionAgent(s) });
+      openTabSettingsMenu(settingsBtn, s);
     });
     tab.appendChild(settingsBtn);
 
@@ -2338,15 +2350,39 @@ function appendChatImages(el, images) {
 function acpAddUserMsg(s, text, images = [], chips = null) {
   s._bannerCollecting = false;
   acpFinalizeStream(s);
-  acpRawLog(s, `\n> ${text}\n\n`);
+  // The chat display is either a plain string, or { body, detail, label } where
+  // `body` shows inline and `detail` is tucked into a collapsed drawer (the agent
+  // still received the full text — this is purely a display trim).
+  const isObj  = text && typeof text === 'object';
+  const body   = isObj ? (text.body   || '') : (text || '');
+  const detail = isObj ? (text.detail || '') : '';
+  const label  = isObj ? (text.label  || 'Details') : '';
+  acpRawLog(s, `\n> ${body}${detail ? '\n' + detail : ''}\n\n`);
   const el = document.createElement('div');
   el.className = 'acp-msg user';
   if (chips) { const w = buildChatChips(chips.figma, chips.attach); if (w) el.appendChild(w); }
-  if (text && text.trim()) {
+  const badges = isObj && Array.isArray(text.badges) ? text.badges : [];
+  if (badges.length) {
+    const row = document.createElement('div');
+    row.className = 'acp-msg-badges';
+    badges.forEach(b => { const sp = document.createElement('span'); sp.className = 'acp-msg-badge'; sp.textContent = b; row.appendChild(sp); });
+    el.appendChild(row);
+  }
+  if (body && body.trim()) {
     const t = document.createElement('div');
     t.className = 'acp-msg-text';
-    t.textContent = text;
+    t.textContent = body;
     el.appendChild(t);
+  }
+  if (detail && detail.trim()) {
+    const d = document.createElement('details');
+    d.className = 'acp-msg-detail';
+    const sum = document.createElement('summary');
+    sum.textContent = label || 'Details';
+    const pre = document.createElement('pre');
+    pre.textContent = detail;
+    d.append(sum, pre);
+    el.appendChild(d);
   }
   appendChatImages(el, images);
   s.msgsEl.appendChild(el);
@@ -2979,6 +3015,67 @@ document.getElementById('claude-md-save').addEventListener('click', async () => 
 
 ipcRenderer.on('edit-agent-memory', (_, agent) => openMemoryModal(agent || 'claude'));
 
+// Session-tab kebab → styled HTML dropdown (replaces the native menu; the tabs
+// live in the left panel, so an HTML overlay isn't fighting any native view).
+let tabSettingsMenu = null;
+function closeTabSettingsMenu() { tabSettingsMenu?.remove(); tabSettingsMenu = null; }
+function openTabSettingsMenu(btn, s) {
+  closeTabSettingsMenu();
+  const agent = sessionAgent(s);
+  const memFile = MEMORY_FILE[agent] || 'AGENTS.md';
+  const menu = document.createElement('div');
+  menu.id = 'tab-settings-menu';
+  const mkItem = (label, fn) => {
+    const item = document.createElement('div');
+    item.className = 'tab-settings-item';
+    item.textContent = label;
+    item.addEventListener('click', e => { e.stopPropagation(); closeTabSettingsMenu(); fn(); });
+    menu.appendChild(item);
+  };
+  mkItem(`Edit ${memFile}`, () => openMemoryModal(agent));
+  if (agent === 'claude') mkItem('Authentication', () => openAuthModal());
+
+  // Model — inline submenu of the tool's available models
+  const mKey = sessionToolKey(s);
+  if (mKey && MODEL_CATALOG[mKey]) {
+    const cur = s.model || (MODEL_CATALOG[mKey].models[0]?.id || '');
+    const parent = document.createElement('div');
+    parent.className = 'tab-settings-item tab-settings-parent';
+    parent.innerHTML = `<span>Model</span><span class="tab-settings-chev">›</span>`;
+    const sub = document.createElement('div');
+    sub.className = 'tab-settings-submenu';
+    sub.hidden = true;
+    MODEL_CATALOG[mKey].models.forEach(m => {
+      const si = document.createElement('div');
+      si.className = 'tab-settings-item tab-settings-sub' + (m.id === cur ? ' selected' : '');
+      si.textContent = m.label;
+      si.addEventListener('click', e => {
+        e.stopPropagation();
+        closeTabSettingsMenu();
+        if (s.id !== activeId) switchSession(s.id);
+        selectModel(m.id);
+      });
+      sub.appendChild(si);
+    });
+    parent.addEventListener('click', e => {
+      e.stopPropagation();
+      sub.hidden = !sub.hidden;
+      parent.classList.toggle('open', !sub.hidden);
+    });
+    menu.appendChild(parent);
+    menu.appendChild(sub);
+  }
+
+  document.body.appendChild(menu);
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.round(r.left) + 'px';
+  menu.style.top  = Math.round(r.bottom + 4) + 'px';
+  tabSettingsMenu = menu;
+}
+document.addEventListener('click', (e) => {
+  if (tabSettingsMenu && !tabSettingsMenu.contains(e.target)) closeTabSettingsMenu();
+});
+
 // ── Right panel view switching ────────────────────────────────────
 const tabBar            = document.getElementById('tab-bar');
 const rightSb           = document.getElementById('right-storybook');
@@ -3170,7 +3267,7 @@ function activateViewTab(tabId, silent = false) {
   if (codePanel) codePanel.style.display = isCode ? 'flex' : 'none';
   if (consolePanel) consolePanel.style.display = isConsole ? 'flex' : 'none';
   if (diffPanel) diffPanel.style.display = isDiff ? 'flex' : 'none';
-  setProjectToolsVisible(isProject, !silent);
+  setProjectToolsVisible(isProject || isStorybook, !silent);   // pick tools also apply to the Storybook preview
   // The Code Viewer, Console and Changes tabs have no live web page, so none of
   // the page tools apply — hide every always-visible pick tool there.
   // `disabled` also blocks their Alt-hotkeys.
@@ -3360,8 +3457,8 @@ document.getElementById('wf-browse').addEventListener('click', async () => {
 });
 
 // Tab switching — folder is the default; show one panel at a time.
-const wfTabs   = Array.from(document.querySelectorAll('.wf-tab'));
-const wfPanels = Array.from(document.querySelectorAll('.wf-tabpanel'));
+const wfTabs   = Array.from(document.querySelectorAll('#wf-empty .wf-tab'));
+const wfPanels = Array.from(document.querySelectorAll('#wf-empty .wf-tabpanel'));
 function setWfTab(name) {
   wfTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   wfPanels.forEach(p => { p.hidden = p.dataset.panel !== name; });
@@ -5079,7 +5176,15 @@ function routeToActiveSession(text, display = text, images = [], chips = null) {
 }
 
 // Route pick/screenshot output to the active session
-ipcRenderer.on('pick-send-to-session', (_, message) => routeToActiveSession(message));
+ipcRenderer.on('pick-send-to-session', (_, message) => {
+  // Structured payload { text, body, detail, label } → agent gets full `text`,
+  // chat shows `body` with `detail` in a drawer. Plain string → unchanged.
+  if (message && typeof message === 'object') {
+    routeToActiveSession(message.text, { body: message.body, detail: message.detail, label: message.label });
+  } else {
+    routeToActiveSession(message);
+  }
+});
 
 // Passive update indicator: a dismissible toast (click → run the update flow)
 // plus a persistent dot on the settings gear.
@@ -5156,15 +5261,20 @@ ipcRenderer.on('update-available', (_, { behind }) => {
     }
   }
   function sendOne(e) {
-    let msg;
+    let detail, body, label;
     if (e.kind === 'net') {
-      msg = '───── Failed request ─────\n' + (e.method || 'GET') + ' ' + e.url + '\n'
-        + (e.error ? 'Error: ' + e.error : 'Status: ' + e.status) + '\n\nFind and fix what makes this request fail.';
+      detail = '───── Failed request ─────\n' + (e.method || 'GET') + ' ' + e.url + '\n'
+        + (e.error ? 'Error: ' + e.error : 'Status: ' + e.status);
+      body = 'Find and fix what makes this request fail.';
+      label = `Failed request · ${e.method || 'GET'} ${shortSrc(e.url)}`;
     } else {
-      msg = '───── Console ' + e.level + ' ─────\n' + e.text
-        + (e.source ? '\nAt: ' + e.source + (e.line ? ':' + e.line : '') : '') + '\n\nInvestigate and fix this.';
+      detail = '───── Console ' + e.level + ' ─────\n' + e.text
+        + (e.source ? '\nAt: ' + e.source + (e.line ? ':' + e.line : '') : '');
+      body = 'Investigate and fix this.';
+      label = `Console ${e.level}`;
     }
-    showToast(routeToActiveSession(msg) ? 'Sent to chat' : 'No active session', { duration: 1500 });
+    const text = detail + '\n\n' + body;   // full (log first, then the ask) → agent
+    showToast(routeToActiveSession(text, { body, detail, label }) ? 'Sent to chat' : 'No active session', { duration: 1500 });
   }
 
   ipcRenderer.on('console-entry', (_, e) => add(e));
@@ -5188,8 +5298,9 @@ ipcRenderer.on('update-available', (_, { behind }) => {
       if (e.kind === 'net') lines.push('• [request] ' + (e.method || 'GET') + ' ' + e.url + ' — ' + (e.error || ('HTTP ' + e.status)));
       else lines.push('• [console] ' + e.text + (e.source ? '  (' + shortSrc(e.source) + (e.line ? ':' + e.line : '') + ')' : ''));
     });
-    lines.push('', 'Investigate and fix these.');
-    showToast(routeToActiveSession(lines.join('\n')) ? 'Sent ' + errs.length + ' to chat' : 'No active session', { duration: 1500 });
+    const detail = lines.join('\n');
+    const body = 'Investigate and fix these.';
+    showToast(routeToActiveSession(detail + '\n\n' + body, { body, detail, label: `Console errors · ${errs.length}` }) ? 'Sent ' + errs.length + ' to chat' : 'No active session', { duration: 1500 });
   });
   listEl.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.c-send'); if (!btn) return;
@@ -5322,8 +5433,9 @@ ipcRenderer.on('update-available', (_, { behind }) => {
       const st = (f.added != null || f.deleted != null) ? '  (+' + (f.added || 0) + ' −' + (f.deleted || 0) + ')' : '';
       lines.push(tag + '  ' + f.rel + st);
     });
-    lines.push('', 'Walk through these changes and flag anything incorrect, risky, or incomplete.');
-    showToast(routeToActiveSession(lines.join('\n'))
+    const detail = lines.join('\n');
+    const body = 'Walk through these changes and flag anything incorrect, risky, or incomplete.';
+    showToast(routeToActiveSession(detail + '\n\n' + body, { body, detail, label: `Changes · ${files.length} file${files.length === 1 ? '' : 's'}` })
       ? 'Sent ' + files.length + ' file' + (files.length === 1 ? '' : 's') + ' to chat'
       : 'No active session', { duration: 1500 });
   });
@@ -6667,10 +6779,9 @@ ipcRenderer.on('storybook-server-status', (_, { state, url, message, log } = {})
   }
 });
 
-// Build a Storybook with the agent — optionally from a Figma file via the Figma MCP
-document.getElementById('sb-build')?.addEventListener('click', async () => {
-  const dir   = document.getElementById('sb-folder').value.trim();
-  const figma = document.getElementById('sb-figma-url').value.trim();
+// Build a Storybook with the agent — from a Figma file, or scaffolded for the project's framework
+async function buildStorybook({ figma = '', framework = '' } = {}) {
+  const dir = document.getElementById('sb-folder').value.trim();
   if (dir) ipcRenderer.send('set-project-dir', { dir });   // run the agent in the chosen folder
   let installed = false;
   try { installed = (await ipcRenderer.invoke('storybook-detect', { dir })).installed; } catch (_) {}
@@ -6679,21 +6790,50 @@ document.getElementById('sb-build')?.addEventListener('click', async () => {
     : 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
   const prompt = figma
     ? `${base}. Then, using the Figma MCP (Framelink figma-developer-mcp), call get_figma_data on ${figma} and download any assets with download_images, and build components plus matching Storybook stories that faithfully reproduce the design’s layout, spacing, colors, typography, and assets. Organize stories under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`
-    : `${base}, then generate stories for the project’s existing components organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;
+    : `${base}, then generate stories for the project’s existing components${framework ? ` (this is a ${framework} project)` : ''} organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;
   const ok = routeToActiveSession(prompt);
   if (sbStatusEl) {
     sbStatusEl.hidden = false;
     sbStatusEl.dataset.state = ok ? 'starting' : 'error';
-    sbStatusEl.textContent = ok ? 'Asked the agent to build a Storybook — watch the chat, then click Start when it’s ready.' : 'No active agent session to build with.';
+    sbStatusEl.textContent = ok ? 'Asked the agent to build a Storybook — watch the chat, then click Run when it’s ready.' : 'No active agent session to build with.';
   }
-});
+}
+document.getElementById('sb-build')?.addEventListener('click', () => buildStorybook({ figma: document.getElementById('sb-figma-url').value.trim() }));
+document.getElementById('sb-build-fw')?.addEventListener('click', () => buildStorybook({ framework: document.getElementById('sb-framework').value.trim() }));
 
-// Advanced: reveal the manual "connect to a running URL" controls
-document.getElementById('sb-manual-toggle')?.addEventListener('click', () => {
-  const m = document.getElementById('sb-manual');
-  if (m) m.hidden = !m.hidden;
-});
+// Storybook setup — the 3 ways (Start / Build / Connect) as tabs
+const sbTabs   = Array.from(document.querySelectorAll('#sb-setup .wf-tab'));
+const sbPanels = Array.from(document.querySelectorAll('#sb-setup .wf-tabpanel'));
+function setSbTab(name) {
+  sbTabs.forEach(t => t.classList.toggle('active', t.dataset.sbtab === name));
+  sbPanels.forEach(p => { p.hidden = p.dataset.sbpanel !== name; });
+  if (name === 'figma')     document.getElementById('sb-figma-url')?.focus();
+  if (name === 'framework') document.getElementById('sb-framework')?.focus();
+  if (name === 'connect')   document.getElementById('sb-url')?.focus();
+}
+sbTabs.forEach(t => t.addEventListener('click', () => setSbTab(t.dataset.sbtab)));
 document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stopPropagation());
+document.getElementById('sb-framework')?.addEventListener('keydown', e => e.stopPropagation());
+// Framework combobox — popular frameworks in a styled dropdown, but free text still works
+(function initFrameworkCombo() {
+  const combo = document.querySelector('.sb-fw-combo');
+  if (!combo) return;
+  const input  = document.getElementById('sb-framework');
+  const toggle = combo.querySelector('.sb-fw-toggle');
+  const menu   = combo.querySelector('.sb-fw-menu');
+  const opts   = Array.from(menu.querySelectorAll('.sb-fw-opt'));
+  const setOpen = (v) => { combo.classList.toggle('open', v); menu.hidden = !v; };
+  const showAll = () => opts.forEach(o => o.hidden = false);
+  const filter = () => {
+    const q = input.value.trim().toLowerCase();
+    opts.forEach(o => { o.hidden = !!q && !o.textContent.toLowerCase().includes(q) && !o.dataset.val.toLowerCase().includes(q); });
+  };
+  toggle.addEventListener('click', (e) => { e.preventDefault(); if (combo.classList.contains('open')) setOpen(false); else { showAll(); setOpen(true); } });
+  input.addEventListener('focus', () => { showAll(); setOpen(true); });
+  input.addEventListener('input', () => { setOpen(true); filter(); });
+  opts.forEach(o => o.addEventListener('click', () => { input.value = o.dataset.val; setOpen(false); }));
+  document.addEventListener('mousedown', (e) => { if (!combo.contains(e.target)) setOpen(false); });
+})();
 
 // ── Storybook instance bar ──
 document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-switcher'));
@@ -6851,12 +6991,13 @@ let openComponentPanel = null;
     const targetDesc = t
       ? '\nTarget element: ' + targetSig(t) + (t.text ? ` ("${t.text.slice(0, 60)}")` : '') + (t.selector ? '\nSelector: ' + t.selector : '')
       : '';
-    const msg = [
-      `[Component Reference] Use the Storybook component "${selected.title} / ${selected.name}" as a reference for this change.`,
+    const componentName = `${selected.title} / ${selected.name}`;
+    const text = [
+      `[Component Reference] Use the Storybook component "${componentName}" as a reference for this change.`,
       'Story: ' + storyUrl, argsLine, targetDesc,
       instructions ? '\nInstructions: ' + instructions : '',
     ].filter(Boolean).join('\n');
-    routeToActiveSession(msg);
+    routeToActiveSession(text, { body: (instructions || '').trim(), badges: [componentName] });
     close();
   }
   function close() {

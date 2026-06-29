@@ -1,7 +1,7 @@
 import React from 'react';
 
 const variantStyles = {
-  default: { background: 'var(--btn-hover)',   color: 'var(--text-dim)',  border: '1px solid var(--border)' },
+  default: { background: 'var(--btn-hover)',   color: '#fff',  border: '1px solid var(--border)' },
   accent:  { background: 'var(--accent-dim)',  color: 'var(--accent)',    border: '1px solid var(--accent-border)' },
   success: { background: 'rgba(78,201,176,.15)', color: 'var(--success)', border: '1px solid rgba(78,201,176,.3)' },
   danger:  { background: 'var(--danger-dim)',  color: 'var(--danger)',    border: '1px solid var(--danger)' },

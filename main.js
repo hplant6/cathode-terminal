@@ -2478,6 +2478,21 @@ function getActivePickView() {
   }
   return null;
 }
+// URL of the page currently shown in the right panel (the tab the user is looking at).
+function activePageUrl() {
+  try { return getActivePickView()?.webContents.getURL() || ''; } catch (_) { return ''; }
+}
+// Human label for where the active page lives — the Working File or a specific Storybook instance.
+function pageSource() {
+  try {
+    if (rightPanelMode === 'storybook' && activeSbId) {
+      const inst = sbServers.get(activeSbId);
+      if (inst) return `the Storybook running on :${inst.port}${inst.label ? ` ("${inst.label}")` : ''}`;
+      return 'the Storybook';
+    }
+  } catch (_) {}
+  return "the app's Working File";
+}
 
 // ── IPC: element picker ───────────────────────────────────────────
 ipcMain.on('pick-start', async (_, mode) => {
@@ -2550,8 +2565,13 @@ ipcMain.on('pick-start', async (_, mode) => {
 
     // Phase 4: format source-first and write to PTY
     const pageUrl = (extracts.length > 0 || media) ? view.webContents.getURL() : null;
-    const message = formatSourceMessage({ items, cssRefs, instruction, extracts, media, mediaSummary, pageUrl });
-    uiSend('pick-send-to-session', message);
+    const srcArgs = { items, cssRefs, extracts, media, mediaSummary, pageUrl };
+    uiSend('pick-send-to-session', {
+      text:   formatSourceMessage({ ...srcArgs, instruction }),
+      body:   (instruction || '').trim(),
+      detail: formatSourceMessage({ ...srcArgs, instruction: '' }),
+      label:  'Element Context',
+    });
 
   } catch (err) {
     console.error('Pick error:', err);
@@ -2609,8 +2629,11 @@ ipcMain.on('pick-panel-send', async (_, { instruction = '', items = [] } = {}) =
   await clearPanelHighlight(p.view);
   uiSend('pick-cancelled');
   if (!items.length && !instruction.trim()) return;
-  const message = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction }) + localAssetNote(items);
-  uiSend('pick-send-to-session', message);
+  const note = localAssetNote(items);
+  let pageUrl = ''; try { pageUrl = p.view.webContents.getURL(); } catch (_) {}   // the page being viewed
+  const text   = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction,      pageUrl }) + note;   // full → agent
+  const detail = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction: '',  pageUrl }) + note;   // CSS/DOM without the typed note → drawer
+  uiSend('pick-send-to-session', { text, body: instruction.trim(), detail, label: 'Element Context' });
 });
 ipcMain.on('pick-panel-cancel', async () => {
   const p = pendingPanelPick;
@@ -2665,8 +2688,13 @@ ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' }
   }
   if (!extracts.length && !media && !instruction.trim()) return;
   const pageUrl = view.webContents.getURL();
-  const message = formatSourceMessage({ items: p.items, cssRefs: [], instruction, extracts, media, mediaSummary, pageUrl });
-  uiSend('pick-send-to-session', message);
+  const srcArgs = { items: p.items, cssRefs: [], extracts, media, mediaSummary, pageUrl };
+  uiSend('pick-send-to-session', {
+    text:   formatSourceMessage({ ...srcArgs, instruction }),
+    body:   (instruction || '').trim(),
+    detail: formatSourceMessage({ ...srcArgs, instruction: '' }),
+    label:  'Element Context',
+  });
 });
 ipcMain.on('extract-panel-cancel', async () => {
   const p = pendingExtract;
@@ -2720,7 +2748,9 @@ ipcMain.on('screenshot-panel-send', (_, { instruction = '', compositeDataUrl = n
     try { fs.writeFileSync(p.filepath, Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')); } catch (_) {}
   }
   const instr = (instruction || '').trim();
-  uiSend('pick-send-to-session', `[Screenshot: ${p.filepath}]${instr ? '\n\n' + instr : ''}`);
+  const ssUrl = activePageUrl();
+  const shotRef = (ssUrl ? `From ${pageSource()} — ${ssUrl}\n` : '') + `[Screenshot: ${p.filepath}]`;
+  uiSend('pick-send-to-session', { text: instr ? `${shotRef}\n\n${instr}` : shotRef, body: instr, detail: shotRef, label: 'Screenshot' });
 });
 ipcMain.on('screenshot-panel-cancel', () => {
   const p = pendingScreenshot;
@@ -2786,8 +2816,10 @@ ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions } = {}) =
   require('fs').mkdirSync(dir, { recursive: true });
   const file = require('path').join(dir, 'draw-' + Date.now() + '.png');
   require('fs').writeFileSync(file, buf);
-  const msg  = '[Drawing: ' + file + ']' + (instructions ? '\n\n' + instructions : '');
-  uiSend('pick-send-to-session', msg);
+  const dwUrl = activePageUrl();
+  const drawRef = (dwUrl ? `From ${pageSource()} — ${dwUrl}\n` : '') + '[Drawing: ' + file + ']';
+  const drawInstr = (instructions || '').trim();
+  uiSend('pick-send-to-session', { text: drawInstr ? `${drawRef}\n\n${drawInstr}` : drawRef, body: drawInstr, detail: drawRef, label: 'Drawing' });
 });
 
 // ── IPC: element resize (left-column panel) ───────────────────────
@@ -2856,9 +2888,10 @@ ipcMain.on('resize-panel-send', async (_, { instruction = '' } = {}) => {
   const lines = ['───── Resize Request ─────', snippet, '', 'Selector: ' + selector];
   if (nW !== oW) lines.push('  width:  ' + oW + 'px  →  ' + nW + 'px');
   if (nH !== oH) lines.push('  height: ' + oH + 'px  →  ' + nH + 'px');
-  if (instr) lines.push('', 'Additional instructions: ' + instr);
-  lines.push('', 'Update the CSS so this element matches these dimensions.');
-  uiSend('pick-send-to-session', lines.join('\n'));
+  const rzUrl = activePageUrl();
+  const detail = (rzUrl ? `From ${pageSource()} — ${rzUrl}\n\n` : '') + lines.join('\n');
+  const body = (instr ? instr + '\n\n' : '') + 'Update the CSS so this element matches these dimensions.';
+  uiSend('pick-send-to-session', { text: detail + '\n\n' + body, body, detail, label: 'Resize request' });
 });
 ipcMain.on('resize-panel-cancel', async () => {
   const p = pendingResize;
@@ -2907,26 +2940,18 @@ ipcMain.on('eyedropper-send', async (_, { instruction = '' } = {}) => {
   uiSend('pick-cancelled');
   if (!res) return;
   const { selector, property, fromColor, toColor, changed, pickedColor, instruction: instr } = res;
-  let msg;
+  let body, detail = '';
   if (changed) {
-    const lines = [
-      '───── Color Change Request ─────',
-      'Selector: ' + selector,
-      '  ' + property + ': ' + fromColor + '  →  ' + toColor,
-    ];
-    if (instr) lines.push('', 'Additional instructions: ' + instr);
+    const edUrl = activePageUrl();
+    detail = (edUrl ? `From ${pageSource()} — ${edUrl}\n\n` : '') + ['───── Color Change Request ─────', 'Selector: ' + selector, '  ' + property + ': ' + fromColor + '  →  ' + toColor].join('\n');
     const what = property === 'box-shadow' ? "box-shadow's color" : property;
-    lines.push('', "Update the CSS so this element's " + what + ' is ' + toColor + '.');
-    msg = lines.join('\n');
+    body = (instr ? instr + '\n\n' : '') + "Update the CSS so this element's " + what + ' is ' + toColor + '.';
   } else {
-    const lines = [
-      '───── Color ─────',
-      'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.',
-    ];
-    if (instr) lines.push('', instr);
-    msg = lines.join('\n');
+    const edUrl = activePageUrl();
+    detail = edUrl ? `From ${pageSource()} — ${edUrl}` : '';
+    body = 'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.' + (instr ? '\n\n' + instr : '');
   }
-  uiSend('pick-send-to-session', msg);
+  uiSend('pick-send-to-session', { text: detail ? detail + '\n\n' + body : body, body, detail, label: 'Color' });
 });
 ipcMain.on('eyedropper-cancel', async () => {
   if (pendingEyedropper) await edExec('window.__cathodeEyedropper && window.__cathodeEyedropper.cancel()');
@@ -2986,9 +3011,10 @@ ipcMain.on('a11y-send', async (_, { issues = [], instruction = '' } = {}) => {
       if (it.instruction) lines.push(`    note: ${it.instruction}`);
     }
   }
-  if (instruction.trim()) lines.push('', instruction.trim());
-  lines.push('', 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.');
-  uiSend('pick-send-to-session', lines.join('\n'));
+  const a11yUrl = activePageUrl();
+  const detail = (a11yUrl ? `From ${pageSource()} — ${a11yUrl}\n\n` : '') + lines.join('\n');
+  const body = (instruction.trim() ? instruction.trim() + '\n\n' : '') + 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.';
+  uiSend('pick-send-to-session', { text: detail + '\n\n' + body, body, detail, label: 'Accessibility check' });
 });
 ipcMain.on('a11y-cancel', async () => {
   if (pendingA11y) await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
@@ -3238,7 +3264,7 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
   // current DOM).
   if (extracts.length > 0 || media) {
     const lines = [];
-    lines.push('I used the Extract tool on the live page in the app. Everything below is the actual current DOM/styles/assets of what I selected — use it directly; do not re-open or re-fetch the page.');
+    lines.push(`I used the Extract tool on the live page in ${pageSource()}. Everything below is the actual current DOM/styles/assets of what I selected — use it directly; do not re-open or re-fetch the page.`);
     lines.push('');
     if (pageUrl) lines.push(`Page: ${pageUrl}`);
     if (items.length > 0) {
@@ -3291,6 +3317,7 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
 
   // ── Standard pick mode format ─────────────────────────────────────
   const lines = ['───── Element Context ─────'];
+  lines.push(`These are live elements from ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}.`);
 
   for (const item of items) {
     if (item.debugSource) {
