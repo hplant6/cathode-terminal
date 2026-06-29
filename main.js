@@ -329,7 +329,9 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1a1a1a',
     icon: path.join(__dirname, 'icon.png'),   // window/taskbar icon (dev + packaged)
-    titleBarStyle: 'hidden',   // custom HTML window controls (see #window-controls)
+    titleBarStyle: 'hidden',   // Windows: custom HTML controls (#window-controls); macOS: native traffic lights show through
+    // macOS keeps the native traffic lights with titleBarStyle:'hidden' — inset them into the 46px app-bar.
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 16, y: 18 } } : {}),
     // nodeIntegration required: renderer uses ipcRenderer and node-pty directly
     webPreferences: { nodeIntegration: true, contextIsolation: false },
   });

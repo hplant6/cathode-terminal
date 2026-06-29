@@ -169,6 +169,10 @@ html, body {
   gap: 10px;
   -webkit-app-region: drag;
 }
+/* macOS: native traffic lights sit top-left, so hide the custom controls and inset
+   the app-bar so the lights don't overlap the logo. */
+.is-mac #window-controls { display: none; }
+.is-mac #app-bar { padding-left: 78px; }
 /* Concave fillets (corner0curve.svg) in the armpits where the structural strip meets
    the logo seat & window controls — so there are no hard inner right angles.
    Masked so they fill with the structural token (light-mode ready). */

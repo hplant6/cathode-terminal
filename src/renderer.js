@@ -20,6 +20,9 @@ function attachCanvasRenderer(term) {
 }
 const { trashIcon, eyeIcon } = require('./icons');
 
+// macOS uses native traffic lights instead of the custom window controls — flag for CSS.
+if (process.platform === 'darwin') document.documentElement.classList.add('is-mac');
+
 // HTML-escape for any text interpolated into innerHTML templates (escapes
 // quotes too, so it is safe in attribute values). The ONLY escaping helper —
 // don't add per-module copies.

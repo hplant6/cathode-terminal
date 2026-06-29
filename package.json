@@ -9,6 +9,8 @@
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win --x64",
+    "dist:win": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac --arm64 --x64",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
@@ -48,15 +50,15 @@
       "!**/.git/**/*",
       "!node_modules/monaco-editor/dev/**",
       "!node_modules/monaco-editor/esm/**",
-      "!node_modules/monaco-editor/min-maps/**",
-      "!node_modules/node-pty/prebuilds/darwin-arm64/**",
-      "!node_modules/node-pty/prebuilds/darwin-x64/**",
-      "!node_modules/node-pty/prebuilds/win32-arm64/**"
+      "!node_modules/monaco-editor/min-maps/**"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
     ],
     "win": {
+      "files": [
+        "!node_modules/node-pty/prebuilds/darwin-*/**"
+      ],
       "target": [
         {
           "target": "nsis",
@@ -72,6 +74,29 @@
         }
       ],
       "requestedExecutionLevel": "asInvoker"
+    },
+    "mac": {
+      "files": [
+        "!node_modules/node-pty/prebuilds/win32-*/**"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
