@@ -3434,6 +3434,10 @@ html, body {
   display: none;   /* blank tab → hide the tool rail entirely (was dimmed to 0.38) */
 }
 #toolbar.no-page-tools { display: none; }   /* Code / Console / Changes tabs have no live page → hide the whole rail so the divider grips fill the gap and the corner fillets disappear */
+/* A framed tool-review panel (draw/eyedropper/a11y/extract/resize/component/screenshot)
+   overlays the left column and half-covers the pick-tool toolbar — the tools overflow the
+   divider into the left edge — so hide the toolbar; the divider grips then fill the gap. */
+#app:has(.tool-panel.tp-framed:not([hidden])) #toolbar { display: none; }
 #project-tools {
   display: flex; flex-direction: column; gap: 6px;
 }
@@ -4230,12 +4234,12 @@ button:active { background: var(--btn-active); }
 .kb-plus { font-size: 10px; color: var(--text-dim); padding: 0 1px; }
 
 /* ── Pick-mode cursors ───────────────────────────────────────────── */
-:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 14 4, crosshair  !important; }
+:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 9 9, crosshair  !important; }
 :root[data-pick="lasso"]      { cursor: url('./icons/lasso-cursor.svg') 9 2, crosshair !important; }
 :root[data-pick="screenshot"] { cursor: crosshair !important; }
 :root[data-pick="resize"]     { cursor: url('./icons/resize-cursor.svg') 9 9, move !important; }
 :root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 9 9, crosshair !important; }
-:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 3 3, crosshair !important; }
+:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 9 9, crosshair !important; }
 :root[data-pick="draw"]       { cursor: url('./icons/marker-cursor.svg') 2 16, crosshair !important; }
 
 /* ════════════════════════════════════════════════════════════════

@@ -91,26 +91,32 @@ function getEyedropperScript(snapshotDataUrl) {
     ov.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive: false });
 
     // ── Loupe ─────────────────────────────────────────────────────────
-    // Circular magnifier with the hex value as a separate pill beneath it.
+    // Black rounded container (22px, orange glow) → magnification area (20px)
+    // with a centered crosshair reticle → hex value beneath, all inside the shell.
     var loupe = document.createElement('div');
     loupe.id = '__ed_loupe';
     loupe.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;display:none;'
-      + 'flex-direction:column;align-items:center;gap:7px;';
+      + 'flex-direction:column;align-items:center;gap:9px;padding:11px 11px 8px;background:#000;border-radius:22px;'
+      + 'box-shadow:0 0 18px rgba(255,87,32,.55),0 0 0 1px rgba(255,87,32,.40),0 10px 30px rgba(0,0,0,.7);';
+    var lmag = document.createElement('div');
+    lmag.style.cssText = 'position:relative;width:150px;height:150px;border-radius:20px;overflow:hidden;background:#0a0a0a;';
     var lcanvas = document.createElement('canvas');
-    lcanvas.width = 140; lcanvas.height = 140;   // square buffer → clipped to a circle below
-    lcanvas.style.cssText = 'display:block;width:140px;height:140px;border-radius:50%;background:#0a0a0a;'
-      + 'border:1px solid #333;box-shadow:0 8px 28px rgba(0,0,0,.8);';
-    loupe.appendChild(lcanvas);
-    var lbar = document.createElement('div');
-    lbar.style.cssText = 'display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;'
-      + 'background:#0a0a0a;border:1px solid #333;box-shadow:0 4px 14px rgba(0,0,0,.6);'
-      + "font-family:Consolas,'Courier New',monospace;";
-    var lsw = document.createElement('div');
-    lsw.style.cssText = 'width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.25);flex-shrink:0;';
+    lcanvas.width = 150; lcanvas.height = 150;
+    lcanvas.style.cssText = 'display:block;width:150px;height:150px;';
+    lmag.appendChild(lcanvas);
+    var lcross = document.createElement('div');
+    lcross.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:38px;opacity:.5;pointer-events:none;';
+    lcross.innerHTML = '<svg width="40" height="38" viewBox="0 0 50 48" fill="#fff" xmlns="http://www.w3.org/2000/svg">'
+      + '<path d="M38.6655 23.8288C38.6655 16.1581 32.4476 9.93936 24.7768 9.9392C17.1059 9.9392 10.8872 16.158 10.8872 23.8288C10.8873 31.4996 17.106 37.7175 24.7768 37.7175V38.7175L24.3921 38.7126C16.4742 38.5119 10.0925 32.1305 9.89206 24.2126L9.88718 23.8288C9.88718 15.6057 16.5537 8.9392 24.7768 8.9392L25.1606 8.94408C33.2063 9.1478 39.6655 15.7341 39.6655 23.8288L39.6606 24.2126C39.4569 32.2582 32.8714 38.7174 24.7768 38.7175V37.7175C32.4475 37.7174 38.6653 31.4995 38.6655 23.8288Z"/>'
+      + '<path d="M23.7765 4.37114e-08L24.7765 0V9.88672H23.7765V4.37114e-08Z"/>'
+      + '<path d="M23.7765 38.0011H24.7765V47.8878H23.7765V38.0011Z"/>'
+      + '<path d="M49.5526 22.8286V23.8286L39.6655 23.8288L39.6659 22.8286H49.5526Z"/>'
+      + '<path d="M9.88672 22.8286L9.88718 23.8288L0 23.8286V22.8286H9.88672Z"/></svg>';
+    lmag.appendChild(lcross);
+    loupe.appendChild(lmag);
     var lval = document.createElement('span');
-    lval.style.cssText = 'font-size:12px;color:#eee;letter-spacing:.05em;';
-    lbar.appendChild(lsw); lbar.appendChild(lval);
-    loupe.appendChild(lbar);
+    lval.style.cssText = "font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:700;color:#fff;letter-spacing:.06em;";
+    loupe.appendChild(lval);
     document.body.appendChild(loupe);
     var lctx = lcanvas.getContext('2d');
 
@@ -232,14 +238,11 @@ function getEyedropperScript(snapshotDataUrl) {
       lctx.imageSmoothingEnabled = false;
       lctx.clearRect(0, 0, lcanvas.width, lcanvas.height);
       lctx.drawImage(canvas, s.ix - srcW / 2, s.iy - srcH / 2, srcW, srcH, 0, 0, lcanvas.width, lcanvas.height);
-      var cx0 = Math.floor(lcanvas.width / 2 / zoom) * zoom, cy0 = Math.floor(lcanvas.height / 2 / zoom) * zoom;
-      lctx.strokeStyle = 'rgba(0,0,0,.6)'; lctx.lineWidth = 1; lctx.strokeRect(cx0 - 0.5, cy0 - 0.5, zoom + 1, zoom + 1);
-      lctx.strokeStyle = 'rgba(255,255,255,.95)'; lctx.strokeRect(cx0 + 0.5, cy0 + 0.5, zoom - 1, zoom - 1);
-      lsw.style.background = hex; lval.textContent = hex;
-      var lw = loupe.offsetWidth || 140, lh = loupe.offsetHeight || 150;
-      var lx = cx + 8, ly = cy + 8;
-      if (lx + lw > window.innerWidth - 6) lx = cx - lw - 8;
-      if (ly + lh > window.innerHeight - 6) ly = cy - lh - 8;
+      lval.textContent = hex;   // crosshair reticle is a centered DOM overlay; no canvas marker needed
+      var lw = loupe.offsetWidth || 174, lh = loupe.offsetHeight || 205;
+      var lx = cx + 14, ly = cy - lh - 14;   // default: above the cursor
+      if (lx + lw > window.innerWidth - 6) lx = cx - lw - 14;
+      if (ly < 6) ly = cy + 14;              // near the top edge → flip below the cursor
       loupe.style.left = lx + 'px'; loupe.style.top = ly + 'px'; loupe.style.display = 'flex';
     }
     ov.addEventListener('mousemove', function(e) { if (phase === 'hover') drawLoupe(e.clientX, e.clientY); });
