@@ -2357,6 +2357,8 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },
+    { type: 'separator' },
+    { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
   ]);
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
