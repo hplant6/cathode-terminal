@@ -1872,7 +1872,18 @@ ipcMain.on('single-pane', (_, mode) => {
 ipcMain.on('native-theme', (_, source) => {
   if (source === 'light' || source === 'dark') nativeTheme.themeSource = source;
 });
-ipcMain.on('renderer-ready', () => { repositionBrowserView(); broadcastLayout(); });
+ipcMain.on('renderer-ready', () => {
+  repositionBrowserView();
+  broadcastLayout();
+  // Re-sync the renderer with the restored browser URL. At boot the renderer registers
+  // its browser-url-changed listener only after the initial did-navigate may have already
+  // fired, so without this re-push the restored page stays hidden behind the empty state.
+  try {
+    let u = (browserView && !browserView.webContents.isDestroyed()) ? browserView.webContents.getURL() : '';
+    if (!u || u === 'about:blank') u = loadLastURL();
+    if (u && u !== 'about:blank') mainWindow.webContents.send('browser-url-changed', u);
+  } catch (_) {}
+});
 
 
 // ── MCP catalog ───────────────────────────────────────────────────
