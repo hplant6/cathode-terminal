@@ -106,6 +106,7 @@
   --spec-graph-2:      #FFE16B;   /* graph ramp 2nd colour (usage/sysperf tip) — themeable */
   --graph-line:        color-mix(in srgb, var(--spec-text) 8%, transparent);   /* faint, follows the text colour (light on dark / dark on light) */
   --r-blob:            22px;      /* signature outer rounding */
+  --r-blob-sm:         18px;      /* smaller blob — the bottom-right "3px 3px 18px 3px" corner */
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1590,7 +1591,7 @@ html, body {
   padding: 0 14px;
   background: var(--spec-dropdown-bg);   /* shade 4 */
   border: none;
-  border-radius: 3px 3px 18px 3px;   /* signature bottom-right blob */
+  border-radius: 3px 3px var(--r-blob-sm) 3px;   /* signature bottom-right blob */
   font-size: 10px;
   color: var(--spec-text-dim);
   cursor: pointer;
@@ -1798,7 +1799,7 @@ html, body {
 #btn-figma {
   display: flex; align-items: center; gap: 10px;
   width: auto; height: 34px; padding: 0 18px;   /* spec: 14px 18px */
-  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px 18px 3px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
   color: var(--spec-text-dim); cursor: pointer; font-size: 12px; font-weight: 600;
   transition: background 0.12s;
 }
@@ -1899,7 +1900,7 @@ html, body {
   padding: 0 18px;
   background: var(--spec-dropdown-bg);
   border: none;
-  border-radius: 3px 3px 18px 3px;
+  border-radius: 3px 3px var(--r-blob-sm) 3px;
   font-family: var(--font-title);          /* match AUDIT */
   font-stretch: 112.5%;
   font-size: 10px;
@@ -1962,7 +1963,7 @@ html, body {
 #btn-persona {
   flex-shrink: 0; display: flex; align-items: center; gap: 10px;
   width: auto; height: 34px; max-width: 190px; padding: 0 18px;
-  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px 18px 3px;   /* match #btn-model / #btn-figma */
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;   /* match #btn-model / #btn-figma */
   font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text-dim);
   cursor: pointer; transition: background 0.12s, color 0.12s;
@@ -2234,7 +2235,7 @@ html, body {
   -webkit-appearance: none; appearance: none; flex-shrink: 0; min-width: 130px; height: 30px;
   background-color: var(--spec-dropdown-bg);
   background-image: url('icons/chevron.svg'); background-repeat: no-repeat; background-position: right 10px center; background-size: 10px;
-  border: none; border-radius: 3px 3px 18px 3px; padding: 0 30px 0 12px; color: var(--spec-text-dim);
+  border: none; border-radius: 3px 3px var(--r-blob-sm) 3px; padding: 0 30px 0 12px; color: var(--spec-text-dim);
   font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
   cursor: pointer; outline: none;
 }
@@ -2458,7 +2459,7 @@ html, body {
 .ct-select.pp-filter-ct { flex: 1 1 0; width: auto; min-width: 0; }   /* 50% of the row (override .ct-select width:100%) */
 .pp-filter-ct .ct-select-btn {   /* match the app's dropdown buttons (shade-4, blob corner, Zalando uppercase) */
   width: auto; height: 32px; box-shadow: none;
-  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px 18px 3px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
   padding: 0 12px; gap: 8px; justify-content: space-between;
   font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim);
@@ -2622,7 +2623,7 @@ html, body {
 .pp-field .pp-ct { width: auto; flex: 0 0 auto; min-width: 135px; }
 .pp-field .pp-ct .ct-select-btn {   /* match the app's Model/Figma/Default-View dropdowns */
   width: auto; height: 30px; box-shadow: none; background: var(--spec-dropdown-bg);
-  border: none; border-radius: 3px 3px 18px 3px;
+  border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
   padding: 0 12px; gap: 8px; justify-content: space-between;
   font-family: var(--font-title); font-size: 10px; color: var(--spec-text-dim);
   transition: background 0.12s;
@@ -3224,7 +3225,7 @@ html, body {
   padding: 0 12px;
   background: var(--spec-dropdown-bg);   /* shade 4 */
   border: none;
-  border-radius: 3px 3px 18px 3px;   /* signature blob — matches Model/Figma */
+  border-radius: 3px 3px var(--r-blob-sm) 3px;   /* signature blob — matches Model/Figma */
   color: var(--spec-text-dim);           /* shade 1 */
   font-family: var(--font-title); font-stretch: 112.5%;
   font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
@@ -3648,7 +3649,7 @@ button:active { background: var(--btn-active); }
 .sb-status { margin-top: 8px; text-align: center; font: 12px var(--font-mono); color: var(--text-dim); }
 .sb-status[data-state="starting"] { color: var(--spec-accent); }
 .sb-status[data-state="ready"]    { color: #4ade80; }
-.sb-status[data-state="error"]    { color: #f44747; }
+.sb-status[data-state="error"]    { color: var(--danger); }
 /* "no Storybook yet?" divider + build path + collapsible manual-URL section */
 .sb-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; color: var(--text-dim); font-size: 11px; white-space: nowrap; }
 .sb-divider::before, .sb-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
@@ -3684,7 +3685,7 @@ button:active { background: var(--btn-active); }
 .sb-bar-prefix { flex-shrink: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--spec-text-dim); }   /* shade 1 — labels the switcher */
 .sb-bar-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
 .sb-bar-dot.starting { background: var(--spec-accent); }
-.sb-bar-dot.error    { background: #f44747; }
+.sb-bar-dot.error    { background: var(--danger); }
 .sb-bar-label { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-bar-caret { color: var(--spec-text-dim); flex-shrink: 0; }
 .sb-bar-spacer { flex: 1; }
@@ -3694,7 +3695,7 @@ button:active { background: var(--btn-active); }
   transition: background 0.12s, color 0.12s;
 }
 .sb-bar-btn:hover { background: var(--spec-dropdown-bg); color: var(--spec-text); }   /* pin shade-4 fill (override global button:hover); only the icon goes white */
-.sb-bar-stop:hover { color: #f44747; }
+.sb-bar-stop:hover { color: var(--danger); }
 
 #sb-connected { display: none; flex-direction: column; padding: 20px; gap: 16px; }
 .sb-conn-header {
@@ -4148,7 +4149,7 @@ button:active { background: var(--btn-active); }
   width: 100%; box-sizing: border-box;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   min-height: 32px; padding: 0 12px;
-  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px 18px 3px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
   color: var(--spec-text-dim);
   font-family: var(--font-title); font-stretch: 112.5%; font-weight: 600; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
   text-align: left; cursor: pointer; transition: background 0.12s, color 0.12s;
