@@ -2438,6 +2438,15 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 .pp-new-sel:hover { background: #E64A1C; color: #fff; }
+.pp-new-wrap { margin-left: auto; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.pp-toggle-sel {
+  width: auto; height: auto; min-width: 0; padding: 0; background: none; border: none; box-shadow: none;
+  white-space: nowrap;   /* stay on one line; the subtitle yields the width */
+  font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  transition: color 0.12s;
+}
+.pp-toggle-sel:hover { color: var(--spec-accent); }   /* shade-1 → orange on hover */
 #pick-panel .tp-title { font-size: 16px; }
 #pick-panel .tp-sub { font-size: 11px; text-transform: none; font-weight: 400; letter-spacing: 0.02em; }
 
@@ -3178,7 +3187,7 @@ html, body {
 .tab-close:hover { background: var(--spec-structural); color: var(--spec-text) !important; }
 
 #btn-new-tab { flex-shrink: 0; width: 34px; height: 34px; font-size: 16px; color: var(--spec-text-dim); }   /* 34×34, matches reload — no fill */
-#btn-new-tab:hover { color: var(--spec-text); }
+#btn-new-tab:hover { color: var(--spec-text); background: none; }   /* no fill — overrides the global button:hover background */
 
 #address-bar, #tab-bar #address-bar {
   flex: 1; min-width: 60px; height: 34px;
@@ -4234,12 +4243,12 @@ button:active { background: var(--btn-active); }
 .kb-plus { font-size: 10px; color: var(--text-dim); padding: 0 1px; }
 
 /* ── Pick-mode cursors ───────────────────────────────────────────── */
-:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 9 9, crosshair  !important; }
+:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 24 24, crosshair  !important; }
 :root[data-pick="lasso"]      { cursor: url('./icons/lasso-cursor.svg') 9 2, crosshair !important; }
 :root[data-pick="screenshot"] { cursor: crosshair !important; }
-:root[data-pick="resize"]     { cursor: url('./icons/resize-cursor.svg') 9 9, move !important; }
-:root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 9 9, crosshair !important; }
-:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 9 9, crosshair !important; }
+:root[data-pick="resize"]     { cursor: url('./icons/resize-cursor.svg') 24 24, move !important; }
+:root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 24 24, crosshair !important; }
+:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 24 24, crosshair !important; }
 :root[data-pick="draw"]       { cursor: url('./icons/marker-cursor.svg') 2 16, crosshair !important; }
 
 /* ════════════════════════════════════════════════════════════════

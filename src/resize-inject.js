@@ -4,7 +4,7 @@ const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 const SHARED = require('./inject-shared');
 
 const RESIZE_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'resize-cursor.svg'), 'utf8')).toString('base64');
-const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 9 9, move`;
+const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 24 24, move`;
 
 // Panel mode: the user hovers + clicks an element, then drags the on-page
 // handles to resize it live. Instead of an in-page toolbar, the instructions /

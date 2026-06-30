@@ -3064,7 +3064,7 @@ function equalizeTabWidths() {
 }
 
 const TAB_TYPES = {
-  project:   { label: 'Working File' },
+  project:   { label: 'Browser' },
   code:      { label: 'Code Viewer' },
   diff:      { label: 'Changes' },
   console:   { label: 'Console' },
@@ -3095,6 +3095,9 @@ let tabsConfig = (() => {
           if (ci !== -1) { cfg.splice(ci, 1); changed = true; }
           localStorage.setItem('cathode-code-tab-retired', '1');
         }
+        // Rename the Working File tab → Browser (one-time for saved configs).
+        const _proj = cfg.find(t => t.type === 'project' && t.label === 'Working File');
+        if (_proj) { _proj.label = 'Browser'; changed = true; }
         // Ensure the Changes (diff) tab exists (after Working File) for older configs.
         if (!cfg.find(t => t.type === 'diff')) {
           const at = Math.max(0, cfg.findIndex(t => t.type === 'project')) + 1;
@@ -3842,6 +3845,8 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   const textarea    = document.getElementById('pick-panel-textarea');
   const sendBtn     = document.getElementById('pick-panel-send');
   const cancelBtn   = document.getElementById('pick-panel-cancel-btn');
+  const toggleSelBtn = document.getElementById('pick-panel-toggle-sel');
+  let selVisible = true;   // drives the page-side 20% selection overlay (Hide/Show selection link)
   if (!panel) return;
 
   let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
@@ -4306,6 +4311,8 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     render();
     pushHighlight();         // nothing highlighted until hover/open
     panel.hidden = false;
+    selVisible = true;   // a fresh selection is always shown
+    if (toggleSelBtn) toggleSelBtn.textContent = 'Hide Selection';
     document.getElementById('toolbar')?.classList.add('hidden-by-pick');   // hide the floating tool palette while the menu is open
     setTimeout(() => textarea.focus(), 0);
   }
@@ -4339,6 +4346,11 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   cancelBtn.addEventListener('click', cancel);
   // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
   document.getElementById('pick-panel-new')?.addEventListener('click', () => setPickMode(lastDrawMode));
+  toggleSelBtn?.addEventListener('click', () => {
+    selVisible = !selVisible;
+    toggleSelBtn.textContent = selVisible ? 'Hide Selection' : 'Show Selection';
+    ipcRenderer.send('toggle-page-selection', { visible: selVisible });
+  });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }

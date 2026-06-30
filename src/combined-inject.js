@@ -396,7 +396,14 @@ function cathodeCombinedPage(OPTS) {
     phost.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:' + Z.OVERLAY + ';';
     document.documentElement.appendChild(phost);
     const psel = document.getElementById('__cathode_selection__');
-    if (psel) psel.remove();   // per-element outlines replace the drag rectangle
+    if (psel) {   // keep the drawn selection as a static 40% fill so the user can still see what they selected
+      psel.querySelectorAll('rect,path').forEach(function (s) {
+        s.setAttribute('fill', 'rgba(255,87,32,0.20)');
+        s.setAttribute('stroke', 'none');
+        s.style.animation = 'none';
+        s.style.filter = 'none';
+      });
+    }
 
     function pBox(item) {
       const r = item.el.getBoundingClientRect();
@@ -463,6 +470,7 @@ function cathodeCombinedPage(OPTS) {
       clear() {
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
         const h = document.getElementById('__cathode_panel_hl__'); if (h) h.remove();
+        const s = document.getElementById('__cathode_selection__'); if (s) s.remove();   // drop the 40% selection fill too
         window.__cathodePanel = null;
       },
     };

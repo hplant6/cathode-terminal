@@ -7,13 +7,13 @@ const LASSO_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'las
 const LASSO_CURSOR = `url("data:image/svg+xml;base64,${LASSO_B64}") 9 2, crosshair`;
 
 const BOX_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'box-select-cursor.svg'), 'utf8')).toString('base64');
-const BOX_CURSOR = `url("data:image/svg+xml;base64,${BOX_B64}") 9 9, crosshair`;
+const BOX_CURSOR = `url("data:image/svg+xml;base64,${BOX_B64}") 24 24, crosshair`;
 
 const STORYBOOK_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
-const STORYBOOK_CURSOR = `url("data:image/svg+xml;base64,${STORYBOOK_B64}") 9 9, crosshair`;
+const STORYBOOK_CURSOR = `url("data:image/svg+xml;base64,${STORYBOOK_B64}") 24 24, crosshair`;
 
 const EXTRACT_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'extract-cursor.svg'), 'utf8')).toString('base64');
-const EXTRACT_CURSOR = `url("data:image/svg+xml;base64,${EXTRACT_B64}") 9 9, crosshair`;
+const EXTRACT_CURSOR = `url("data:image/svg+xml;base64,${EXTRACT_B64}") 24 24, crosshair`;
 
 function getPickerScript(mode) {
   const cursorCss = mode === 'lasso' ? LASSO_CURSOR

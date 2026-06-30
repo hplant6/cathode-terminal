@@ -2615,6 +2615,12 @@ ipcMain.on('extract-panel-highlight', async (_, { active } = {}) => {
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
+// Show/hide the persisted box/lasso selection overlay (the panel's "Hide selection" link).
+ipcMain.on('toggle-page-selection', (_, { visible } = {}) => {
+  const view = getActivePickView();
+  if (!view || view.webContents.isDestroyed()) return;
+  view.webContents.executeJavaScript(`(function(){var s=document.getElementById('__cathode_selection__');if(s)s.style.display=${visible ? "''" : "'none'"};})()`).catch(() => {});
+});
 // Per-element extraction: each entry has its own keys/media chosen in its drawer,
 // extracted independently (scoped to that element), then merged into one message.
 ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' } = {}) => {
