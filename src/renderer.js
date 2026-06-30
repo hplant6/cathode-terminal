@@ -89,7 +89,7 @@ const THEME_TOKENS = [
   ['--spec-black',       'Shade 8'],
   ['--spec-accent',      'Accent 1'],
   ['--spec-accent-dark', 'Accent 1 Alt'],
-  ['--spec-accent-3',    'Accent 3'],
+  ['--spec-accent-3',    'Messages'],
   ['--danger',           'Danger'],
   ['--success',          'Success'],
   ['--warning',          'Warning'],
@@ -100,14 +100,54 @@ const THEME_PRESETS = {
   default: {
     '--spec-text':'#BCBCBC','--spec-text-dim':'#817E89','--spec-text-faint':'#46434D','--spec-structural':'#28262F',
     '--spec-dropdown-bg':'#212026','--spec-toolbar-bg':'#19191C','--spec-header-bg':'#111113','--spec-input-bg':'#08090C','--spec-black':'#000000',
-    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#4A9EFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B',
+    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#30201C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B',
   },
-  khaki: {   // reversed: dark tan text on light backgrounds
-    '--spec-text':'#967B59','--spec-text-dim':'#A48C6D','--spec-text-faint':'#B39C81','--spec-structural':'#C1AD95',
-    '--spec-dropdown-bg':'#D0BDA8','--spec-toolbar-bg':'#DECEBC','--spec-header-bg':'#EDDED0','--spec-input-bg':'#FFFFF9','--spec-black':'#2D241A',
-    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#4A9EFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#B3681C',
+  tan: {   // light, warm cream — dark text on light tan backgrounds
+    '--spec-text':'#5C4A38','--spec-text-dim':'#7A6450','--spec-text-faint':'#9A8369','--spec-structural':'#C7B49E',
+    '--spec-dropdown-bg':'#DDCDB8','--spec-toolbar-bg':'#E8DAC8','--spec-header-bg':'#F2E7D8','--spec-input-bg':'#FBF5EC','--spec-black':'#2A211A',
+    '--spec-accent':'#FF5720','--spec-accent-dark':'#B83C10','--spec-accent-3':'#4A3826','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#B3681C',
+  },
+  sky: {   // light, cool blue — dark slate text on light blue backgrounds
+    '--spec-text':'#2C3E50','--spec-text-dim':'#4A6076','--spec-text-faint':'#6E869C','--spec-structural':'#A9BFD4',
+    '--spec-dropdown-bg':'#C7D8E8','--spec-toolbar-bg':'#D6E4F0','--spec-header-bg':'#E6EFF7','--spec-input-bg':'#F5F9FD','--spec-black':'#16202B',
+    '--spec-accent':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#2E7DD6',
+  },
+  green: {   // P1 phosphor — green CRT
+    '--spec-text':'#76F58A','--spec-text-dim':'#4CA85C','--spec-text-faint':'#2C6336','--spec-structural':'#1A3A22',
+    '--spec-dropdown-bg':'#132E19','--spec-toolbar-bg':'#0D2412','--spec-header-bg':'#08180C','--spec-input-bg':'#040E07','--spec-black':'#000000',
+    '--spec-accent':'#3DFB5A','--spec-accent-dark':'#123A1D','--spec-accent-3':'#9CFF7A','--danger':'#FF6B6B','--success':'#5FE85F','--warning':'#C6E84A','--spec-graph-2':'#B6FF7A',
+  },
+  amber: {   // P3 phosphor — amber CRT
+    '--spec-text':'#FFB454','--spec-text-dim':'#C98A3A','--spec-text-faint':'#7A5526','--spec-structural':'#4A3419',
+    '--spec-dropdown-bg':'#3B2914','--spec-toolbar-bg':'#2E200F','--spec-header-bg':'#1F150A','--spec-input-bg':'#120C05','--spec-black':'#000000',
+    '--spec-accent':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-2':'#FFE16B',
+  },
+  bluecrt: {   // blue/white CRT
+    '--spec-text':'#BCD8FF','--spec-text-dim':'#7F9BC9','--spec-text-faint':'#455A7E','--spec-structural':'#28374F',
+    '--spec-dropdown-bg':'#1E2A40','--spec-toolbar-bg':'#161F30','--spec-header-bg':'#0E1422','--spec-input-bg':'#070B14','--spec-black':'#000000',
+    '--spec-accent':'#58A6FF','--spec-accent-dark':'#123459','--spec-accent-3':'#7AD0FF','--danger':'#FF6B6B','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#8CC8FF',
+  },
+  midnight: {   // deep blue
+    '--spec-text':'#C5CDD9','--spec-text-dim':'#8A94A6','--spec-text-faint':'#4E5666','--spec-structural':'#2A3242',
+    '--spec-dropdown-bg':'#222A38','--spec-toolbar-bg':'#1A2230','--spec-header-bg':'#121826','--spec-input-bg':'#0A0F1A','--spec-black':'#04070D',
+    '--spec-accent':'#5B9DFF','--spec-accent-dark':'#14305C','--spec-accent-3':'#7C5CFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B',
+  },
+  nord: {
+    '--spec-text':'#ECEFF4','--spec-text-dim':'#9BA6BA','--spec-text-faint':'#4C566A','--spec-structural':'#3B4252',
+    '--spec-dropdown-bg':'#353B49','--spec-toolbar-bg':'#2E3440','--spec-header-bg':'#272C36','--spec-input-bg':'#1E232B','--spec-black':'#15181E',
+    '--spec-accent':'#88C0D0','--spec-accent-dark':'#2E4A52','--spec-accent-3':'#B48EAD','--danger':'#BF616A','--success':'#A3BE8C','--warning':'#EBCB8B','--spec-graph-2':'#EBCB8B',
+  },
+  dracula: {
+    '--spec-text':'#F8F8F2','--spec-text-dim':'#BDBECC','--spec-text-faint':'#6272A4','--spec-structural':'#44475A',
+    '--spec-dropdown-bg':'#3C3F51','--spec-toolbar-bg':'#343746','--spec-header-bg':'#282A36','--spec-input-bg':'#21222C','--spec-black':'#191A21',
+    '--spec-accent':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD',
   },
 };
+const BUILTIN_THEMES = [
+  ['default','Default'], ['tan','Tan'], ['sky','Sky'],
+  ['green','Green CRT'], ['amber','Amber CRT'], ['bluecrt','Blue CRT'],
+  ['midnight','Midnight'], ['nord','Nord'], ['dracula','Dracula'],
+];
 
 // Modal display layout — three columns. (--spec-accent appears twice: as Accent 1 and Graph 1.)
 const THEME_GROUPS = [
@@ -117,7 +157,7 @@ const THEME_GROUPS = [
     ['--spec-header-bg','Shade 6'],['--spec-input-bg','Shade 7'],['--spec-black','Shade 8'],
   ]},
   { title: 'Accent', col: 'mid', rows: [
-    ['--spec-accent','Accent 1'],['--spec-accent-dark','Accent 2'],['--spec-accent-3','Accent 3'],
+    ['--spec-accent','Accent 1'],['--spec-accent-dark','Accent 2'],['--spec-accent-3','Messages'],
   ]},
   { title: 'Graph', col: 'mid', rows: [
     ['--spec-accent','Graph 1'],['--spec-graph-2','Graph 2'],
@@ -143,10 +183,11 @@ let sharedColorPicker = null;   // the iro picker (assigned by initPickPanel) �
 
 let activeThemeName = localStorage.getItem(LS.theme) || 'default';
 if (activeThemeName === 'custom') activeThemeName = savedThemes.length ? 'saved:0' : 'default';
+if (activeThemeName === 'khaki') activeThemeName = 'tan';   // khaki retired → light Tan theme
 
 // Resolve a theme name → its colour map.
 function themeColors(name) {
-  if (name === 'default' || name === 'khaki') return THEME_PRESETS[name];
+  if (THEME_PRESETS[name]) return THEME_PRESETS[name];
   if (isThemeEditable(name)) return draftColors || THEME_PRESETS.default;
   return THEME_PRESETS.default;
 }
@@ -228,8 +269,7 @@ function renderThemeSidebar() {
     return btn;
   };
   el.appendChild(mkTitle('Cathode Themes'));
-  el.appendChild(mkBtn('default', 'Default'));
-  el.appendChild(mkBtn('khaki', 'Khaki'));
+  BUILTIN_THEMES.forEach(([name, label]) => el.appendChild(mkBtn(name, label)));
   el.appendChild(mkTitle('Custom Themes'));
   el.appendChild(mkBtn('add', 'Add Custom'));
   savedThemes.forEach((t, i) => el.appendChild(mkBtn(`saved:${i}`, t.name)));
@@ -283,8 +323,12 @@ function renderThemeFooter() {
   const footer = document.getElementById('theme-footer');
   if (!footer) return;
   const editable = isThemeEditable(activeThemeName);
-  footer.style.display = editable ? 'flex' : 'none';
-  if (!editable) { footer.innerHTML = ''; return; }
+  footer.style.display = 'flex';
+  if (!editable) {   // preset → button to fork it into a new editable custom theme
+    footer.innerHTML = `<button id="theme-fork" class="modal-btn-confirm">Create theme from this</button>`;
+    footer.querySelector('#theme-fork').addEventListener('click', forkTheme);
+    return;
+  }
   const saved = /^saved:/.test(activeThemeName);
   footer.innerHTML = `<input type="text" id="theme-name-input" class="theme-name-input" placeholder="Name" spellcheck="false"><button id="theme-reset" class="modal-btn-cancel">${saved ? 'Delete' : 'Reset'}</button><button id="theme-save" class="modal-btn-confirm">${saved ? 'Update' : 'Save'}</button>`;
   const nameIn = footer.querySelector('#theme-name-input');
@@ -317,6 +361,14 @@ function saveDraftAsNew() {
   savedThemes.push({ name: (draftName || '').trim() || `Custom ${savedThemes.length + 1}`, colors: { ...draftColors } });
   persistThemes();
   applyTheme(`saved:${savedThemes.length - 1}`);
+}
+// Fork the current (read-only) preset into a new editable custom theme.
+function forkTheme() {
+  const base = { ...themeColors(activeThemeName) };
+  const label = (BUILTIN_THEMES.find(([n]) => n === activeThemeName) || [])[1] || 'Theme';
+  savedThemes.push({ name: `${label} Copy`, colors: base });
+  persistThemes();
+  applyTheme(`saved:${savedThemes.length - 1}`);   // switch to the editable copy (applyTheme seeds draftColors)
 }
 function updateSavedTheme(i) {
   if (!savedThemes[i]) return;

@@ -50,8 +50,8 @@
   --text-on-accent:   #ffffff;                   /* contrast on the accent — left fixed */
 
   /* Accent */
-  --accent:           var(--spec-accent);   /* UI accent is orange now; the theme's blue Accent 3 lives on --spec-accent-3 */
-  --spec-accent-3:    #4a9eff;               /* theme-only blue (shown as "Accent 3" in the theme modal) */
+  --accent:           var(--spec-accent);   /* UI accent is orange */
+  --spec-accent-3:    #30201C;               /* "Messages" — agent chat message bubble bg (themeable) */
   --accent-dim:       color-mix(in srgb, var(--accent) 15%, transparent);
   --accent-border:    color-mix(in srgb, var(--accent) 35%, transparent);
   --accent-hover:     color-mix(in srgb, var(--accent), #fff 28%);
@@ -1323,7 +1323,7 @@ html, body {
 }
 .acp-msg.assistant {
   align-self: flex-start;
-  background: var(--spec-dropdown-bg);   /* shade 4 */
+  background: var(--spec-accent-3);   /* "Messages" token — themeable AI message bubble bg */
   border: none;
   border-radius: 0 var(--r-blob) var(--r-blob) var(--r-blob);
   padding: 14px 18px;
@@ -2786,13 +2786,13 @@ html, body {
   background: var(--spec-accent-dark);                            /* static fill (hover → var(--spec-accent)) */
   border: none;
   border-radius: 0 0 var(--r-blob) 0;            /* only the blob corner */
-  color: var(--spec-text-dim);                  /* shade 1 */
+  color: #FFFFFF;                               /* always white, regardless of theme */
   font-family: var(--font-title); font-stretch: 112.5%;
   font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-#btn-ui-send:hover { background: var(--spec-accent); color: #FFFFFF; }   /* bright orange + white */
+#btn-ui-send:hover { background: var(--spec-accent); }   /* bright orange; text stays white */
 
 /* ── Save prompt button ── */
 #btn-save-prompt {
@@ -4711,7 +4711,7 @@ button:active { background: var(--btn-active); }
 }
 .theme-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .theme-row label { flex: 0 0 62px; font: 11px var(--font-mono); color: var(--spec-text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
-.theme-row .theme-hex { font: 11px var(--font-mono); color: var(--spec-text-faint); }
+.theme-row .theme-hex { font: 11px var(--font-mono); color: var(--spec-text-faint); -webkit-user-select: text; user-select: text; cursor: text; }
 .theme-circle {
   flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; border: none; padding: 0;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);   /* faint ring so dark shades read */
