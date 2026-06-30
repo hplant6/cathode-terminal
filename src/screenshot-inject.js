@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const { MARCH_BORDER_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { iconText } = require('./read-icon');
 
 // Build the camera cursor data URL once at require time
-const cameraSVG = fs.readFileSync(path.join(__dirname, 'icons', 'camera.svg'), 'utf8')
+const cameraSVG = iconText(path.join(__dirname, 'icons', 'camera.svg'))
   .replace(/height="18"/, 'height="24"')
   .replace(/width="18"/, 'width="24"');
 const CURSOR_B64 = Buffer.from(cameraSVG).toString('base64');

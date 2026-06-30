@@ -581,8 +581,8 @@ const svtThumb = document.getElementById('svt-thumb');
 function updateSvtThumb() {
   const active = svtEl.querySelector('.svt-tab.active');
   if (!active) return;
-  svtThumb.style.left  = active.offsetLeft + 'px';
-  svtThumb.style.width = active.offsetWidth + 'px';
+  if (svtThumb) svtThumb.style.left  = active.offsetLeft + 'px';
+  if (svtThumb) svtThumb.style.width = active.offsetWidth + 'px';
 }
 
 function switchAcpView(id, view) {
@@ -598,16 +598,16 @@ function switchAcpView(id, view) {
     }
     refitSession(id, 50);
   }
-  svtEl.querySelectorAll('.svt-tab').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  svtEl?.querySelectorAll('.svt-tab').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   updateSvtThumb();
 }
 
-svtEl.querySelectorAll('.svt-tab').forEach(btn => {
+svtEl?.querySelectorAll('.svt-tab').forEach(btn => {
   btn.addEventListener('click', () => switchAcpView(activeId, btn.dataset.view));
 });
 
 function syncSvt(s) {
-  if (!s) { svtEl.style.display = 'none'; return; }
+  if (!s) { if (svtEl) svtEl.style.display = 'none'; return; }
   svtEl.style.display = '';
   const isAcp = s.type === 'acp';
   svtEl.querySelectorAll('.svt-tab').forEach(b => {
@@ -751,7 +751,7 @@ function usageSegments(pct, n) {
 function usageBarRow(label, pct, sub) {
   pct = Math.max(0, Math.min(100, pct || 0));
   // ~2px segment + 2px gap → one cell every 4px of the available width
-  const w = usageBody.clientWidth || 600;
+  const w = usageBody?.clientWidth || 600;
   const n = Math.max(24, Math.round(w / 4));
   return `
     <div class="usage-row">
@@ -906,10 +906,10 @@ function setUsageView(mini) {
   body.addEventListener('transitionend', onEnd);
   body._usageAnimCleanup = done;
 }
-usageViewFull.addEventListener('click', () => setUsageView(false));
-usageViewMini.addEventListener('click', () => setUsageView(true));
-usageViewFull.classList.toggle('active', !usageMini);
-usageViewMini.classList.toggle('active', usageMini);
+usageViewFull?.addEventListener('click', () => setUsageView(false));
+usageViewMini?.addEventListener('click', () => setUsageView(true));
+usageViewFull?.classList.toggle('active', !usageMini);
+usageViewMini?.classList.toggle('active', usageMini);
 
 // Open/close the usage panel with a height grow-in / shrink-out animation.
 function setUsageOpen(open) {
@@ -927,7 +927,7 @@ function setUsageOpen(open) {
   growPanel(el, open);   // shared height grow/shrink (defined below)
 }
 
-btnUsage.addEventListener('click', () => setUsageOpen(!usageOpen));
+btnUsage?.addEventListener('click', () => setUsageOpen(!usageOpen));
 
 // ── Agent persona (composer) ──────────────────────────────────────
 // A per-message "lens": the chosen persona's preamble is prepended to the
@@ -946,7 +946,7 @@ const btnPersona   = document.getElementById('btn-persona');
 const personaLabel = document.getElementById('btn-persona-label');
 const personaMenu  = document.getElementById('persona-menu');
 function renderPersonaMenu() {
-  personaMenu.innerHTML = '';
+  if (personaMenu) personaMenu.innerHTML = '';
   const mkItem = (key, label, desc) => {
     const item = document.createElement('div');
     item.className = 'persona-item' + (activePersona === key ? ' selected' : '');
@@ -969,7 +969,7 @@ function selectPersona(key) {
   btnPersona.classList.toggle('has-persona', !!activePersona);
   renderPersonaMenu();
 }
-btnPersona.addEventListener('click', (e) => {
+btnPersona?.addEventListener('click', (e) => {
   e.stopPropagation();
   const open = personaMenu.classList.toggle('open');
   btnPersona.classList.toggle('open', open);
@@ -1441,7 +1441,7 @@ ipcRenderer.on('pty-output', (_, { id, data }) => {
 });
 
 
-document.getElementById('btn-restart').addEventListener('click', () => {
+document.getElementById('btn-restart')?.addEventListener('click', () => {
   const s = sessions.get(activeId);
   if (!s || s.type === 'acp') return;
   s.term.clear();
@@ -1578,7 +1578,7 @@ function renderProfileMenu() {
   profileMenu.appendChild(manage);
 }
 
-btnNewPty.addEventListener('click', () => {
+btnNewPty?.addEventListener('click', () => {
   renderProfileMenu();
   profileMenu.classList.toggle('open');
 });
@@ -1753,9 +1753,9 @@ function renderInstallModels() {
   });
 }
 
-document.getElementById('profiles-add').addEventListener('click', () => addProfileCard('', '', true));
+document.getElementById('profiles-add')?.addEventListener('click', () => addProfileCard('', '', true));
 
-document.getElementById('profiles-save').addEventListener('click', () => {
+document.getElementById('profiles-save')?.addEventListener('click', () => {
   const cards = profilesList.querySelectorAll('.ap-card');
   const updated = [];
   cards.forEach((card, i) => {
@@ -1779,9 +1779,9 @@ document.getElementById('profiles-save').addEventListener('click', () => {
 
 document.getElementById('btn-manage-profiles')?.addEventListener('click', () => openProfilesModal());
 
-document.getElementById('profiles-cancel').addEventListener('click', () => profilesModalCtl.close());
-document.getElementById('profiles-close').addEventListener('click', () => profilesModalCtl.close());
-document.getElementById('profiles-install-done').addEventListener('click', () => profilesModalCtl.close());
+document.getElementById('profiles-cancel')?.addEventListener('click', () => profilesModalCtl.close());
+document.getElementById('profiles-close')?.addEventListener('click', () => profilesModalCtl.close());
+document.getElementById('profiles-install-done')?.addEventListener('click', () => profilesModalCtl.close());
 
 document.querySelectorAll('.profiles-tab').forEach(btn => {
   btn.addEventListener('click', () => switchProfilesTab(btn.dataset.tab));
@@ -2719,7 +2719,7 @@ const gearBtn      = document.getElementById('btn-settings');
 const apiKeyModal  = document.getElementById('api-key-modal');
 const apiKeyInput  = document.getElementById('api-key-input');
 
-gearBtn.addEventListener('click', e => {
+gearBtn?.addEventListener('click', e => {
   e.stopPropagation();
   const rect = gearBtn.getBoundingClientRect();
   ipcRenderer.send('show-settings-menu', { x: Math.round(rect.left), y: Math.round(rect.bottom) });
@@ -2756,9 +2756,9 @@ ipcRenderer.on('settings-action', (_, action) => {
 const apiKeyModalCtl = wireModal(apiKeyModal);
 const closeApiKeyModal = apiKeyModalCtl.close;
 
-document.getElementById('api-key-cancel').addEventListener('click', closeApiKeyModal);
+document.getElementById('api-key-cancel')?.addEventListener('click', closeApiKeyModal);
 
-document.getElementById('api-key-confirm').addEventListener('click', () => {
+document.getElementById('api-key-confirm')?.addEventListener('click', () => {
   const key = apiKeyInput.value.trim();
   if (key) {
     secureSet(LS.apiKey, key);
@@ -2767,7 +2767,7 @@ document.getElementById('api-key-confirm').addEventListener('click', () => {
   closeApiKeyModal();
 });
 
-apiKeyInput.addEventListener('keydown', e => {
+apiKeyInput?.addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('api-key-confirm').click();
   if (e.key === 'Escape') closeApiKeyModal();
 });
@@ -2894,7 +2894,7 @@ async function openAuthModal() {
   authModalCtl.open();
 }
 
-document.getElementById('api-key-new-open').addEventListener('click', () => {
+document.getElementById('api-key-new-open')?.addEventListener('click', () => {
   const open = apiKeyNewForm.style.display === 'none';
   apiKeyNewForm.style.display = open ? '' : 'none';
   if (open) {
@@ -2917,17 +2917,17 @@ function commitNewApiKey() {
   renderApiKeysList();
 }
 
-document.getElementById('api-key-new-save').addEventListener('click', commitNewApiKey);
-document.getElementById('api-key-new-cancel').addEventListener('click', () => { apiKeyNewForm.style.display = 'none'; });
-document.getElementById('api-key-new-name').addEventListener('keydown', e => {
+document.getElementById('api-key-new-save')?.addEventListener('click', commitNewApiKey);
+document.getElementById('api-key-new-cancel')?.addEventListener('click', () => { apiKeyNewForm.style.display = 'none'; });
+document.getElementById('api-key-new-name')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('api-key-new-value').focus();
 });
-document.getElementById('api-key-new-value').addEventListener('keydown', e => {
+document.getElementById('api-key-new-value')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') commitNewApiKey();
   if (e.key === 'Escape') { apiKeyNewForm.style.display = 'none'; }
 });
-document.getElementById('auth-done').addEventListener('click', () => authModalCtl.close());
-document.getElementById('auth-close').addEventListener('click', () => authModalCtl.close());
+document.getElementById('auth-done')?.addEventListener('click', () => authModalCtl.close());
+document.getElementById('auth-close')?.addEventListener('click', () => authModalCtl.close());
 
 // ── CLAUDE.md editor modal ────────────────────────────────────────
 const claudeMdModal    = document.getElementById('claude-md-modal');
@@ -2959,8 +2959,8 @@ async function openMemoryModal(agent = 'claude') {
 // Back-compat shim (settings menu still calls this for Claude).
 const openClaudeMdModal = () => openMemoryModal('claude');
 
-document.getElementById('claude-md-cancel').addEventListener('click', () => claudeMdModalCtl.close());
-document.getElementById('claude-md-save').addEventListener('click', async () => {
+document.getElementById('claude-md-cancel')?.addEventListener('click', () => claudeMdModalCtl.close());
+document.getElementById('claude-md-save')?.addEventListener('click', async () => {
   const btn = document.getElementById('claude-md-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
@@ -3328,7 +3328,7 @@ document.addEventListener('scroll', scheduleDodge, true);     // any scroll cont
 setInterval(scheduleDodge, 400);                              // catch-all for content-driven layout shifts
 scheduleDodge();
 
-document.getElementById('right-panel-tabs').addEventListener('contextmenu', e => {
+document.getElementById('right-panel-tabs')?.addEventListener('contextmenu', e => {
   e.preventDefault();
   ipcRenderer.send('show-tabs-context-menu', { x: e.clientX, y: e.clientY });
 });
@@ -3413,7 +3413,7 @@ function renderRecentList() {
     wfRecentList.appendChild(btn);
   });
 }
-document.getElementById('wf-browse').addEventListener('click', async () => {
+document.getElementById('wf-browse')?.addEventListener('click', async () => {
   const dir = await ipcRenderer.invoke('show-folder-dialog');
   if (dir) startDevServer(dir);
 });
@@ -3450,9 +3450,9 @@ function wfCloneGo() {
   sendToAgent(`Clone the repository at ${repo} into my project folder, install its dependencies, and start its dev server on a free, open localhost port. When it's running, reply with the exact http://localhost:<port> URL so I can open it here in the Working File.`);
   wfRepo.value = '';
 }
-document.getElementById('wf-prompt-go').addEventListener('click', wfPromptGo);
-document.getElementById('wf-figma-go').addEventListener('click', wfFigmaGo);
-document.getElementById('wf-clone-go').addEventListener('click', wfCloneGo);
+document.getElementById('wf-prompt-go')?.addEventListener('click', wfPromptGo);
+document.getElementById('wf-figma-go')?.addEventListener('click', wfFigmaGo);
+document.getElementById('wf-clone-go')?.addEventListener('click', wfCloneGo);
 wfPromptIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfPromptGo(); } });
 wfFigmaIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfFigmaGo(); } });
 wfRepo.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfCloneGo(); } });
@@ -3512,14 +3512,14 @@ function renderTabs() {
 }
 
 createTab('');
-document.getElementById('btn-new-tab').addEventListener('click', () => createTab(''));
+document.getElementById('btn-new-tab')?.addEventListener('click', () => createTab(''));
 
-addressBar.addEventListener('keydown', e => {
+addressBar?.addEventListener('keydown', e => {
   if (e.key === 'Enter')  { ipcRenderer.send('browser-navigate', addressBar.value); addressBar.blur(); }
   if (e.key === 'Escape') addressBar.blur();
 });
-addressBar.addEventListener('focus', () => addressBar.select());
-document.getElementById('btn-reload').addEventListener('click', () => ipcRenderer.send('browser-reload'));
+addressBar?.addEventListener('focus', () => addressBar.select());
+document.getElementById('btn-reload')?.addEventListener('click', () => ipcRenderer.send('browser-reload'));
 
 // ── Device emulation dropdown ─────────────────────────────────────
 let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
@@ -3761,9 +3761,9 @@ ipcRenderer.on('tab-title-updated', (_, title) => {
 });
 
 const devToolsBtn = document.getElementById('btn-devtools');
-devToolsBtn.addEventListener('click', () => ipcRenderer.send('browser-toggle-devtools'));
-ipcRenderer.on('devtools-opened', () => devToolsBtn.classList.add('active'));
-ipcRenderer.on('devtools-closed', () => devToolsBtn.classList.remove('active'));
+devToolsBtn?.addEventListener('click', () => ipcRenderer.send('browser-toggle-devtools'));
+ipcRenderer.on('devtools-opened', () => devToolsBtn?.classList.add('active'));
+ipcRenderer.on('devtools-closed', () => devToolsBtn?.classList.remove('active'));
 
 // ── Pick mode ─────────────────────────────────────────────────────
 let pickMode = null;
@@ -3784,28 +3784,28 @@ function setPickMode(mode) {
   if (mode === 'box' || mode === 'lasso') lastDrawMode = mode;
   applyPickCursor(mode);
   document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`btn-pick-${mode}`).classList.add('active');
+  document.getElementById(`btn-pick-${mode}`)?.classList.add('active');
   ipcRenderer.send('pick-start', mode);
 }
 
-document.getElementById('btn-pick-box').addEventListener('click',   () => setPickMode('box'));
-document.getElementById('btn-pick-lasso').addEventListener('click', () => setPickMode('lasso'));
-document.getElementById('btn-pick-aidev').addEventListener('click', () => setPickMode('aidev'));
+document.getElementById('btn-pick-box')?.addEventListener('click',   () => setPickMode('box'));
+document.getElementById('btn-pick-lasso')?.addEventListener('click', () => setPickMode('lasso'));
+document.getElementById('btn-pick-aidev')?.addEventListener('click', () => setPickMode('aidev'));
 document.getElementById('extract-panel-new')?.addEventListener('click', () => setPickMode('aidev'));
-document.getElementById('btn-screenshot').addEventListener('click', () => {
+document.getElementById('btn-screenshot')?.addEventListener('click', () => {
   if (pickMode === 'screenshot') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'screenshot';
   applyPickCursor('screenshot');
-  document.getElementById('btn-screenshot').classList.add('active');
+  document.getElementById('btn-screenshot')?.classList.add('active');
   ipcRenderer.send('pick-screenshot');
 });
-document.getElementById('btn-pick-resize').addEventListener('click', () => {
+document.getElementById('btn-pick-resize')?.addEventListener('click', () => {
   if (pickMode === 'resize') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'resize';
   applyPickCursor('resize');
-  document.getElementById('btn-pick-resize').classList.add('active');
+  document.getElementById('btn-pick-resize')?.classList.add('active');
   ipcRenderer.send('pick-resize');
 });
 // Resize panel's "New Selection" → re-arm the resize tool to pick a new element.
@@ -3816,30 +3816,30 @@ document.getElementById('resize-panel-new')?.addEventListener('click', () => {
   ipcRenderer.send('pick-resize');
 });
 
-document.getElementById('btn-draw').addEventListener('click', () => {
+document.getElementById('btn-draw')?.addEventListener('click', () => {
   if (pickMode === 'draw') { clearPickMode(); ipcRenderer.send('draw-cancel'); return; }
   clearPickMode();
   pickMode = 'draw';
   applyPickCursor('draw');
-  document.getElementById('btn-draw').classList.add('active');
+  document.getElementById('btn-draw')?.classList.add('active');
   ipcRenderer.send('pick-draw');
 });
 
-document.getElementById('btn-pick-eyedropper').addEventListener('click', () => {
+document.getElementById('btn-pick-eyedropper')?.addEventListener('click', () => {
   if (pickMode === 'eyedropper') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'eyedropper';
   applyPickCursor('eyedropper');
-  document.getElementById('btn-pick-eyedropper').classList.add('active');
+  document.getElementById('btn-pick-eyedropper')?.classList.add('active');
   ipcRenderer.send('pick-eyedropper');
 });
 
-document.getElementById('btn-pick-a11y').addEventListener('click', () => {
+document.getElementById('btn-pick-a11y')?.addEventListener('click', () => {
   if (pickMode === 'a11y') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'a11y';
   applyPickCursor('a11y');
-  document.getElementById('btn-pick-a11y').classList.add('active');
+  document.getElementById('btn-pick-a11y')?.classList.add('active');
   ipcRenderer.send('pick-a11y');
 });
 
@@ -6517,17 +6517,17 @@ function sendUiMessage() {
   updateSaveBtn();
 }
 
-document.getElementById('btn-ui-send').addEventListener('click', sendUiMessage);
+document.getElementById('btn-ui-send')?.addEventListener('click', sendUiMessage);
 
 // Code block wrap
 // File attach — opens native file dialog, adds the paths as chips
-document.getElementById('btn-ui-attach').addEventListener('click', async () => {
+document.getElementById('btn-ui-attach')?.addEventListener('click', async () => {
   const paths = await ipcRenderer.invoke('show-file-dialog');
   if (paths && paths.length) addAttachChips(paths, 'file');
 });
 
 // Folder attach — opens native folder dialog, adds the path as a chip
-document.getElementById('btn-ui-attach-folder').addEventListener('click', async () => {
+document.getElementById('btn-ui-attach-folder')?.addEventListener('click', async () => {
   const dir = await ipcRenderer.invoke('show-folder-dialog');
   if (dir) addAttachChips([dir], 'folder');
 });
@@ -6636,7 +6636,7 @@ function sbNotifyMain() {
 
 // Init — re-adopt the remembered Storybook only if it's actually still running.
 ipcRenderer.send('set-project-dir', { dir: (sbConfig && sbConfig.projectDir) || '' });
-if (sbConfig && sbConfig.projectDir) document.getElementById('sb-folder').value = sbConfig.projectDir;
+if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-folder'); if (sf) sf.value = sbConfig.projectDir; }
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)
     const { instances, activeId } = await ipcRenderer.invoke('storybook-list');
@@ -6653,12 +6653,12 @@ if (sbConfig && sbConfig.projectDir) document.getElementById('sb-folder').value 
   renderSbSetup();
 })();
 
-document.getElementById('sb-folder-pick').addEventListener('click', async () => {
+document.getElementById('sb-folder-pick')?.addEventListener('click', async () => {
   const dir = await ipcRenderer.invoke('show-folder-dialog');
   if (dir) { document.getElementById('sb-folder').value = dir; detectStorybook(); }
 });
 
-document.getElementById('sb-connect').addEventListener('click', async () => {
+document.getElementById('sb-connect')?.addEventListener('click', async () => {
   const url  = document.getElementById('sb-url').value.trim();
   const auto = document.getElementById('sb-auto').checked;
   const dir  = document.getElementById('sb-folder').value.trim();
@@ -6679,7 +6679,7 @@ document.getElementById('sb-connect').addEventListener('click', async () => {
   updateComponentPickerBtn?.();
 });
 
-document.getElementById('sb-disconnect').addEventListener('click', async () => {
+document.getElementById('sb-disconnect')?.addEventListener('click', async () => {
   if (sbConfig?.managed) ipcRenderer.invoke('storybook-server-stop');   // kill the managed dev server
   await ipcRenderer.invoke('storybook-clear-memory');   // remove the managed block first
   sbConfig = null;
@@ -6692,14 +6692,14 @@ document.getElementById('sb-disconnect').addEventListener('click', async () => {
   updateComponentPickerBtn?.();
 });
 
-document.getElementById('sb-auto-conn').addEventListener('change', e => {
+document.getElementById('sb-auto-conn')?.addEventListener('change', e => {
   if (!sbConfig) return;
   sbConfig.autoInject = e.target.checked;
   localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
   document.getElementById('sb-preview').style.display = e.target.checked ? '' : 'none';
 });
 
-document.getElementById('sb-url').addEventListener('keydown', e => {
+document.getElementById('sb-url')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sb-connect').click(); }
   e.stopPropagation();
 });

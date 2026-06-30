@@ -24,8 +24,9 @@ const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
 const http = require('http');
+const { iconB64 } = require('./src/read-icon');
 
-const STORYBOOK_CURSOR_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'src', 'icons', 'storybook-cursor.svg'), 'utf8')).toString('base64');
+const STORYBOOK_CURSOR_B64 = iconB64(path.join(__dirname, 'src', 'icons', 'storybook-cursor.svg'));
 const STORYBOOK_CURSOR_CSS = `url("data:image/svg+xml;base64,${STORYBOOK_CURSOR_B64}") 9 9, crosshair`;
 const { execFile, spawn } = require('child_process');
 // Platform abstraction layer: all WSL/cmd.exe/PowerShell/registry branching is

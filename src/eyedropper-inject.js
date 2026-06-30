@@ -10,10 +10,9 @@
 const fs   = require('fs');
 const path = require('path');
 const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { iconB64 } = require('./read-icon');
 
-const ED_CURSOR_B64 = Buffer.from(
-  fs.readFileSync(path.join(__dirname, 'icons', 'eyedropper-cursor.svg'), 'utf8')
-).toString('base64');
+const ED_CURSOR_B64 = iconB64(path.join(__dirname, 'icons', 'eyedropper-cursor.svg'));
 // Hotspot at the dropper tip (bottom-left), for a 22px-tall cursor.
 const ED_CURSOR = `url("data:image/svg+xml;base64,${ED_CURSOR_B64}") 2 20, crosshair`;
 

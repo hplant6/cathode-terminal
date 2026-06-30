@@ -2,8 +2,9 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { iconB64 } = require('./read-icon');
 
-const MARKER_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'marker-cursor.svg'), 'utf8')).toString('base64');
+const MARKER_B64 = iconB64(path.join(__dirname, 'icons', 'marker-cursor.svg'));
 const MARKER_CURSOR = `url("data:image/svg+xml;base64,${MARKER_B64}") 2 16, crosshair`;
 
 // Sets up a persistent marker layer (canvas + draw overlay) and exposes

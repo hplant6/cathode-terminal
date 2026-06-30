@@ -2,8 +2,9 @@ const fs     = require('fs');
 const path   = require('path');
 const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 const SHARED = require('./inject-shared');
+const { iconB64 } = require('./read-icon');
 
-const RESIZE_B64 = Buffer.from(fs.readFileSync(path.join(__dirname, 'icons', 'resize-cursor.svg'), 'utf8')).toString('base64');
+const RESIZE_B64 = iconB64(path.join(__dirname, 'icons', 'resize-cursor.svg'));
 const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 24 24, move`;
 
 // Panel mode: the user hovers + clicks an element, then drags the on-page
