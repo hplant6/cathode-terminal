@@ -1,4 +1,5 @@
 const { ipcRenderer } = require('electron');
+const { IPC } = require('./ipc-channels');
 const { TOOLS: PAGE_TOOLS, accelOf } = require('./tools');
 const { Terminal }    = require('@xterm/xterm');
 const { FitAddon }    = require('@xterm/addon-fit');
@@ -208,7 +209,7 @@ function syncNativeMenuTheme(bgHex) {
     const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
     source = lum > 0.5 ? 'light' : 'dark';
   }
-  ipcRenderer.send('native-theme', source);
+  ipcRenderer.send(IPC.NATIVE_THEME, source);
 }
 
 // Graph (usage / sysperf) LED ramp — themeable: dark accent → accent. Both
@@ -465,15 +466,15 @@ function createSession(name, command, acp) {
   term.loadAddon(fitAddon);
   term.open(termEl);
   attachCanvasRenderer(term);
-  term.onData(data => ipcRenderer.send('pty-input', { id, data }));
+  term.onData(data => ipcRenderer.send(IPC.PTY_INPUT, { id, data }));
 
   const ro = new ResizeObserver(() => {
     fitAddon.fit();
-    ipcRenderer.send('pty-resize', { id, cols: term.cols, rows: term.rows });
+    ipcRenderer.send(IPC.PTY_RESIZE, { id, cols: term.cols, rows: term.rows });
   });
   ro.observe(termEl);
 
-  ipcRenderer.send('pty-spawn', { id, command: cmd });
+  ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
   sessions.set(id, {
     name: sName, command: cmd, term, fitAddon, el, termEl, ro,
   });
@@ -507,12 +508,12 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   acpTerm.loadAddon(acpFit);
   acpTerm.open(termEl);
   attachCanvasRenderer(acpTerm);
-  acpTerm.onData(data => ipcRenderer.send('pty-input', { id, data }));
+  acpTerm.onData(data => ipcRenderer.send(IPC.PTY_INPUT, { id, data }));
 
   const acpRo = new ResizeObserver(() => {
     if (termEl.style.display !== 'none') {
       acpFit.fit();
-      ipcRenderer.send('pty-resize', { id, cols: acpTerm.cols, rows: acpTerm.rows });
+      ipcRenderer.send(IPC.PTY_RESIZE, { id, cols: acpTerm.cols, rows: acpTerm.rows });
     }
   });
   acpRo.observe(termEl);
@@ -547,7 +548,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
     toolCards: new Map(),
     streamEl: null, streamTextEl: null, streamMsgId: null,
   });
-  ipcRenderer.send('acp-spawn', { id, agent });
+  ipcRenderer.send(IPC.ACP_SPAWN, { id, agent });
   switchSession(id);
 }
 
@@ -561,14 +562,14 @@ function closeSession(id) {
     switchSession(ids[idx + 1] ?? ids[idx - 1]);
   }
   if (s.type === 'acp') {
-    ipcRenderer.send('acp-kill', { id });
-    if (s._ptySpawned) ipcRenderer.send('pty-kill', { id });
+    ipcRenderer.send(IPC.ACP_KILL, { id });
+    if (s._ptySpawned) ipcRenderer.send(IPC.PTY_KILL, { id });
     s.ro.disconnect();
     s.term.dispose();
   } else {
     s.ro.disconnect();
     s.term.dispose();
-    ipcRenderer.send('pty-kill', { id });
+    ipcRenderer.send(IPC.PTY_KILL, { id });
   }
   s.el.remove();
   sessions.delete(id);
@@ -594,7 +595,7 @@ function switchAcpView(id, view) {
   if (view === 'term') {
     if (!s._ptySpawned) {
       s._ptySpawned = true;
-      ipcRenderer.send('pty-spawn', { id, command: s.command || 'claude' });
+      ipcRenderer.send(IPC.PTY_SPAWN, { id, command: s.command || 'claude' });
     }
     refitSession(id, 50);
   }
@@ -669,11 +670,11 @@ function selectModel(modelId) {
     // The toast is dismissed in the acp-ready handler once it reconnects.
     acpSetStatus(s, 'connecting');
     s.statusTextEl.textContent = 'Switching model…';
-    ipcRenderer.send('acp-kill', { id: activeId });
-    ipcRenderer.send('acp-spawn', { id: activeId, model: modelId, agent: s.agent });
+    ipcRenderer.send(IPC.ACP_KILL, { id: activeId });
+    ipcRenderer.send(IPC.ACP_SPAWN, { id: activeId, model: modelId, agent: s.agent });
   } else {
     s.term.clear();
-    ipcRenderer.send('pty-restart', { id: activeId, command: commandWithModel(s.command, key, modelId) });
+    ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: commandWithModel(s.command, key, modelId) });
     // PTY has no clean "ready" signal — confirm shortly after relaunch.
     setTimeout(() => finishModelSwitch(s), PTY_MODEL_SWITCH_SETTLE_MS);
   }
@@ -863,8 +864,8 @@ async function refreshUsage() {
   const isClaude = !!(s && s.type === 'acp');
   try {
     const [ctx, lim] = await Promise.all([
-      isClaude ? ipcRenderer.invoke('get-usage', { cwd: s.cwd || '' }) : Promise.resolve(null),
-      ipcRenderer.invoke('get-rate-limits'),
+      isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '' }) : Promise.resolve(null),
+      ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
     ]);
     _lastUsage = { ctx, lim, isClaude };
     renderUsage(_lastUsage);
@@ -1171,7 +1172,7 @@ function hideFigmaTip() {
 const FIGMA_URL_RE = /https?:\/\/(?:www\.)?figma\.com\/[^\s]+/i;
 async function getClipboardFigmaUrl() {
   try {
-    const text = await ipcRenderer.invoke('clipboard-read');
+    const text = await ipcRenderer.invoke(IPC.CLIPBOARD_READ);
     const m = (text || '').match(FIGMA_URL_RE);
     return m ? m[0] : '';
   } catch (_) { return ''; }
@@ -1340,7 +1341,7 @@ document.addEventListener('click', (e) => {
 
 async function refreshFigmaTool() {
   try {
-    const { connected } = await ipcRenderer.invoke('mcp-has-server', { name: 'figma' });
+    const { connected } = await ipcRenderer.invoke(IPC.MCP_HAS_SERVER, { name: 'figma' });
     figmaWrap.style.display = connected ? '' : 'none';
     if (!connected) clearFigmaChips();
   } catch (_) { figmaWrap.style.display = 'none'; }
@@ -1356,7 +1357,7 @@ function refitSession(id, delay = 0) {
   if (s.type === 'acp' && s.viewMode !== 'term') return;
   setTimeout(() => {
     s.fitAddon.fit();
-    ipcRenderer.send('pty-resize', { id, cols: s.term.cols, rows: s.term.rows });
+    ipcRenderer.send(IPC.PTY_RESIZE, { id, cols: s.term.cols, rows: s.term.rows });
   }, delay);
 }
 
@@ -1369,7 +1370,7 @@ function switchSession(id) {
   const s = sessions.get(id);
   if (!s) return;
   s.el.classList.add('active');
-  ipcRenderer.send('set-active-pty', { id });
+  ipcRenderer.send(IPC.SET_ACTIVE_PTY, { id });
   refitSession(id);
   syncSvt(s);
   ensureSessionModel();
@@ -1435,7 +1436,7 @@ function startRename(nameEl, id) {
   });
 }
 
-ipcRenderer.on('pty-output', (_, { id, data }) => {
+ipcRenderer.on(IPC.PTY_OUTPUT, (_, { id, data }) => {
   const s = sessions.get(id);
   if (s) s.term.write(data);
 });
@@ -1445,7 +1446,7 @@ document.getElementById('btn-restart')?.addEventListener('click', () => {
   const s = sessions.get(activeId);
   if (!s || s.type === 'acp') return;
   s.term.clear();
-  ipcRenderer.send('pty-restart', { id: activeId, command: s.command });
+  ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
 });
 
 // ── Session Profiles ─────────────────────────────────────────────
@@ -1680,7 +1681,7 @@ function renderInstallModels() {
     const btn        = card.querySelector('.im-btn');
     const progressEl = card.querySelector('.im-progress');
 
-    ipcRenderer.invoke('check-model', { command: model.command }).then(installed => {
+    ipcRenderer.invoke(IPC.CHECK_MODEL, { command: model.command }).then(installed => {
       badge.textContent = installed ? 'Installed' : 'Not installed';
       badge.className   = `im-badge ${installed ? 'installed' : 'not-installed'}`;
       if (alreadyAdded) return;
@@ -1741,12 +1742,12 @@ function renderInstallModels() {
             _installListeners.delete(installId);
           }
 
-          ipcRenderer.on('profile-install-progress', onProgress);
-          ipcRenderer.on('profile-install-done',     onDone);
-          ipcRenderer.on('profile-install-error',    onError);
+          ipcRenderer.on(IPC.PROFILE_INSTALL_PROGRESS, onProgress);
+          ipcRenderer.on(IPC.PROFILE_INSTALL_DONE,     onDone);
+          ipcRenderer.on(IPC.PROFILE_INSTALL_ERROR,    onError);
           _installListeners.set(installId, cleanup);
 
-          ipcRenderer.send('profile-install', { installId, command: model.install });
+          ipcRenderer.send(IPC.PROFILE_INSTALL, { installId, command: model.install });
         });
       }
     });
@@ -1798,7 +1799,7 @@ document.querySelectorAll('.profiles-tab').forEach(btn => {
     const open = !!document.querySelector('.modal-backdrop.open');
     if (open === last) return;          // only signal on actual change
     last = open;
-    ipcRenderer.send('modal-overlay', { open });
+    ipcRenderer.send(IPC.MODAL_OVERLAY, { open });
   }
   // Observe ONLY the modal backdrops' class attributes — the previous
   // whole-document subtree observer ran this callback for every DOM mutation
@@ -2455,7 +2456,7 @@ function handleAcpUpdate(s, update) {
 }
 
 // ── ACP IPC listeners ─────────────────────────────────────────────
-ipcRenderer.on('acp-installing', (_, { id }) => {
+ipcRenderer.on(IPC.ACP_INSTALLING, (_, { id }) => {
   const s = acpSession(id);
   if (!s) return;
   acpSetStatus(s, 'installing');
@@ -2471,14 +2472,14 @@ ipcRenderer.on('acp-installing', (_, { id }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on('acp-install-progress', (_, { id, text }) => {
+ipcRenderer.on(IPC.ACP_INSTALL_PROGRESS, (_, { id, text }) => {
   const s = sessions.get(id);
   if (!s || s.type !== 'acp' || !s._installEl) return;
   s._installEl.appendChild(document.createTextNode(text));
   acpScrollEnd(s);
 });
 
-ipcRenderer.on('acp-ready', (_, { id, version, model, cwd, agent }) => {
+ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent }) => {
   const s = acpSession(id);
   if (!s) return;
   if (agent) s.agent = agent;
@@ -2492,23 +2493,23 @@ ipcRenderer.on('acp-ready', (_, { id, version, model, cwd, agent }) => {
   finishModelSwitch(s);  // dismiss "switching…" toast + confirm, if a model switch is pending
 });
 
-ipcRenderer.on('acp-update', (_, { id, update }) => {
+ipcRenderer.on(IPC.ACP_UPDATE, (_, { id, update }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') handleAcpUpdate(s, update);
 });
 
-ipcRenderer.on('acp-done', (_, { id }) => {
+ipcRenderer.on(IPC.ACP_DONE, (_, { id }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'ready'); }
   if (id === activeId) refreshUsage();  // update usage after each reply (panel re-reads only if open)
 });
 
-ipcRenderer.on('acp-closed', (_, { id }) => {
+ipcRenderer.on(IPC.ACP_CLOSED, (_, { id }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'closed'); }
 });
 
-ipcRenderer.on('acp-error', (_, { id, message }) => {
+ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message }) => {
   const s = acpSession(id);
   if (!s) return;
   if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; s._pendingModelLabel = null; }
@@ -2521,7 +2522,7 @@ ipcRenderer.on('acp-error', (_, { id, message }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
+ipcRenderer.on(IPC.ACP_TOOL_APPROVED, (_, { id, toolCall }) => {
   const s = acpSession(id);
   if (!s) return;
   acpFinalizeStream(s);
@@ -2533,13 +2534,13 @@ ipcRenderer.on('acp-tool-approved', (_, { id, toolCall }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on('acp-term-create', (_, { id, termId, title }) => {
+ipcRenderer.on(IPC.ACP_TERM_CREATE, (_, { id, termId, title }) => {
   const s = acpSession(id);
   if (!s) return;
   acpAddTermCard(s, { termId, title });
 });
 
-ipcRenderer.on('acp-term-output', (_, { id, termId, output }) => {
+ipcRenderer.on(IPC.ACP_TERM_OUTPUT, (_, { id, termId, output }) => {
   const s = acpSession(id);
   if (!s) return;
   const stripped = stripAnsi(output);
@@ -2559,7 +2560,7 @@ ipcRenderer.on('acp-term-output', (_, { id, termId, output }) => {
   if (tc) { tc.bodyEl.appendChild(document.createTextNode(stripped)); tc.bodyEl.scrollTop = tc.bodyEl.scrollHeight; }
 });
 
-ipcRenderer.on('acp-term-release', (_, { id, termId }) => {
+ipcRenderer.on(IPC.ACP_TERM_RELEASE, (_, { id, termId }) => {
   const s = acpSession(id);
   if (!s) return;
   const tc = s.toolCards.get(termId);
@@ -2581,7 +2582,7 @@ let currentDevToolsWidth = 0;
 // open/close animation. Refit the PTY once, trailing — fitAddon.fit()
 // measures the DOM and resizes the shell, far too heavy to run per event.
 let layoutRefitTimer = null;
-ipcRenderer.on('devtools-layout', (_, { leftPanelWidth, devToolsWidth: dw }) => {
+ipcRenderer.on(IPC.DEVTOOLS_LAYOUT, (_, { leftPanelWidth, devToolsWidth: dw }) => {
   currentDevToolsWidth = dw;
   if (!panelCollapsed) leftPanel.style.width = leftPanelWidth + 'px';   // collapsed → let CSS keep the column at 0 (don't re-apply the split width)
   devtoolsPlaceholderEl.style.width = dw + 'px';
@@ -2610,7 +2611,7 @@ document.addEventListener('mousemove', e => {
     const appW     = appRootEl.offsetWidth - currentDevToolsWidth;
     const fraction = Math.min(0.75, Math.max(0.2, dragClientX / appW));
     leftPanel.style.width = Math.round(fraction * appW) + 'px';
-    ipcRenderer.send('split-changed', fraction);
+    ipcRenderer.send(IPC.SPLIT_CHANGED, fraction);
   });
 });
 document.addEventListener('mouseup', () => {
@@ -2640,16 +2641,16 @@ function setSinglePane(pane) {
     appRootEl.classList.toggle('pane-chat', pane === 'chat');
     appRootEl.classList.toggle('pane-browser', pane === 'browser');
     btnPanelToggle.classList.add('collapsed');
-    ipcRenderer.send('single-pane', pane);   // main positions/hides the browser view
+    ipcRenderer.send(IPC.SINGLE_PANE, pane);   // main positions/hides the browser view
   } else {
     panelCollapsed = false;
     appRootEl.classList.remove('panel-collapsed', 'pane-chat', 'pane-browser');
     btnPanelToggle.classList.remove('collapsed');
     if (savedPanelWidth) leftPanel.style.width = savedPanelWidth;
-    ipcRenderer.send('single-pane', null);
+    ipcRenderer.send(IPC.SINGLE_PANE, null);
     setTimeout(() => {
       const w = leftPanel.offsetWidth;
-      ipcRenderer.send('split-changed', w / appRootEl.offsetWidth);
+      ipcRenderer.send(IPC.SPLIT_CHANGED, w / appRootEl.offsetWidth);
     }, 250);
   }
   refitSession(activeId, PANEL_ANIM_MS);
@@ -2669,10 +2670,10 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
 (function initWindowControls() {
   const wc = document.getElementById('window-controls');
   if (!wc) return;
-  document.getElementById('wc-minimize').addEventListener('click', () => ipcRenderer.send('window-minimize'));
-  document.getElementById('wc-maximize').addEventListener('click', () => ipcRenderer.send('window-maximize-toggle'));
-  document.getElementById('wc-close').addEventListener('click', () => ipcRenderer.send('window-close'));
-  ipcRenderer.on('window-maximized-state', (_, max) => wc.classList.toggle('maximized', !!max));
+  document.getElementById('wc-minimize').addEventListener('click', () => ipcRenderer.send(IPC.WINDOW_MINIMIZE));
+  document.getElementById('wc-maximize').addEventListener('click', () => ipcRenderer.send(IPC.WINDOW_MAXIMIZE_TOGGLE));
+  document.getElementById('wc-close').addEventListener('click', () => ipcRenderer.send(IPC.WINDOW_CLOSE));
+  ipcRenderer.on(IPC.WINDOW_MAXIMIZED_STATE, (_, max) => wc.classList.toggle('maximized', !!max));
 })();
 
 // ── Views control bar — wires the LED toggles to their views ──────
@@ -2696,8 +2697,8 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
   toggles.usage  && toggles.usage.addEventListener('click',  () => { proxy('btn-usage');           setOn('usage', usageOpen); });
   toggles.system && toggles.system.addEventListener('click', () => { proxy('btn-sysperf-toggle');  setOn('system', sysOn()); });
   toggles.devtools && toggles.devtools.addEventListener('click', () => proxy('btn-devtools'));
-  ipcRenderer.on('devtools-opened', () => setOn('devtools', true));
-  ipcRenderer.on('devtools-closed', () => setOn('devtools', false));
+  ipcRenderer.on(IPC.DEVTOOLS_OPENED, () => setOn('devtools', true));
+  ipcRenderer.on(IPC.DEVTOOLS_CLOSED, () => setOn('devtools', false));
   toggles.terminal && toggles.terminal.addEventListener('click', () => {
     const wantTerm = !isOn('terminal');
     const tab = document.querySelector('#session-view-toggle .svt-tab[data-view="' + (wantTerm ? 'term' : 'chat') + '"]');
@@ -2722,7 +2723,7 @@ const apiKeyInput  = document.getElementById('api-key-input');
 gearBtn?.addEventListener('click', e => {
   e.stopPropagation();
   const rect = gearBtn.getBoundingClientRect();
-  ipcRenderer.send('show-settings-menu', { x: Math.round(rect.left), y: Math.round(rect.bottom) });
+  ipcRenderer.send(IPC.SHOW_SETTINGS_MENU, { x: Math.round(rect.left), y: Math.round(rect.bottom) });
 });
 
 let openAuditPromptsModal      = null;
@@ -2730,7 +2731,7 @@ let openEditTabsModal          = null;
 let openMcpToolsModal          = null;
 let openKeyboardShortcutsModal = null;
 
-ipcRenderer.on('settings-action', (_, action) => {
+ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
   switch (action) {
     case 'api-key': {
       const saved = secureGet(LS.apiKey) || '';
@@ -2749,7 +2750,7 @@ ipcRenderer.on('settings-action', (_, action) => {
     case 'keyboard-shortcuts': openKeyboardShortcutsModal?.(); break;
     case 'edit-devices':       openEditDevicesModal?.();       break;
     case 'theme':         openThemeModal?.();    break;
-    case 'new-window':    ipcRenderer.send('new-window'); break;
+    case 'new-window':    ipcRenderer.send(IPC.NEW_WINDOW); break;
   }
 });
 
@@ -2762,7 +2763,7 @@ document.getElementById('api-key-confirm')?.addEventListener('click', () => {
   const key = apiKeyInput.value.trim();
   if (key) {
     secureSet(LS.apiKey, key);
-    ipcRenderer.send('set-api-key', key);
+    ipcRenderer.send(IPC.SET_API_KEY, key);
   }
   closeApiKeyModal();
 });
@@ -2804,7 +2805,7 @@ function persistApiKeys(keys) {
   const active = keys.find(k => k.active);
   if (active) {
     secureSet(LS.apiKey, active.key);
-    ipcRenderer.send('set-api-key', active.key);
+    ipcRenderer.send(IPC.SET_API_KEY, active.key);
   }
 }
 
@@ -2855,7 +2856,7 @@ const apiKeyNewForm = document.getElementById('api-key-new-form');
 async function renderAuthAccountSection() {
   const el = document.getElementById('auth-account-status');
   el.innerHTML = '<span class="auth-loading">Checking…</span>';
-  const creds = await ipcRenderer.invoke('auth-status-read');
+  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ);
   const oauth        = creds?.claudeAiOauth ?? creds;
   const hasToken     = !!(oauth?.accessToken);
   const expiresAt    = oauth?.expiresAt;
@@ -2950,7 +2951,7 @@ async function openMemoryModal(agent = 'claude') {
   claudeMdTextarea.value = '';
   claudeMdTextarea.placeholder = 'Loading…';
   claudeMdModalCtl.open();
-  const content = await ipcRenderer.invoke('agent-md-read', { agent });
+  const content = await ipcRenderer.invoke(IPC.AGENT_MD_READ, { agent });
   if (memoryAgent !== agent) return;   // a newer open superseded this
   claudeMdTextarea.value = content;
   claudeMdTextarea.placeholder = `# Agent Instructions\n\nWrite instructions for ${label} here…`;
@@ -2964,13 +2965,13 @@ document.getElementById('claude-md-save')?.addEventListener('click', async () =>
   const btn = document.getElementById('claude-md-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  const ok = await ipcRenderer.invoke('agent-md-write', { agent: memoryAgent, content: claudeMdTextarea.value });
+  const ok = await ipcRenderer.invoke(IPC.AGENT_MD_WRITE, { agent: memoryAgent, content: claudeMdTextarea.value });
   btn.disabled = false;
   btn.textContent = 'Save';
   if (ok) claudeMdModalCtl.close();
 });
 
-ipcRenderer.on('edit-agent-memory', (_, agent) => openMemoryModal(agent || 'claude'));
+ipcRenderer.on(IPC.EDIT_AGENT_MEMORY, (_, agent) => openMemoryModal(agent || 'claude'));
 
 // Session-tab kebab → styled HTML dropdown (replaces the native menu; the tabs
 // live in the left panel, so an HTML overlay isn't fighting any native view).
@@ -3248,7 +3249,7 @@ function activateViewTab(tabId, silent = false) {
   if (isDiff) window.__onDiffTabActive?.();
   if (!silent) {
     const mode = tab.type === 'url' ? 'url:' + tab.url : tab.type;
-    ipcRenderer.send('right-panel-mode', mode);
+    ipcRenderer.send(IPC.RIGHT_PANEL_MODE, mode);
     updateWfEmpty();   // re-evaluate when the user switches view tabs (guarded to user actions to avoid init TDZ)
   }
 }
@@ -3296,7 +3297,7 @@ window.addEventListener('resize', () => {
   // Re-sync the split fraction so main re-derives the native browser view's x
   // from the *current* left-panel width (otherwise a stale fraction drifts the
   // view a few px off the tab bar after a window resize).
-  if (!panelCollapsed) ipcRenderer.send('split-changed', leftPanel.offsetWidth / appRootEl.offsetWidth);
+  if (!panelCollapsed) ipcRenderer.send(IPC.SPLIT_CHANGED, leftPanel.offsetWidth / appRootEl.offsetWidth);
 });
 
 // ── Dodge the vertical tool rail ──────────────────────────────────
@@ -3330,7 +3331,7 @@ scheduleDodge();
 
 document.getElementById('right-panel-tabs')?.addEventListener('contextmenu', e => {
   e.preventDefault();
-  ipcRenderer.send('show-tabs-context-menu', { x: e.clientX, y: e.clientY });
+  ipcRenderer.send(IPC.SHOW_TABS_CONTEXT_MENU, { x: e.clientX, y: e.clientY });
 });
 
 // ── Browser tabs & address bar ────────────────────────────────────
@@ -3361,7 +3362,7 @@ function updateWfEmpty() {
   _wfWasEmpty = empty;
   // Nothing loaded → the pick tools have nothing to act on: show them inactive.
   document.getElementById('toolbar')?.classList.toggle('tools-inactive', empty);
-  ipcRenderer.send('set-browser-empty', empty);
+  ipcRenderer.send(IPC.SET_BROWSER_EMPTY, empty);
 }
 
 // Send a task straight to the active agent (fills + sends the composer immediately)
@@ -3414,7 +3415,7 @@ function renderRecentList() {
   });
 }
 document.getElementById('wf-browse')?.addEventListener('click', async () => {
-  const dir = await ipcRenderer.invoke('show-folder-dialog');
+  const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
   if (dir) startDevServer(dir);
 });
 
@@ -3482,7 +3483,7 @@ function switchTab(id, navigate = false) {
   // about:blank at boot raced (and aborted) the saved-URL restore in main;
   // a blank tab hides the browser view via set-browser-empty anyway.
   if (navigate && tab.url && tab.url !== 'about:blank') {
-    ipcRenderer.send('browser-navigate', tab.url);
+    ipcRenderer.send(IPC.BROWSER_NAVIGATE, tab.url);
   }
   renderTabs();
   updateWfEmpty();
@@ -3515,11 +3516,11 @@ createTab('');
 document.getElementById('btn-new-tab')?.addEventListener('click', () => createTab(''));
 
 addressBar?.addEventListener('keydown', e => {
-  if (e.key === 'Enter')  { ipcRenderer.send('browser-navigate', addressBar.value); addressBar.blur(); }
+  if (e.key === 'Enter')  { ipcRenderer.send(IPC.BROWSER_NAVIGATE, addressBar.value); addressBar.blur(); }
   if (e.key === 'Escape') addressBar.blur();
 });
 addressBar?.addEventListener('focus', () => addressBar.select());
-document.getElementById('btn-reload')?.addEventListener('click', () => ipcRenderer.send('browser-reload'));
+document.getElementById('btn-reload')?.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_RELOAD));
 
 // ── Device emulation dropdown ─────────────────────────────────────
 let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
@@ -3569,10 +3570,10 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     btn.classList.toggle('emulating', !active.default);
   }
   function sendActive() {
-    if (active.default)   ipcRenderer.send('set-device', { default: true });
-    else if (active.name) ipcRenderer.send('set-device', { name: active.name, width: active.width, height: active.height });
-    else if (active.fit)  ipcRenderer.send('set-device', { responsive: true });
-    else                  ipcRenderer.send('set-device', { name: '', width: active.width, height: active.height });
+    if (active.default)   ipcRenderer.send(IPC.SET_DEVICE, { default: true });
+    else if (active.name) ipcRenderer.send(IPC.SET_DEVICE, { name: active.name, width: active.width, height: active.height });
+    else if (active.fit)  ipcRenderer.send(IPC.SET_DEVICE, { responsive: true });
+    else                  ipcRenderer.send(IPC.SET_DEVICE, { name: '', width: active.width, height: active.height });
   }
   setLabel();
 
@@ -3592,14 +3593,14 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     e.stopPropagation();
     const r = btn.getBoundingClientRect();
     const devices = allDevices();
-    ipcRenderer.send('show-device-menu', {
+    ipcRenderer.send(IPC.SHOW_DEVICE_MENU, {
       x: Math.round(r.right - menuWidth(devices)), y: Math.round(r.bottom + 2),
       devices, activeName: active.name, defaultView: !!active.default,
     });
   });
 
   // Native-menu selection. Reconstruct the descriptor.
-  ipcRenderer.on('device-changed', (_, { name, default: isDefault }) => {
+  ipcRenderer.on(IPC.DEVICE_CHANGED, (_, { name, default: isDefault }) => {
     if (isDefault) {
       active = { default: true };
     } else if (name) {
@@ -3637,7 +3638,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     hb.style.cssText = `left:${x}px;top:${y + height}px;width:${width}px;height:${HANDLE}px`;
     hc.style.cssText = `left:${x + width}px;top:${y + height}px;width:${HANDLE}px;height:${HANDLE}px`;
   }
-  ipcRenderer.on('device-view-bounds', (_, b) => { bounds = b; if (!drag) placeHandles(); });
+  ipcRenderer.on(IPC.DEVICE_VIEW_BOUNDS, (_, b) => { bounds = b; if (!drag) placeHandles(); });
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   function showGhost(w, h) {
@@ -3661,7 +3662,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     document.body.style.cursor = '';
     const w = Math.round(drag.cw ?? drag.w), h = Math.round(drag.ch ?? drag.h);
     ghost.style.display = 'none';
-    ipcRenderer.send('device-resize-end', { width: w, height: h });
+    ipcRenderer.send(IPC.DEVICE_RESIZE_END, { width: w, height: h });
     active = { name: '', width: w, height: h, fit: false };
     persist(); setLabel();
     drag = null;
@@ -3672,7 +3673,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     drag = { axis, sx: e.clientX, sy: e.clientY, w: bounds.width, h: bounds.height,
              panelX: bounds.panelX, panelY: bounds.panelY, panelW: bounds.panelW,
              maxW: bounds.panelW - HANDLE * 2, maxH: bounds.panelH - HANDLE };
-    ipcRenderer.send('device-resize-start');   // main hides the view
+    ipcRenderer.send(IPC.DEVICE_RESIZE_START);   // main hides the view
     document.body.style.cursor = axis === 'x' ? 'ew-resize' : axis === 'y' ? 'ns-resize' : 'nwse-resize';
     showGhost(drag.w, drag.h);
     document.addEventListener('mousemove', onMove, true);
@@ -3748,22 +3749,22 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
   };
 })();
 
-ipcRenderer.on('browser-url-changed', (_, url) => {
+ipcRenderer.on(IPC.BROWSER_URL_CHANGED, (_, url) => {
   addressBar.value = (url && url !== 'about:blank') ? url : '';
   const tab = tabs.find(t => t.id === activeTabId);
   if (tab) tab.url = url;
   updateWfEmpty();
 });
 
-ipcRenderer.on('tab-title-updated', (_, title) => {
+ipcRenderer.on(IPC.TAB_TITLE_UPDATED, (_, title) => {
   const tab = tabs.find(t => t.id === activeTabId);
   if (tab && title) { tab.title = title; renderTabs(); }
 });
 
 const devToolsBtn = document.getElementById('btn-devtools');
-devToolsBtn?.addEventListener('click', () => ipcRenderer.send('browser-toggle-devtools'));
-ipcRenderer.on('devtools-opened', () => devToolsBtn?.classList.add('active'));
-ipcRenderer.on('devtools-closed', () => devToolsBtn?.classList.remove('active'));
+devToolsBtn?.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_TOGGLE_DEVTOOLS));
+ipcRenderer.on(IPC.DEVTOOLS_OPENED, () => devToolsBtn?.classList.add('active'));
+ipcRenderer.on(IPC.DEVTOOLS_CLOSED, () => devToolsBtn?.classList.remove('active'));
 
 // ── Pick mode ─────────────────────────────────────────────────────
 let pickMode = null;
@@ -3776,7 +3777,7 @@ function applyPickCursor(mode) {
 function setPickMode(mode) {
   if (pickMode === mode) {
     // Toggle off: also dismiss the armed overlay in the page, not just the UI
-    ipcRenderer.send('pick-cancel');
+    ipcRenderer.send(IPC.PICK_CANCEL);
     clearPickMode();
     return;
   }
@@ -3785,7 +3786,7 @@ function setPickMode(mode) {
   applyPickCursor(mode);
   document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`btn-pick-${mode}`)?.classList.add('active');
-  ipcRenderer.send('pick-start', mode);
+  ipcRenderer.send(IPC.PICK_START, mode);
 }
 
 document.getElementById('btn-pick-box')?.addEventListener('click',   () => setPickMode('box'));
@@ -3793,54 +3794,54 @@ document.getElementById('btn-pick-lasso')?.addEventListener('click', () => setPi
 document.getElementById('btn-pick-aidev')?.addEventListener('click', () => setPickMode('aidev'));
 document.getElementById('extract-panel-new')?.addEventListener('click', () => setPickMode('aidev'));
 document.getElementById('btn-screenshot')?.addEventListener('click', () => {
-  if (pickMode === 'screenshot') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  if (pickMode === 'screenshot') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'screenshot';
   applyPickCursor('screenshot');
   document.getElementById('btn-screenshot')?.classList.add('active');
-  ipcRenderer.send('pick-screenshot');
+  ipcRenderer.send(IPC.PICK_SCREENSHOT);
 });
 document.getElementById('btn-pick-resize')?.addEventListener('click', () => {
-  if (pickMode === 'resize') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  if (pickMode === 'resize') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'resize';
   applyPickCursor('resize');
   document.getElementById('btn-pick-resize')?.classList.add('active');
-  ipcRenderer.send('pick-resize');
+  ipcRenderer.send(IPC.PICK_RESIZE);
 });
 // Resize panel's "New Selection" → re-arm the resize tool to pick a new element.
 document.getElementById('resize-panel-new')?.addEventListener('click', () => {
   clearPickMode();
   pickMode = 'resize';
   applyPickCursor('resize');
-  ipcRenderer.send('pick-resize');
+  ipcRenderer.send(IPC.PICK_RESIZE);
 });
 
 document.getElementById('btn-draw')?.addEventListener('click', () => {
-  if (pickMode === 'draw') { clearPickMode(); ipcRenderer.send('draw-cancel'); return; }
+  if (pickMode === 'draw') { clearPickMode(); ipcRenderer.send(IPC.DRAW_CANCEL); return; }
   clearPickMode();
   pickMode = 'draw';
   applyPickCursor('draw');
   document.getElementById('btn-draw')?.classList.add('active');
-  ipcRenderer.send('pick-draw');
+  ipcRenderer.send(IPC.PICK_DRAW);
 });
 
 document.getElementById('btn-pick-eyedropper')?.addEventListener('click', () => {
-  if (pickMode === 'eyedropper') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  if (pickMode === 'eyedropper') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'eyedropper';
   applyPickCursor('eyedropper');
   document.getElementById('btn-pick-eyedropper')?.classList.add('active');
-  ipcRenderer.send('pick-eyedropper');
+  ipcRenderer.send(IPC.PICK_EYEDROPPER);
 });
 
 document.getElementById('btn-pick-a11y')?.addEventListener('click', () => {
-  if (pickMode === 'a11y') { ipcRenderer.send('pick-cancel'); clearPickMode(); return; }
+  if (pickMode === 'a11y') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
   pickMode = 'a11y';
   applyPickCursor('a11y');
   document.getElementById('btn-pick-a11y')?.classList.add('active');
-  ipcRenderer.send('pick-a11y');
+  ipcRenderer.send(IPC.PICK_A11Y);
 });
 
 function clearPickMode() {
@@ -3878,11 +3879,11 @@ function clearPickMode() {
     const svg = document.querySelector(`#${t.id} svg`);
     const icon = svg ? await svgToPng(svg, 16, '#c8ccd4') : '';
     return { key: t.key, label: t.label, accel: t.accel, icon };
-  })).then((tools) => ipcRenderer.send('register-browser-tools', tools));
+  })).then((tools) => ipcRenderer.send(IPC.REGISTER_BROWSER_TOOLS, tools));
 })();
 
-ipcRenderer.on('pick-cancelled', () => clearPickMode());
-ipcRenderer.on('pick-complete',  () => clearPickMode());
+ipcRenderer.on(IPC.PICK_CANCELLED, () => clearPickMode());
+ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
 
 // ── Box/Lasso element panel (overtakes the chat column) ──────────
 // Faithful port of the in-page popup drawers: filter chips, per-element CSS
@@ -3912,7 +3913,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (hovered != null && rows[hovered] && !rows[hovered].removed) s.add(hovered);
     return [...s];
   }
-  function pushHighlight() { ipcRenderer.send('pick-panel-update', { active: highlightSet() }); }
+  function pushHighlight() { ipcRenderer.send(IPC.PICK_PANEL_UPDATE, { active: highlightSet() }); }
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -3921,7 +3922,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     return e;
   }
   function activeIndices() { return rows.map((r, i) => (r.removed ? -1 : i)).filter(i => i >= 0); }
-  function applyStyle(i, prop, value) { ipcRenderer.send('pick-panel-style', { i, prop, value }); }
+  function applyStyle(i, prop, value) { ipcRenderer.send(IPC.PICK_PANEL_STYLE, { i, prop, value }); }
 
   // ── one CSS property row ──────────────────────────────────────
   // ── property metadata (Method 2 sections + Method 3 typed controls) ─
@@ -4032,7 +4033,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       const pick = el('button', 'pp-img-pick'); pick.innerHTML = FOLDER_GLYPH; pick.title = 'Choose image…';
       pick.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const file = await ipcRenderer.invoke('pick-image-file');
+        const file = await ipcRenderer.invoke(IPC.PICK_IMAGE_FILE);
         if (!file) return;
         const v = `url('${file}')`;
         const input = ctrl.querySelector('input');
@@ -4386,11 +4387,11 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     });
   }
   function send() {
-    ipcRenderer.send('pick-panel-send', { instruction: textarea.value.trim(), items: resolvedItems() });
+    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: textarea.value.trim(), items: resolvedItems() });
     close();
   }
   function cancel() {
-    ipcRenderer.send('pick-panel-cancel');
+    ipcRenderer.send(IPC.PICK_PANEL_CANCEL);
     close();
   }
 
@@ -4401,7 +4402,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   toggleSelBtn?.addEventListener('click', () => {
     selVisible = !selVisible;
     toggleSelBtn.textContent = selVisible ? 'Hide Selection' : 'Show Selection';
-    ipcRenderer.send('toggle-page-selection', { visible: selVisible });
+    ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible });
   });
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -4411,7 +4412,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('pick-panel-open', (_, { items, tool }) => open(items || [], tool));
+  ipcRenderer.on(IPC.PICK_PANEL_OPEN, (_, { items, tool }) => open(items || [], tool));
 })();
 
 // ── Resize tool panel (overtakes the chat column) ────────────────
@@ -4458,15 +4459,15 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     panel.hidden = false;
   }
   function close() { panel.hidden = true; textarea.value = ''; sliding = null; }
-  function send()   { ipcRenderer.send('resize-panel-send', { instruction: textarea.value.trim() }); close(); }
-  function cancel() { ipcRenderer.send('resize-panel-cancel'); close(); }
+  function send()   { ipcRenderer.send(IPC.RESIZE_PANEL_SEND, { instruction: textarea.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send(IPC.RESIZE_PANEL_CANCEL); close(); }
 
   // Sliders → live-resize the page element; optimistic text update.
   function wireSlider(slider, dim, valEl) {
     slider.addEventListener('input', () => {
       sliding = dim;
       const v = +slider.value;
-      ipcRenderer.send('resize-panel-set', { dim, value: v });
+      ipcRenderer.send(IPC.RESIZE_PANEL_SET, { dim, value: v });
       const orig = dim === 'w' ? lastOrig.oW : lastOrig.oH;
       setText(valEl, v, orig);
     });
@@ -4477,7 +4478,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   wireSlider(wSlider, 'w', wEl);
   wireSlider(hSlider, 'h', hEl);
 
-  resetBtn.addEventListener('click', () => ipcRenderer.send('resize-panel-reset'));
+  resetBtn.addEventListener('click', () => ipcRenderer.send(IPC.RESIZE_PANEL_RESET));
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   textarea.addEventListener('keydown', (e) => {
@@ -4488,8 +4489,8 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('resize-panel-open', (_, data) => open(data || {}));
-  ipcRenderer.on('resize-panel-dims', (_, d) => { if (!panel.hidden) setDims(d); });
+  ipcRenderer.on(IPC.RESIZE_PANEL_OPEN, (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.RESIZE_PANEL_DIMS, (_, d) => { if (!panel.hidden) setDims(d); });
 })();
 
 // ── Extract tool panel (overtakes the chat column) ───────────────
@@ -4579,8 +4580,8 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
         body.style.display = row.expanded ? '' : 'none';
         caret.classList.toggle('open', row.expanded);
       });
-      head.addEventListener('mouseenter', () => ipcRenderer.send('extract-panel-highlight', { active: [row.index] }));
-      head.addEventListener('mouseleave', () => ipcRenderer.send('extract-panel-highlight', { active: [] }));
+      head.addEventListener('mouseenter', () => ipcRenderer.send(IPC.EXTRACT_PANEL_HIGHLIGHT, { active: [row.index] }));
+      head.addEventListener('mouseleave', () => ipcRenderer.send(IPC.EXTRACT_PANEL_HIGHLIGHT, { active: [] }));
       x.addEventListener('click', (e) => {
         e.stopPropagation();
         rows = rows.filter(r => r !== row);
@@ -4610,17 +4611,17 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
       mediaTypes: MEDIA.filter(m => r.media.has(m.key)).map(m => m.key),
       mediaDest: r.dest,
     }));
-    ipcRenderer.send('extract-panel-send', { perElement, instruction: instr.value.trim() });
+    ipcRenderer.send(IPC.EXTRACT_PANEL_SEND, { perElement, instruction: instr.value.trim() });
     close();
   }
-  function cancel() { ipcRenderer.send('extract-panel-cancel'); close(); }
+  function cancel() { ipcRenderer.send(IPC.EXTRACT_PANEL_CANCEL); close(); }
 
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
   document.addEventListener('keydown', (e) => { if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); } });
 
-  ipcRenderer.on('extract-panel-open', (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.EXTRACT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── Eyedropper tool panel (overtakes the chat column) ────────────
@@ -4665,7 +4666,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   function setOld(hex) { const h = (hex || '').toUpperCase(); oldSw.style.background = h; oldHex.textContent = h; }
   // The picker shows the adjusted color; keep the hex field + new swatch in sync.
   function setNew(hex) { const h = (hex || '').toUpperCase(); if (document.activeElement !== hexInput) hexInput.value = h; if (newSw) newSw.style.background = h; }
-  function onPick(hex) { setNew(hex); ipcRenderer.send('eyedropper-set-color', { hex }); }
+  function onPick(hex) { setNew(hex); ipcRenderer.send(IPC.EYEDROPPER_SET_COLOR, { hex }); }
 
   function open(data) {
     clearPickMode();
@@ -4690,12 +4691,12 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     panel.hidden = false;
     ensureIro(() => { if (!window.iro) return; if (!picker) buildPicker(picked); else setPicker(picked); setNew(picked); hexInput.value = picked; });
   }
-  function close() { ipcRenderer.send('cp-clear-target-highlight'); panel.hidden = true; instr.value = ''; }
-  function send() { ipcRenderer.send('eyedropper-send', { instruction: instr.value.trim() }); close(); }
-  function cancel() { ipcRenderer.send('eyedropper-cancel'); close(); }
+  function close() { ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT); panel.hidden = true; instr.value = ''; }
+  function send() { ipcRenderer.send(IPC.EYEDROPPER_SEND, { instruction: instr.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send(IPC.EYEDROPPER_CANCEL); close(); }
 
   propSel.addEventListener('change', async () => {
-    const r = await ipcRenderer.invoke('eyedropper-set-prop', { prop: propSel.value });
+    const r = await ipcRenderer.invoke(IPC.EYEDROPPER_SET_PROP, { prop: propSel.value });
     if (r && r.from) { setOld(r.from); setNew(r.from); setPicker(r.from); }
   });
   hexInput.addEventListener('input', () => {
@@ -4709,11 +4710,11 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   adjustCb?.addEventListener('change', () => {
     if (editor) editor.hidden = !adjustCb.checked;
     if (adjustCb.checked) { onPick(picker ? picker.color.hexString : origHex); }
-    else { ipcRenderer.send('eyedropper-set-color', { hex: origHex }); }
+    else { ipcRenderer.send(IPC.EYEDROPPER_SET_COLOR, { hex: origHex }); }
   });
-  newBtn?.addEventListener('click', () => { pickMode = 'eyedropper'; ipcRenderer.send('pick-eyedropper'); });
-  linkEl.addEventListener('mouseenter', () => { if (sel && sel.selector) ipcRenderer.send('cp-highlight-target', { selector: sel.selector }); });
-  linkEl.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
+  newBtn?.addEventListener('click', () => { pickMode = 'eyedropper'; ipcRenderer.send(IPC.PICK_EYEDROPPER); });
+  linkEl.addEventListener('mouseenter', () => { if (sel && sel.selector) ipcRenderer.send(IPC.CP_HIGHLIGHT_TARGET, { selector: sel.selector }); });
+  linkEl.addEventListener('mouseleave', () => ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT));
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
@@ -4721,7 +4722,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr && document.activeElement !== hexInput) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('eyedropper-panel-open', (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.EYEDROPPER_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── Accessibility checker panel (overtakes the chat column) ──────
@@ -4788,7 +4789,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (cb.checked) note.classList.add('show');   // input slides in only when "Fix Issue" is checked
     note.addEventListener('input', () => { state[iss.idx].instruction = note.value; });
     cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; note.classList.toggle('show', cb.checked); updateCount(); });
-    head.addEventListener('mouseenter', () => ipcRenderer.send('a11y-flash', { idx: iss.idx }));
+    head.addEventListener('mouseenter', () => ipcRenderer.send(IPC.A11Y_FLASH, { idx: iss.idx }));
     wrap.append(note);
     return wrap;
   }
@@ -4814,10 +4815,10 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     const out = issues.filter(i => state[i.idx].checked).map(i => ({
       category: i.label, selector: i.selector, detail: i.detail, instruction: (state[i.idx].instruction || '').trim(), url,
     }));
-    ipcRenderer.send('a11y-send', { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
+    ipcRenderer.send(IPC.A11Y_SEND, { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
     close();
   }
-  function cancel() { ipcRenderer.send('a11y-cancel'); close(); }
+  function cancel() { ipcRenderer.send(IPC.A11Y_CANCEL); close(); }
 
   toggleAll.addEventListener('click', () => {
     const next = !issues.some(i => state[i.idx].checked);   // any checked → uncheck all; none → check all
@@ -4832,7 +4833,7 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
     if (!panel.hidden && e.key === 'Escape' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('a11y-panel-open', (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.A11Y_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── Screenshot tool panel (overtakes the chat column) ────────────
@@ -4925,20 +4926,20 @@ ipcRenderer.on('pick-complete',  () => clearPickMode());
   }
   function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; ctx.clearRect(0, 0, canvas.width, canvas.height); setMarkerMode(false); }
   function send() {
-    ipcRenderer.send('screenshot-panel-send', { instruction: instr.value.trim(), compositeDataUrl: hasDrawing ? composite() : null });
+    ipcRenderer.send(IPC.SCREENSHOT_PANEL_SEND, { instruction: instr.value.trim(), compositeDataUrl: hasDrawing ? composite() : null });
     close();
   }
-  function cancel() { ipcRenderer.send('screenshot-panel-cancel'); close(); }
+  function cancel() { ipcRenderer.send(IPC.SCREENSHOT_PANEL_CANCEL); close(); }
 
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
-  newBtn?.addEventListener('click', () => { pickMode = 'screenshot'; ipcRenderer.send('pick-screenshot'); });
+  newBtn?.addEventListener('click', () => { pickMode = 'screenshot'; ipcRenderer.send(IPC.PICK_SCREENSHOT); });
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   document.addEventListener('keydown', (e) => {
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('screenshot-panel-open', (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.SCREENSHOT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── System performance graph (CPU / RAM / GPU) ───────────────────────
@@ -4983,12 +4984,12 @@ function growPanel(el, open) {
   let on = localStorage.getItem(LS.sysperf) !== '0';
   panel.style.display = on ? '' : 'none';   // initial state (no animation)
   btn.classList.toggle('active', on);
-  ipcRenderer.send('sysperf-active', on);   // only sample/tick in main while the panel is open
+  ipcRenderer.send(IPC.SYSPERF_ACTIVE, on);   // only sample/tick in main while the panel is open
   btn.addEventListener('click', () => {
     on = !on;
     localStorage.setItem(LS.sysperf, on ? '1' : '0');
     btn.classList.toggle('active', on);
-    ipcRenderer.send('sysperf-active', on);
+    ipcRenderer.send(IPC.SYSPERF_ACTIVE, on);
     growPanel(panel, on);                   // animate grow-in / shrink-out on toggle
   });
 })();
@@ -5061,7 +5062,7 @@ function growPanel(el, open) {
     if (view === 'all' || (panel && panel.style.display === 'none')) return;
     const kind = view;   // 'ram' | 'cpu'
     let res = null;
-    try { res = await ipcRenderer.invoke('top-procs', kind); } catch (_) {}
+    try { res = await ipcRenderer.invoke(IPC.TOP_PROCS, kind); } catch (_) {}
     if (view !== kind) return;   // view changed mid-flight
     renderProcs(res, kind);
   }
@@ -5111,7 +5112,7 @@ function renderSysperfBars(m) {
   };
   set('cpu', m && m.cpu); set('ram', m && m.ram); set('gpu', m && m.gpu);
 }
-ipcRenderer.on('sysperf', (_, m) => { _lastSysperf = m; renderSysperfBars(m); });
+ipcRenderer.on(IPC.SYSPERF, (_, m) => { _lastSysperf = m; renderSysperfBars(m); });
 
 // Route a message to the active session — chat (ACP) or PTY. The single
 // sending path for tools, audits, and the composer. `display` is what the
@@ -5124,10 +5125,10 @@ function interruptActiveSession() {
   if (!s) return false;
   if (s.type === 'acp') {
     if (s.status !== 'thinking') return false;
-    ipcRenderer.send('acp-cancel', { id: activeId });
+    ipcRenderer.send(IPC.ACP_CANCEL, { id: activeId });
     return true;
   }
-  ipcRenderer.send('pty-input', { id: activeId, data: '\x03' });
+  ipcRenderer.send(IPC.PTY_INPUT, { id: activeId, data: '\x03' });
   return true;
 }
 
@@ -5138,16 +5139,16 @@ function routeToActiveSession(text, display = text, images = [], chips = null) {
   if (s.type === 'acp') {
     acpAddUserMsg(s, display, images, chips);
     acpSetStatus(s, 'thinking');
-    ipcRenderer.send('acp-prompt', { id: activeId, text });
+    ipcRenderer.send(IPC.ACP_PROMPT, { id: activeId, text });
   } else {
     s.term.paste(text);
-    setTimeout(() => ipcRenderer.send('pty-input', { id: activeId, data: '\r' }), PTY_SEND_DELAY);
+    setTimeout(() => ipcRenderer.send(IPC.PTY_INPUT, { id: activeId, data: '\r' }), PTY_SEND_DELAY);
   }
   return true;
 }
 
 // Route pick/screenshot output to the active session
-ipcRenderer.on('pick-send-to-session', (_, message) => {
+ipcRenderer.on(IPC.PICK_SEND_TO_SESSION, (_, message) => {
   // Structured payload { text, body, detail, label } → agent gets full `text`,
   // chat shows `body` with `detail` in a drawer. Plain string → unchanged.
   if (message && typeof message === 'object') {
@@ -5159,13 +5160,13 @@ ipcRenderer.on('pick-send-to-session', (_, message) => {
 
 // Passive update indicator: a dismissible toast (click → run the update flow)
 // plus a persistent dot on the settings gear.
-ipcRenderer.on('update-available', (_, { behind }) => {
+ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, { behind }) => {
   const gear = document.getElementById('btn-settings');
   if (gear) gear.classList.add('has-update');
   const t = showToast(`↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`, { duration: 9000 });
   if (t && t.el) {
     t.el.style.cursor = 'pointer';
-    t.el.addEventListener('click', () => { ipcRenderer.send('app-check-updates'); t.dismiss(); });
+    t.el.addEventListener('click', () => { ipcRenderer.send(IPC.APP_CHECK_UPDATES); t.dismiss(); });
   }
 });
 
@@ -5248,8 +5249,8 @@ ipcRenderer.on('update-available', (_, { behind }) => {
     showToast(routeToActiveSession(text, { body, detail, label }) ? 'Sent to chat' : 'No active session', { duration: 1500 });
   }
 
-  ipcRenderer.on('console-entry', (_, e) => add(e));
-  ipcRenderer.invoke('console-get').then(list => { entries = (list || []).slice(-MAX); render(); }).catch(() => {});
+  ipcRenderer.on(IPC.CONSOLE_ENTRY, (_, e) => add(e));
+  ipcRenderer.invoke(IPC.CONSOLE_GET).then(list => { entries = (list || []).slice(-MAX); render(); }).catch(() => {});
 
   document.querySelectorAll('.console-filter').forEach(b => {
     b.addEventListener('click', () => {
@@ -5259,7 +5260,7 @@ ipcRenderer.on('update-available', (_, { behind }) => {
     });
   });
   document.getElementById('console-clear').addEventListener('click', () => {
-    entries = []; ipcRenderer.send('console-clear'); render();
+    entries = []; ipcRenderer.send(IPC.CONSOLE_CLEAR); render();
   });
   document.getElementById('console-send-errors').addEventListener('click', () => {
     const errs = entries.filter(isErr);
@@ -5364,7 +5365,7 @@ ipcRenderer.on('update-available', (_, { behind }) => {
     if (!ed) { showEmpty('no-git'); return; }
     if (token !== reqToken) return;    // superseded while Monaco loaded
     let res;
-    try { res = await ipcRenderer.invoke('diff-file', { rel: f.rel, status: f.status }); }
+    try { res = await ipcRenderer.invoke(IPC.DIFF_FILE, { rel: f.rel, status: f.status }); }
     catch (_) { res = null; }
     if (token !== reqToken) return;    // a newer selection won — drop this stale result
     emptyEl.style.display = 'none';
@@ -5380,7 +5381,7 @@ ipcRenderer.on('update-available', (_, { behind }) => {
     models = { original: orig, modified: mod };
   }
   async function refresh() {
-    const res = await ipcRenderer.invoke('diff-status');
+    const res = await ipcRenderer.invoke(IPC.DIFF_STATUS);
     if (!res || !res.ok) { files = []; selected = null; branchEl.textContent = ''; renderList(); showEmpty(res ? res.reason : 'not-git'); return; }
     branchEl.textContent = res.branch || '';
     files = res.files || [];
@@ -5436,7 +5437,7 @@ let openDrawPanel = null;
     if (!window.iro || drawIro || !iroWrap) return;
     try {
       drawIro = new iro.ColorPicker(iroWrap, { width: 90, color: color || '#ff3b30', layout: [{ component: iro.ui.Wheel }] });
-      drawIro.on('color:change', (c) => { swatch.style.background = c.hexString; ipcRenderer.send('marker-set-color', c.hexString); });
+      drawIro.on('color:change', (c) => { swatch.style.background = c.hexString; ipcRenderer.send(IPC.MARKER_SET_COLOR, c.hexString); });
     } catch (_) {}
   }
   // The swatch is a live preview of the brush — its diameter tracks the size.
@@ -5452,10 +5453,10 @@ let openDrawPanel = null;
     if (drawIro) { try { drawIro.color.set('#ff3b30'); } catch (_) {} }
   }
   function close() { panel.hidden = true; instr.value = ''; }
-  function send() { ipcRenderer.send('marker-send', { instructions: instr.value.trim() }); close(); }   // main grabs the marker + composites
-  function cancel() { ipcRenderer.send('marker-cancel'); close(); }
-  sizeIn?.addEventListener('input', () => { setSwatchSize(+sizeIn.value); ipcRenderer.send('marker-set-size', +sizeIn.value); });
-  clearBtn?.addEventListener('click', () => ipcRenderer.send('marker-clear'));
+  function send() { ipcRenderer.send(IPC.MARKER_SEND, { instructions: instr.value.trim() }); close(); }   // main grabs the marker + composites
+  function cancel() { ipcRenderer.send(IPC.MARKER_CANCEL); close(); }
+  sizeIn?.addEventListener('input', () => { setSwatchSize(+sizeIn.value); ipcRenderer.send(IPC.MARKER_SET_SIZE, +sizeIn.value); });
+  clearBtn?.addEventListener('click', () => ipcRenderer.send(IPC.MARKER_CLEAR));
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
@@ -5463,10 +5464,10 @@ let openDrawPanel = null;
     if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
   });
 
-  ipcRenderer.on('draw-panel-open', () => open());
+  ipcRenderer.on(IPC.DRAW_PANEL_OPEN, () => open());
 })();
 
-ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instructions = '' }) => {
+ipcRenderer.on(IPC.DRAW_COMPOSITE, async (_, { pageB64, canvasDataUrl, instructions = '' }) => {
   const offscreen = document.createElement('canvas');
   const img1 = new Image(), img2 = new Image();
   img1.src = 'data:image/png;base64,' + pageB64;
@@ -5481,7 +5482,7 @@ ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instruction
   ctx.drawImage(img1, 0, 0);
   ctx.drawImage(img2, 0, 0);
   // Brush controls + instruction live in the panel; composite + send straight through.
-  ipcRenderer.send('draw-composite-done', { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
+  ipcRenderer.send(IPC.DRAW_COMPOSITE_DONE, { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────
@@ -5490,13 +5491,13 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); createTab(''); }
   // Ctrl+W only — on macOS the window menu owns Cmd+W (close window); don't double-bind it to tab-close.
   if (e.ctrlKey && e.key === 'w') { e.preventDefault(); closeTab(activeTabId); }
-  if (e.key === 'F5')  ipcRenderer.send('browser-reload');
-  if (e.key === 'F12') ipcRenderer.send('browser-toggle-devtools');
+  if (e.key === 'F5')  ipcRenderer.send(IPC.BROWSER_RELOAD);
+  if (e.key === 'F12') ipcRenderer.send(IPC.BROWSER_TOGGLE_DEVTOOLS);
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === '\\') { e.preventDefault(); btnPanelToggle.click(); }
 
   // Escape — cancel active tool
   if (e.key === 'Escape' && pickMode) {
-    ipcRenderer.send('pick-cancel');
+    ipcRenderer.send(IPC.PICK_CANCEL);
     clearPickMode();
   }
 
@@ -5512,7 +5513,7 @@ document.addEventListener('keydown', e => {
 // currently has keyboard focus, then sends this IPC to the renderer. Tool
 // shortcuts are Alt+<letter>, so no input-focus guard is needed.
 const TOOL_BTN = Object.fromEntries(PAGE_TOOLS.map(t => [t.key, t.id]));
-ipcRenderer.on('shortcut-action', (_, action) => {
+ipcRenderer.on(IPC.SHORTCUT_ACTION, (_, action) => {
   if (action.type === 'tab-switch') {
     const idx = tabsConfig.findIndex(t => t.id === activeViewTabId);
     if (idx !== -1) activateViewTab(tabsConfig[(idx + action.dir + tabsConfig.length) % tabsConfig.length].id);
@@ -5521,7 +5522,7 @@ ipcRenderer.on('shortcut-action', (_, action) => {
   } else if (action.type === 'panel-toggle') {
     btnPanelToggle.click();
   } else if (action.type === 'escape') {
-    if (pickMode) { ipcRenderer.send('pick-cancel'); clearPickMode(); }
+    if (pickMode) { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); }
     // Esc anywhere else stops the agent — but let the composer's own keydown
     // own that case (and the slash menu) when it's focused.
     else if (document.activeElement !== uiTextarea) interruptActiveSession();
@@ -5819,7 +5820,7 @@ function buildAuditMenu() {
     // Destroy removed custom views in main
     tabsConfig
       .filter(t => t.type === 'url' && !draft.some(d => d.id === t.id))
-      .forEach(t => ipcRenderer.send('destroy-custom-view', t.url));
+      .forEach(t => ipcRenderer.send(IPC.DESTROY_CUSTOM_VIEW, t.url));
 
     tabsConfig = draft;
     localStorage.setItem(LS.tabs, JSON.stringify(tabsConfig));
@@ -5909,7 +5910,7 @@ function buildAuditMenu() {
       `;
       row.querySelector('.tabs-modal-remove').addEventListener('click', async () => {
         row.querySelector('.tabs-modal-remove').textContent = '…';
-        await ipcRenderer.invoke('mcp-disconnect', { serverName: srv.name });
+        await ipcRenderer.invoke(IPC.MCP_DISCONNECT, { serverName: srv.name });
         await loadAndRender();
       });
       listEl.appendChild(row);
@@ -5958,7 +5959,7 @@ function buildAuditMenu() {
     connectMsg.className = 'mcp-connect-msg';
     connectMsg.textContent = `Adding to ${agentList.map(a => a.label).join(', ') || 'agents'}…`;
 
-    const result = await ipcRenderer.invoke('mcp-connect', {
+    const result = await ipcRenderer.invoke(IPC.MCP_CONNECT, {
       catalogKey: svc,
       token,
       custom: svc === 'custom'
@@ -5995,7 +5996,7 @@ function buildAuditMenu() {
 
   async function loadAndRender() {
     listEl.innerHTML = '<div class="mcp-status">Checking agents…</div>';
-    const status = await ipcRenderer.invoke('mcp-status');
+    const status = await ipcRenderer.invoke(IPC.MCP_STATUS);
     agentList = status.agents || [];
     servers   = status.servers || [];
     renderRows();
@@ -6006,7 +6007,7 @@ function buildAuditMenu() {
   const ctl = wireModal(modal, { backdropClose: false });
 
   restartBtn.addEventListener('click', () => {
-    if (activeId !== null) ipcRenderer.send('pty-restart', { id: activeId });
+    if (activeId !== null) ipcRenderer.send(IPC.PTY_RESTART, { id: activeId });
     ctl.close();
   });
 
@@ -6522,13 +6523,13 @@ document.getElementById('btn-ui-send')?.addEventListener('click', sendUiMessage)
 // Code block wrap
 // File attach — opens native file dialog, adds the paths as chips
 document.getElementById('btn-ui-attach')?.addEventListener('click', async () => {
-  const paths = await ipcRenderer.invoke('show-file-dialog');
+  const paths = await ipcRenderer.invoke(IPC.SHOW_FILE_DIALOG);
   if (paths && paths.length) addAttachChips(paths, 'file');
 });
 
 // Folder attach — opens native folder dialog, adds the path as a chip
 document.getElementById('btn-ui-attach-folder')?.addEventListener('click', async () => {
-  const dir = await ipcRenderer.invoke('show-folder-dialog');
+  const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
   if (dir) addAttachChips([dir], 'folder');
 });
 
@@ -6599,7 +6600,7 @@ function renderSbTab() {
   const back = document.getElementById('sb-back');
   if (back) back.hidden = !hasLive;
   if (here && hasLive && !showSetup) renderSbBar();
-  ipcRenderer.send('storybook-setup-open', here ? showSetup : false);   // suppress the native view while setup is up
+  ipcRenderer.send(IPC.STORYBOOK_SETUP_OPEN, here ? showSetup : false);   // suppress the native view while setup is up
 }
 function renderSbBar() {
   const a = sbInstances.find(i => i.id === sbActiveId) || sbInstances[0];
@@ -6620,7 +6621,7 @@ async function detectStorybook() {
   const det = document.getElementById('sb-detect');
   if (!det) return;
   let r;
-  try { r = await ipcRenderer.invoke('storybook-detect', { dir: document.getElementById('sb-folder').value.trim() }); }
+  try { r = await ipcRenderer.invoke(IPC.STORYBOOK_DETECT, { dir: document.getElementById('sb-folder').value.trim() }); }
   catch (_) { det.hidden = true; return; }
   det.dataset.state = r.installed ? 'ok' : 'missing';
   det.textContent = r.installed
@@ -6630,31 +6631,31 @@ async function detectStorybook() {
 }
 
 function sbNotifyMain() {
-  if (sbConfig) ipcRenderer.send('storybook-load-url', sbConfig.value);
-  else          ipcRenderer.send('storybook-disconnect');
+  if (sbConfig) ipcRenderer.send(IPC.STORYBOOK_LOAD_URL, sbConfig.value);
+  else          ipcRenderer.send(IPC.STORYBOOK_DISCONNECT);
 }
 
 // Init — re-adopt the remembered Storybook only if it's actually still running.
-ipcRenderer.send('set-project-dir', { dir: (sbConfig && sbConfig.projectDir) || '' });
+ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: (sbConfig && sbConfig.projectDir) || '' });
 if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-folder'); if (sf) sf.value = sbConfig.projectDir; }
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)
-    const { instances, activeId } = await ipcRenderer.invoke('storybook-list');
+    const { instances, activeId } = await ipcRenderer.invoke(IPC.STORYBOOK_LIST);
     sbInstances = instances || []; sbActiveId = activeId;
   } catch (_) {}
   if (sbInstances.length) { renderSbTab(); return; }
   const m = sbConfig && /:(\d+)/.exec(sbConfig.value || '');
   if (m) {   // re-adopt the remembered Storybook only if it's actually still up
     try {
-      const { found } = await ipcRenderer.invoke('storybook-scan');
-      if ((found || []).some(f => f.port === +m[1])) { await ipcRenderer.invoke('storybook-adopt', { port: +m[1] }); return; }
+      const { found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN);
+      if ((found || []).some(f => f.port === +m[1])) { await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] }); return; }
     } catch (_) {}
   }
   renderSbSetup();
 })();
 
 document.getElementById('sb-folder-pick')?.addEventListener('click', async () => {
-  const dir = await ipcRenderer.invoke('show-folder-dialog');
+  const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
   if (dir) { document.getElementById('sb-folder').value = dir; detectStorybook(); }
 });
 
@@ -6671,24 +6672,24 @@ document.getElementById('sb-connect')?.addEventListener('click', async () => {
   sbConfig = { value: url, autoInject: auto, projectDir: dir, managed: false };   // manual URL → not app-managed
   localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
   // Point future sessions at the project dir, then write the memory files there
-  ipcRenderer.send('set-project-dir', { dir });
-  await ipcRenderer.invoke('storybook-write-memory', { url });
+  ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
+  await ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
   const m = /:(\d+)/.exec(url);
-  if (m) await ipcRenderer.invoke('storybook-adopt', { port: +m[1] });   // adopt into the registry → bar/view
+  if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] });   // adopt into the registry → bar/view
   sbSetupOpen = false; renderSbTab();
   updateComponentPickerBtn?.();
 });
 
 document.getElementById('sb-disconnect')?.addEventListener('click', async () => {
-  if (sbConfig?.managed) ipcRenderer.invoke('storybook-server-stop');   // kill the managed dev server
-  await ipcRenderer.invoke('storybook-clear-memory');   // remove the managed block first
+  if (sbConfig?.managed) ipcRenderer.invoke(IPC.STORYBOOK_SERVER_STOP);   // kill the managed dev server
+  await ipcRenderer.invoke(IPC.STORYBOOK_CLEAR_MEMORY);   // remove the managed block first
   sbConfig = null;
   localStorage.removeItem(LS.storybook);
   document.getElementById('sb-url').value = '';
   document.getElementById('sb-folder').value = '';
-  ipcRenderer.send('set-project-dir', { dir: '' });
+  ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: '' });
   renderSbSetup();
-  ipcRenderer.send('storybook-disconnect');
+  ipcRenderer.send(IPC.STORYBOOK_DISCONNECT);
   updateComponentPickerBtn?.();
 });
 
@@ -6708,9 +6709,9 @@ document.getElementById('sb-url')?.addEventListener('keydown', e => {
 const sbStartBtn = document.getElementById('sb-start');
 const sbStatusEl = document.getElementById('sb-status');
 sbStartBtn?.addEventListener('click', () => {
-  ipcRenderer.invoke('storybook-server-start', { dir: document.getElementById('sb-folder').value.trim() });
+  ipcRenderer.invoke(IPC.STORYBOOK_SERVER_START, { dir: document.getElementById('sb-folder').value.trim() });
 });
-ipcRenderer.on('storybook-server-status', (_, { state, url, message, log } = {}) => {
+ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {}) => {
   if (log && (state === 'error' || (state === 'stopped'))) console.warn('[storybook server]', message || '', '\n' + log);
   if (sbStatusEl) {
     const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Failed to start', stopped: 'Storybook stopped' };
@@ -6725,15 +6726,15 @@ ipcRenderer.on('storybook-server-status', (_, { state, url, message, log } = {})
     const dir = document.getElementById('sb-folder').value.trim();
     sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: true };
     localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
-    ipcRenderer.send('set-project-dir', { dir });
-    ipcRenderer.invoke('storybook-write-memory', { url });
+    ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
+    ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
     renderSbConnected();
     updateComponentPickerBtn?.();
   }
   if (state === 'stopped' && sbConfig?.managed) {   // server died/stopped while connected → back to setup
     sbConfig = null;
     localStorage.removeItem(LS.storybook);
-    ipcRenderer.send('storybook-disconnect');
+    ipcRenderer.send(IPC.STORYBOOK_DISCONNECT);
     renderSbSetup();
     updateComponentPickerBtn?.();
   }
@@ -6742,9 +6743,9 @@ ipcRenderer.on('storybook-server-status', (_, { state, url, message, log } = {})
 // Build a Storybook with the agent — from a Figma file, or scaffolded for the project's framework
 async function buildStorybook({ figma = '', framework = '' } = {}) {
   const dir = document.getElementById('sb-folder').value.trim();
-  if (dir) ipcRenderer.send('set-project-dir', { dir });   // run the agent in the chosen folder
+  if (dir) ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });   // run the agent in the chosen folder
   let installed = false;
-  try { installed = (await ipcRenderer.invoke('storybook-detect', { dir })).installed; } catch (_) {}
+  try { installed = (await ipcRenderer.invoke(IPC.STORYBOOK_DETECT, { dir })).installed; } catch (_) {}
   const base = installed
     ? 'Storybook is already set up in this project'
     : 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
@@ -6796,20 +6797,20 @@ document.getElementById('sb-framework')?.addEventListener('keydown', e => e.stop
 })();
 
 // ── Storybook instance bar ──
-document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke('storybook-open-switcher'));
+document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_OPEN_SWITCHER));
 document.getElementById('sb-bar-new')?.addEventListener('click', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
-document.getElementById('sb-bar-reload')?.addEventListener('click', () => ipcRenderer.invoke('storybook-reload'));
+document.getElementById('sb-bar-reload')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_RELOAD));
 document.getElementById('sb-bar-kebab')?.addEventListener('click', (e) => {
   const r = e.currentTarget.getBoundingClientRect();
-  ipcRenderer.send('show-sb-bar-menu', { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
+  ipcRenderer.send(IPC.SHOW_SB_BAR_MENU, { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
 });
-ipcRenderer.on('sb-bar-menu-action', (_, action) => {
-  if (action === 'external') ipcRenderer.invoke('storybook-open-external', {});
-  else if (action === 'stop') ipcRenderer.invoke('storybook-server-stop', { id: sbActiveId });
+ipcRenderer.on(IPC.SB_BAR_MENU_ACTION, (_, action) => {
+  if (action === 'external') ipcRenderer.invoke(IPC.STORYBOOK_OPEN_EXTERNAL, {});
+  else if (action === 'stop') ipcRenderer.invoke(IPC.STORYBOOK_SERVER_STOP, { id: sbActiveId });
 });
 document.getElementById('sb-back')?.addEventListener('click', () => { sbSetupOpen = false; renderSbTab(); });
 
-ipcRenderer.on('storybook-instances', (_, { instances, activeId } = {}) => {
+ipcRenderer.on(IPC.STORYBOOK_INSTANCES, (_, { instances, activeId } = {}) => {
   sbInstances = instances || [];
   sbActiveId  = activeId;
   const active = sbInstances.find(i => i.active);
@@ -6820,7 +6821,7 @@ ipcRenderer.on('storybook-instances', (_, { instances, activeId } = {}) => {
   renderSbTab();
   updateComponentPickerBtn?.();
 });
-ipcRenderer.on('storybook-show-setup', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
+ipcRenderer.on(IPC.STORYBOOK_SHOW_SETUP, () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
 
 // ── Storybook component picker panel (left column) ───────────────
 // Ported from the old separate component-picker window. The renderer already
@@ -6932,11 +6933,11 @@ let openComponentPanel = null;
   }
 
   viewBtns.forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-  selectNewBtn.addEventListener('click', () => { pickMode = 'component'; ipcRenderer.send('pick-component'); });
+  selectNewBtn.addEventListener('click', () => { pickMode = 'component'; ipcRenderer.send(IPC.PICK_COMPONENT); });
   searchIn.addEventListener('input', () => renderList(searchIn.value));
   searchIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = listEl.querySelector('.comp-item'); if (first) first.click(); } });
-  locLink.addEventListener('mouseenter', () => { if (target && target.selector) ipcRenderer.send('cp-highlight-target', { selector: target.selector }); });
-  locLink.addEventListener('mouseleave', () => ipcRenderer.send('cp-clear-target-highlight'));
+  locLink.addEventListener('mouseenter', () => { if (target && target.selector) ipcRenderer.send(IPC.CP_HIGHLIGHT_TARGET, { selector: target.selector }); });
+  locLink.addEventListener('mouseleave', () => ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT));
 
   async function doInsert() {
     if (!selected) return;
@@ -6961,7 +6962,7 @@ let openComponentPanel = null;
     close();
   }
   function close() {
-    ipcRenderer.send('cp-clear-target-highlight');
+    ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT);
     if (io) { io.disconnect(); io = null; }
     panel.hidden = true;
     listEl.innerHTML = ''; instr.value = ''; searchIn.value = '';
@@ -7018,7 +7019,7 @@ let openComponentPanel = null;
       // 'pick-cancel' dispatches Escape into the page so the click-capture
       // overlay actually tears down (sending 'pick-cancelled' did nothing —
       // that's a main→renderer event with no ipcMain handler).
-      ipcRenderer.send('pick-cancel');
+      ipcRenderer.send(IPC.PICK_CANCEL);
       pickActive = false;
       clearPickMode();
       return;
@@ -7026,12 +7027,12 @@ let openComponentPanel = null;
     pickActive = true;
     pickMode = 'component';   // lets the global Escape handler cancel this mode too
     btn.classList.add('active');
-    ipcRenderer.send('pick-component');
+    ipcRenderer.send(IPC.PICK_COMPONENT);
   });
 
-  ipcRenderer.on('pick-cancelled', () => { pickActive = false; });
+  ipcRenderer.on(IPC.PICK_CANCELLED, () => { pickActive = false; });
 
-  ipcRenderer.on('pick-component-result', (_, target) => {
+  ipcRenderer.on(IPC.PICK_COMPONENT_RESULT, (_, target) => {
     pickActive = false;
     if (openComponentPanel && sbConfig) openComponentPanel(target, sbConfig.value);
   });
@@ -7098,9 +7099,9 @@ let openOnboarding = null;
   }
 
   async function detect(step) {
-    if (step.detect === 'wsl')  return ipcRenderer.invoke('check-wsl');
-    if (step.detect === 'auth') return ipcRenderer.invoke('check-claude-auth');
-    return ipcRenderer.invoke('check-model', { command: step.detect });
+    if (step.detect === 'wsl')  return ipcRenderer.invoke(IPC.CHECK_WSL);
+    if (step.detect === 'auth') return ipcRenderer.invoke(IPC.CHECK_CLAUDE_AUTH);
+    return ipcRenderer.invoke(IPC.CHECK_MODEL, { command: step.detect });
   }
 
   async function recheck(step) {
@@ -7117,14 +7118,14 @@ let openOnboarding = null;
     e.installBtn.disabled = true;
     e.log.classList.add('visible');
     e.log.textContent = '$ ' + step.cmd + '\n\n';
-    ipcRenderer.send('onboarding-run', { id: step.id, command: step.cmd });
+    ipcRenderer.send(IPC.ONBOARDING_RUN, { id: step.id, command: step.cmd });
   }
 
-  ipcRenderer.on('onboarding-output', (_, { id, data }) => {
+  ipcRenderer.on(IPC.ONBOARDING_OUTPUT, (_, { id, data }) => {
     const e = els[id];
     if (e) { e.log.textContent += data; e.log.scrollTop = e.log.scrollHeight; }
   });
-  ipcRenderer.on('onboarding-done', (_, { id, code }) => {
+  ipcRenderer.on(IPC.ONBOARDING_DONE, (_, { id, code }) => {
     const e = els[id];
     if (e) e.log.textContent += `\n[finished · exit ${code}]\n`;
     const step = ONB_STEPS.find(s => s.id === id) || ONB_STEPS_OPT.find(s => s.id === id);
@@ -7292,7 +7293,7 @@ let openOnboarding = null;
   function close() {
     clearLocate();
     modal.classList.remove('open');
-    ipcRenderer.send('onboarding-cancel');
+    ipcRenderer.send(IPC.ONBOARDING_CANCEL);
     localStorage.setItem(LS.onboarded, '1');
   }
   document.getElementById('onb-close').addEventListener('click', close);
@@ -7403,7 +7404,7 @@ let openOnboarding = null;
     markActive(el);
     openRel = rel; openName = name; openMtime = 0;
     pathEl.textContent = rel;
-    const res = await ipcRenderer.invoke('code-read', { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel });
     if (!res || res.error)  { openRel = null; return showMessage(rel, res?.error || 'Could not open file'); }
     if (res.tooLarge)       { openRel = null; return showMessage(rel, 'File too large to preview (over 2 MB)'); }
     if (res.binary)         { openRel = null; return showMessage(rel, 'Binary file — preview unavailable'); }
@@ -7425,7 +7426,7 @@ let openOnboarding = null;
   async function reloadOpenFile() {
     if (!openRel || !editor || !monaco) return;
     const rel = openRel;
-    const res = await ipcRenderer.invoke('code-read', { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel });
     if (rel !== openRel) return;   // user switched files mid-read
     if (!res || res.error) { showMessage(rel, res?.error || 'File no longer available'); openRel = null; return; }
     if (res.binary || res.tooLarge) return;
@@ -7441,7 +7442,7 @@ let openOnboarding = null;
   }
 
   async function buildLevel(parentEl, rel, depth) {
-    const res = await ipcRenderer.invoke('code-list', { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_LIST, { rel });
     const entries = (res && res.entries) || [];
     for (const entry of entries) {
       const childRel = rel ? rel + '/' + entry.name : entry.name;
@@ -7497,7 +7498,7 @@ let openOnboarding = null;
       const dirs = ['', ...expanded];
       const relAtPoll = openRel;   // snapshot: the user can switch files during the await
       const paths = relAtPoll ? [...dirs, relAtPoll] : dirs;
-      const res = await ipcRenderer.invoke('code-poll', { paths });
+      const res = await ipcRenderer.invoke(IPC.CODE_POLL, { paths });
       if (!res) return;
       // Open file: content edits bump the file's own mtime. Only act if the
       // open file is still the one this poll asked about.
@@ -7523,10 +7524,10 @@ let openOnboarding = null;
   function stopPoll()  { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
   async function refresh() {
-    projectDir = (await ipcRenderer.invoke('get-project-dir')) || '';
+    projectDir = (await ipcRenderer.invoke(IPC.GET_PROJECT_DIR)) || '';
     if (!projectDir) {
       const saved = localStorage.getItem(LS.projectDir);
-      if (saved) { ipcRenderer.send('set-project-dir', { dir: saved }); projectDir = saved; }
+      if (saved) { ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: saved }); projectDir = saved; }
     }
     if (!projectDir) { stopPoll(); emptyEl.style.display = 'flex'; mainEl.style.display = 'none'; return; }
     emptyEl.style.display = 'none';
@@ -7541,7 +7542,7 @@ let openOnboarding = null;
   }
 
   async function pickFolder() {
-    const dir = await ipcRenderer.invoke('pick-project-dir');
+    const dir = await ipcRenderer.invoke(IPC.PICK_PROJECT_DIR);
     if (dir) { localStorage.setItem(LS.projectDir, dir); await refresh(); }
   }
 
@@ -7558,5 +7559,5 @@ let openOnboarding = null;
 
 // ── Ready ─────────────────────────────────────────────────────────
 const _savedApiKey = secureGet(LS.apiKey);
-if (_savedApiKey) ipcRenderer.send('set-api-key', _savedApiKey);
-ipcRenderer.send('renderer-ready');
+if (_savedApiKey) ipcRenderer.send(IPC.SET_API_KEY, _savedApiKey);
+ipcRenderer.send(IPC.RENDERER_READY);

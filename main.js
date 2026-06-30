@@ -1,4 +1,5 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeImage, nativeTheme, dialog, safeStorage, clipboard, net, shell } = require('electron');
+const { IPC } = require('./src/ipc-channels');
 // Windows/Linux use custom HTML window chrome → no menu. macOS needs the standard
 // app/edit/window menus or Cmd+Q/C/V/X/A/W and the like won't work at all.
 if (process.platform === 'darwin') {
@@ -162,7 +163,7 @@ const TOOL_KEYS = new Set(require('./src/tools').TOOLS.map(t => t.key));
 // Toolbar tools mirrored into the browser context menu. The renderer registers
 // them (label, accelerator, key, rasterized icon) once the toolbar is built.
 let browserTools = [];
-ipcMain.on('register-browser-tools', (_, tools) => { browserTools = Array.isArray(tools) ? tools : []; });
+ipcMain.on(IPC.REGISTER_BROWSER_TOOLS, (_, tools) => { browserTools = Array.isArray(tools) ? tools : []; });
 function attachShortcutHandler(wc, { tabOnly = false } = {}) {
   wc.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
@@ -173,7 +174,7 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
     if (ctrl && input.shift && !input.alt) {
       if (input.key === 'ArrowLeft' || input.key === 'ArrowRight') {
         event.preventDefault();
-        mainWindow.webContents.send('shortcut-action', {
+        mainWindow.webContents.send(IPC.SHORTCUT_ACTION, {
           type: 'tab-switch',
           dir: input.key === 'ArrowLeft' ? -1 : 1,
         });
@@ -183,14 +184,14 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
 
     // Escape — cancel active tool (all views)
     if (!ctrl && !input.shift && !input.alt && input.key === 'Escape') {
-      mainWindow.webContents.send('shortcut-action', { type: 'escape' });
+      mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'escape' });
       return;
     }
 
     // Ctrl/Cmd+\ — toggle terminal/browser divider
     if (ctrl && !input.shift && !input.alt && input.key === '\\') {
       event.preventDefault();
-      mainWindow.webContents.send('shortcut-action', { type: 'panel-toggle' });
+      mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'panel-toggle' });
       return;
     }
 
@@ -202,7 +203,7 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
       const key = input.code.slice(3).toLowerCase();
       if (TOOL_KEYS.has(key)) {
         event.preventDefault();
-        mainWindow.webContents.send('shortcut-action', { type: 'tool', key });
+        mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'tool', key });
       }
     }
   });
@@ -245,7 +246,7 @@ function pushEntry(entry) {
   entry.ts = Date.now();
   consoleLog.push(entry);
   if (consoleLog.length > CONSOLE_CAP) consoleLog.shift();
-  uiSend('console-entry', entry);
+  uiSend(IPC.CONSOLE_ENTRY, entry);
 }
 function normLevel(level) {
   if (typeof level === 'string') {
@@ -282,8 +283,8 @@ function attachConsoleCapture() {
     });
   } catch (_) {}
 }
-ipcMain.handle('console-get', () => consoleLog);
-ipcMain.on('console-clear', () => { consoleLog = []; });
+ipcMain.handle(IPC.CONSOLE_GET, () => consoleLog);
+ipcMain.on(IPC.CONSOLE_CLEAR, () => { consoleLog = []; });
 
 // ── System performance sampler (CPU / RAM / GPU) ──────────────────
 // Pushes {cpu,ram,gpu} percentages to the renderer's perf graph every 2s.
@@ -311,7 +312,7 @@ function startSysPerf() {
   if (_sysPerfTimer) return;
   platform.startGpuSampler();
   _sysPerfTimer = setInterval(() => {
-    uiSend('sysperf', { cpu: cpuPercent(), ram: ramPercent(), gpu: platform.gpuPercent() });
+    uiSend(IPC.SYSPERF, { cpu: cpuPercent(), ram: ramPercent(), gpu: platform.gpuPercent() });
   }, 2000);
 }
 function stopSysPerf() {
@@ -322,14 +323,14 @@ function stopSysPerf() {
 }
 // Renderer drives this by the sysperf panel's visibility — no point sampling
 // CPU/RAM/GPU every 2 s (and rebuilding the bars) while the panel is closed.
-ipcMain.on('sysperf-active', (_, on) => { on ? startSysPerf() : stopSysPerf(); });
+ipcMain.on(IPC.SYSPERF_ACTIVE, (_, on) => { on ? startSysPerf() : stopSysPerf(); });
 
 // Top processes by memory or CPU, grouped by name and summed so multi-process
 // apps (Chrome, Code…) read as one entry — like Task Manager. On-demand (the
 // renderer polls only while a process-breakdown view is open).
 //   by='cpu' → instantaneous % from perf counters, normalized by logical cores.
 //   else     → working-set bytes via Get-Process.
-ipcMain.handle('top-procs', (_, by) => platform.topProcs(by));
+ipcMain.handle(IPC.TOP_PROCS, (_, by) => platform.topProcs(by));
 
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
@@ -361,7 +362,7 @@ function createWindow() {
   });
 
   // Keep the custom maximize/restore icon in sync with the real window state.
-  const sendMaxState = () => uiSend('window-maximized-state', mainWindow.isMaximized());
+  const sendMaxState = () => uiSend(IPC.WINDOW_MAXIMIZED_STATE, mainWindow.isMaximized());
   mainWindow.on('maximize', sendMaxState);
   mainWindow.on('unmaximize', sendMaxState);
 
@@ -391,7 +392,7 @@ function createWindow() {
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();
     saveLastURL(url);
-    mainWindow.webContents.send('browser-url-changed', url);
+    mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, url);
     // Reconnect embedded DevTools after full navigation (WebSocket target URL may change)
     if (devToolsView) {
       browserView.webContents.once('did-finish-load', () => reconnectDevTools());
@@ -399,10 +400,10 @@ function createWindow() {
   });
   browserView.webContents.on('did-navigate-in-page', (_, url) => {
     saveLastURL(url);
-    mainWindow.webContents.send('browser-url-changed', url);
+    mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, url);
   });
   browserView.webContents.on('page-title-updated', (_, title) => {
-    mainWindow.webContents.send('tab-title-updated', title);
+    mainWindow.webContents.send(IPC.TAB_TITLE_UPDATED, title);
   });
 
   // Intercept window.open() — deny OS window, open inside app as WebContentsViews
@@ -424,7 +425,7 @@ function createWindow() {
           accelerator: t.accel,
           registerAccelerator: false,            // display only — Alt+<key> already handles it
           icon: t.icon ? nativeImage.createFromDataURL(t.icon) : undefined,
-          click: () => mainWindow.webContents.send('shortcut-action', { type: 'tool', key: t.key }),
+          click: () => mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'tool', key: t.key }),
         });
       }
       tpl.push({ type: 'separator' });
@@ -537,7 +538,7 @@ function openInlinePopup(url) {
   popupBarView.setBounds({ x: b.x, y: b.y, width: b.width, height: POPUP_BAR_HEIGHT });
   popupBarView.webContents.loadFile(path.join(__dirname, 'src', 'popup-bar.html'));
   popupBarView.webContents.once('did-finish-load', () => {
-    popupBarView.webContents.send('popup-url', url);
+    popupBarView.webContents.send(IPC.POPUP_URL, url);
   });
   mainWindow.contentView.addChildView(popupBarView);
 
@@ -550,7 +551,7 @@ function openInlinePopup(url) {
   popupContentView.webContents.on('did-navigate', (_, u) => {
     // Update header URL
     if (popupBarView && !popupBarView.webContents.isDestroyed()) {
-      popupBarView.webContents.send('popup-url', u);
+      popupBarView.webContents.send(IPC.POPUP_URL, u);
     }
     // Detect auth completion: popup landed back on the same root domain as the main browser.
     // Promote it — load in the main browser and close the popup.
@@ -558,7 +559,7 @@ function openInlinePopup(url) {
       const popupRoot = rootDomain(new URL(u).hostname);
       if (mainRoot && popupRoot === mainRoot) {
         browserView.webContents.loadURL(u).catch(() => {});
-        mainWindow.webContents.send('browser-url-changed', u);
+        mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, u);
         closeInlinePopup();
       }
     } catch (_) {}
@@ -589,7 +590,7 @@ function repositionInlinePopup() {
   if (popupContentView) popupContentView.setBounds({ x: b.x, y: b.y + POPUP_BAR_HEIGHT, width: b.width, height: b.height - POPUP_BAR_HEIGHT });
 }
 
-ipcMain.on('close-inline-popup', () => closeInlinePopup());
+ipcMain.on(IPC.CLOSE_INLINE_POPUP, () => closeInlinePopup());
 
 // ── Right panel views (Figma, Storybook, custom URL) ─────────────
 // A panel WebContentsView (Figma / Storybook / custom URL): isolated context,
@@ -710,7 +711,7 @@ function broadcastLayout() {
   const [winW] = mainWindow.getContentSize();
   const frac   = splitFraction;
   const leftW  = Math.max(280, Math.round((winW - devToolsWidth - 4) * frac));
-  mainWindow.webContents.send('devtools-layout', { leftPanelWidth: leftW, devToolsWidth });
+  mainWindow.webContents.send(IPC.DEVTOOLS_LAYOUT, { leftPanelWidth: leftW, devToolsWidth });
 }
 
 function animateDevTools(open) {
@@ -805,11 +806,11 @@ function destroyStorybookView() {
   repositionRightPanelView();
 }
 
-ipcMain.on('storybook-load-url', (_, url) => {
+ipcMain.on(IPC.STORYBOOK_LOAD_URL, (_, url) => {
   createStorybookView(url);
 });
 
-ipcMain.on('storybook-disconnect', () => {
+ipcMain.on(IPC.STORYBOOK_DISCONNECT, () => {
   destroyStorybookView();
 });
 
@@ -827,7 +828,7 @@ function sbLabel(dir) { return !dir ? '' : (dir === SB_DEMO_DIR ? 'Demo' : (path
 function sbSerialize() {
   return [...sbServers.values()].map(s => ({ id: s.id, port: s.port, url: s.url, label: s.label, status: s.status, managed: s.managed, active: s.id === activeSbId }));
 }
-function emitInstances() { uiSend('storybook-instances', { instances: sbSerialize(), activeId: activeSbId }); }
+function emitInstances() { uiSend(IPC.STORYBOOK_INSTANCES, { instances: sbSerialize(), activeId: activeSbId }); }
 function setActiveStorybook(id) {
   const inst = sbServers.get(id);
   if (!inst) return;
@@ -876,7 +877,7 @@ function reapOrphanStorybook() {
   clearSbState();
 }
 
-function sbStatus(state, extra = {}) { uiSend('storybook-server-status', { state, ...extra }); }
+function sbStatus(state, extra = {}) { uiSend(IPC.STORYBOOK_SERVER_STATUS, { state, ...extra }); }
 
 function pollInstanceReady(inst, tries = 150) {
   return new Promise((resolve) => {
@@ -944,12 +945,12 @@ function ensurePreviewHead(projectDir) {
   catch (err) { console.error('[storybook] preview-head write failed', err.message); }
 }
 
-ipcMain.handle('storybook-detect', (_, { dir } = {}) => {
+ipcMain.handle(IPC.STORYBOOK_DETECT, (_, { dir } = {}) => {
   const projectDir = sbResolveDir(dir);
   return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === SB_DEMO_DIR };
 });
 
-ipcMain.handle('storybook-server-start', async (_, { dir, port } = {}) => {
+ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   const projectDir = sbResolveDir(dir);
   for (const s of sbServers.values()) { if (s.dir === projectDir) { setActiveStorybook(s.id); return { ok: true, url: s.url, already: true }; } }   // already running this dir
   if (!sbHasStorybook(projectDir)) {
@@ -994,10 +995,10 @@ ipcMain.handle('storybook-server-start', async (_, { dir, port } = {}) => {
   return { ok: true, url };
 });
 
-ipcMain.handle('storybook-server-stop', (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
-ipcMain.handle('storybook-list',          () => ({ instances: sbSerialize(), activeId: activeSbId }));
-ipcMain.handle('storybook-reload',        () => { if (storybookView && !storybookView.webContents.isDestroyed()) storybookView.webContents.reload(); return { ok: true }; });
-ipcMain.handle('storybook-open-external', (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url); return { ok: true }; });
+ipcMain.handle(IPC.STORYBOOK_SERVER_STOP, (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
+ipcMain.handle(IPC.STORYBOOK_LIST,          () => ({ instances: sbSerialize(), activeId: activeSbId }));
+ipcMain.handle(IPC.STORYBOOK_RELOAD,        () => { if (storybookView && !storybookView.webContents.isDestroyed()) storybookView.webContents.reload(); return { ok: true }; });
+ipcMain.handle(IPC.STORYBOOK_OPEN_EXTERNAL, (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url); return { ok: true }; });
 
 // Detect Storybooks the app didn't start (scan common ports), then adopt one.
 function scanPorts(known) {
@@ -1016,23 +1017,23 @@ function adoptPort(port) {
   setActiveStorybook(id);
   return inst;
 }
-ipcMain.handle('storybook-scan',  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
-ipcMain.handle('storybook-adopt', (_, { port } = {}) => { const i = adoptPort(port); return { ok: true, id: i.id, url: i.url }; });
+ipcMain.handle(IPC.STORYBOOK_SCAN,  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
+ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port } = {}) => { const i = adoptPort(port); return { ok: true, id: i.id, url: i.url }; });
 
 // Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
-ipcMain.handle('storybook-open-switcher', async () => {
+ipcMain.handle(IPC.STORYBOOK_OPEN_SWITCHER, async () => {
   const items = [...sbServers.values()].map(s => ({
     label: `${s.label}  ·  :${s.port}${s.managed ? '' : '  (external)'}`,
     type: 'checkbox', checked: s.id === activeSbId, click: () => setActiveStorybook(s.id),
   }));
   if (items.length) items.push({ type: 'separator' });
-  items.push({ label: 'New Storybook…', click: () => uiSend('storybook-show-setup') });
+  items.push({ label: 'New Storybook…', click: () => uiSend(IPC.STORYBOOK_SHOW_SETUP) });
   Menu.buildFromTemplate(items).popup({ window: mainWindow });
   return { ok: true };
 });
 
 // Setup panel shown over the view (add/manage) → suppress the native view while open.
-ipcMain.on('storybook-setup-open', (_, open) => { sbSetupOpen = !!open; repositionRightPanelView(); });
+ipcMain.on(IPC.STORYBOOK_SETUP_OPEN, (_, open) => { sbSetupOpen = !!open; repositionRightPanelView(); });
 
 app.on('before-quit', stopAllStorybook);
 
@@ -1064,7 +1065,7 @@ function stripBlock(text) {
   return out.replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\n+$/, '') + (out.trim() ? '\n' : '');
 }
 
-ipcMain.handle('storybook-write-memory', (_, { url } = {}) => {
+ipcMain.handle(IPC.STORYBOOK_WRITE_MEMORY, (_, { url } = {}) => {
   const dir = sessionCwd();
   const written = [];
   for (const name of MEMORY_FILES) {
@@ -1083,7 +1084,7 @@ ipcMain.handle('storybook-write-memory', (_, { url } = {}) => {
   return { ok: true, dir, written };
 });
 
-ipcMain.handle('storybook-clear-memory', () => {
+ipcMain.handle(IPC.STORYBOOK_CLEAR_MEMORY, () => {
   const dir = sessionCwd();
   for (const name of MEMORY_FILES) {
     const fp = path.join(dir, name);
@@ -1103,19 +1104,19 @@ ipcMain.handle('storybook-clear-memory', () => {
 
 // Single source of truth: when any HTML modal is open, push EVERY native
 // WebContentsView offscreen so the modal (which is HTML) is never occluded.
-ipcMain.on('modal-overlay', (_, { open } = {}) => {
+ipcMain.on(IPC.MODAL_OVERLAY, (_, { open } = {}) => {
   modalOpen = open;
   repositionAll();
 });
 
-ipcMain.on('right-panel-mode', (_, mode) => {
+ipcMain.on(IPC.RIGHT_PANEL_MODE, (_, mode) => {
   rightPanelMode = mode;
   if (mode === 'figma' && !figmaView) createFigmaView();
   if (mode.startsWith('url:')) ensureCustomView(mode.slice(4));
   repositionAll();
 });
 
-ipcMain.on('destroy-custom-view', (_, url) => destroyCustomView(url));
+ipcMain.on(IPC.DESTROY_CUSTOM_VIEW, (_, url) => destroyCustomView(url));
 
 function repositionBrowserView(overrideFraction) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1128,7 +1129,7 @@ function repositionBrowserView(overrideFraction) {
   // single-pane chat → the chat fills the main area; hide the browser entirely.
   if (modalOpen || rightPanelMode !== 'project' || browserEmpty || singlePane === 'chat') {
     browserView.setBounds(OFFSCREEN_BOUNDS);
-    uiSend('device-view-bounds', null);   // hide the resize handles
+    uiSend(IPC.DEVICE_VIEW_BOUNDS, null);   // hide the resize handles
     return;
   }
   const [winW, winH] = mainWindow.getContentSize();
@@ -1155,12 +1156,12 @@ function repositionBrowserView(overrideFraction) {
     const x = rightX + Math.round((panelW - w) / 2);   // centered horizontally
     const y = panelY;                                  // top-anchored (8px inset)
     browserView.setBounds({ x, y, width: w, height: h });
-    uiSend('device-view-bounds', { x, y, width: w, height: h, panelW, panelH, panelX: rightX, panelY });
+    uiSend(IPC.DEVICE_VIEW_BOUNDS, { x, y, width: w, height: h, panelW, panelH, panelX: rightX, panelY });
     return;
   }
   // No emulation → fill the panel, no handles
   browserView.setBounds({ x: rightX, y: panelY, width: panelW, height: panelH });
-  uiSend('device-view-bounds', null);
+  uiSend(IPC.DEVICE_VIEW_BOUNDS, null);
 }
 
 // ── Project folder ────────────────────────────────────────────────
@@ -1169,7 +1170,7 @@ function repositionBrowserView(overrideFraction) {
 let currentProjectDir = '';
 function homeDir() { return platform.homeDir(); }
 function sessionCwd() { return currentProjectDir || homeDir(); }
-ipcMain.on('set-project-dir', (_, { dir } = {}) => { currentProjectDir = dir || ''; });
+ipcMain.on(IPC.SET_PROJECT_DIR, (_, { dir } = {}) => { currentProjectDir = dir || ''; });
 
 // ── Agent runtime environment (WSL vs Windows vs native) ──────────
 // Most tools (claude/aider/llm) run in WSL on Windows. Gemini/Codex may be
@@ -1211,37 +1212,37 @@ async function spawnPty(id, command = 'claude') {
       });
     }
     proc.onData(data => {
-      uiSend('pty-output', { id, data });
+      uiSend(IPC.PTY_OUTPUT, { id, data });
     });
     proc.onExit(() => {
       // Guard: a restart may have already replaced this id with a new proc —
       // a stale exit must not clobber the new entry (or print into its term).
       if (ptyProcesses[id] !== proc) return;
-      uiSend('pty-output', { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
+      uiSend(IPC.PTY_OUTPUT, { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
       delete ptyProcesses[id];
     });
     ptyProcesses[id] = proc;
   } catch (err) {
-    uiSend('pty-output', { id, data: `\r\n\x1b[31m[Error starting session: ${err.message}]\x1b[0m\r\n` });
+    uiSend(IPC.PTY_OUTPUT, { id, data: `\r\n\x1b[31m[Error starting session: ${err.message}]\x1b[0m\r\n` });
   }
 }
 
 // ── IPC: terminal ─────────────────────────────────────────────────
-ipcMain.on('pty-input',   (_, { id, data })       => { const p = ptyProcesses[id]; if (p) { try { p.write(data); } catch (_) {} } });
+ipcMain.on(IPC.PTY_INPUT,   (_, { id, data })       => { const p = ptyProcesses[id]; if (p) { try { p.write(data); } catch (_) {} } });
 // node-pty throws synchronously if the pty has already exited (e.g. a refit fires
 // after the process ended) — swallow it so it doesn't crash the main process.
-ipcMain.on('pty-resize',  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
-ipcMain.on('pty-spawn',   (_, { id, command })     => spawnPty(id, command));
-ipcMain.on('pty-kill',    (_, { id })              => {
+ipcMain.on(IPC.PTY_RESIZE,  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
+ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => spawnPty(id, command));
+ipcMain.on(IPC.PTY_KILL,    (_, { id })              => {
   killPty(id);
 });
-ipcMain.on('pty-restart', (_, { id, command })     => {
+ipcMain.on(IPC.PTY_RESTART, (_, { id, command })     => {
   killPty(id);
   spawnPty(id, command || ptyCommands[id] || 'claude');
 });
-ipcMain.on('set-active-pty', (_, { id } = {}) => { activePtyId = id; });
+ipcMain.on(IPC.SET_ACTIVE_PTY, (_, { id } = {}) => { activePtyId = id; });
 
-ipcMain.handle('check-model', (_, { command } = {}) => {
+ipcMain.handle(IPC.CHECK_MODEL, (_, { command } = {}) => {
   return new Promise(resolve => {
     try {
       const safe = command.replace(/[^a-zA-Z0-9\-_.]/g, '');
@@ -1255,9 +1256,9 @@ ipcMain.handle('check-model', (_, { command } = {}) => {
 
 // ── Onboarding: detection + streaming install runner ──────────────
 // check-wsl → "is the *nix environment reachable?" (always true on macOS/Linux)
-ipcMain.handle('check-wsl', () => platform.checkNixEnv());
+ipcMain.handle(IPC.CHECK_WSL, () => platform.checkNixEnv());
 
-ipcMain.handle('check-claude-auth', () => new Promise(resolve => {
+ipcMain.handle(IPC.CHECK_CLAUDE_AUTH, () => new Promise(resolve => {
   try {
     const p = platform.nixSpawn(['bash', '-lic', 'test -f ~/.claude/.credentials.json && echo yes']);
     let out = '';
@@ -1269,7 +1270,7 @@ ipcMain.handle('check-claude-auth', () => new Promise(resolve => {
 }));
 
 let onboardingProc = null;
-ipcMain.on('onboarding-run', (_, { id, command } = {}) => {
+ipcMain.on(IPC.ONBOARDING_RUN, (_, { id, command } = {}) => {
   const send = uiSend;
   if (!validRunCommand(command)) { send('onboarding-done', { id, code: 1 }); return; }
   safeKill(onboardingProc);
@@ -1294,10 +1295,10 @@ ipcMain.on('onboarding-run', (_, { id, command } = {}) => {
     send('onboarding-done', { id, code: 1 });
   }
 });
-ipcMain.on('onboarding-cancel', () => { safeKill(onboardingProc); onboardingProc = null; });
+ipcMain.on(IPC.ONBOARDING_CANCEL, () => { safeKill(onboardingProc); onboardingProc = null; });
 
 // ── Profile installer (streams output back to the modal) ──────────
-ipcMain.on('profile-install', (_, { installId, command } = {}) => {
+ipcMain.on(IPC.PROFILE_INSTALL, (_, { installId, command } = {}) => {
   const send = uiSend;
   if (!validRunCommand(command)) { send('profile-install-error', { installId, message: 'Invalid install command.' }); return; }
   try {
@@ -1369,17 +1370,17 @@ async function ensureClaudeAdapter(id) {
     else needInstall = true;   // missing OR wrong version → (re)install pinned
   }
   if (!needInstall) return true;
-  uiSend('acp-installing', { id });
+  uiSend(IPC.ACP_INSTALLING, { id });
   const ok = await new Promise(resolve => {
     // Windows: `cmd.exe /c npm` — never spawn `npm.cmd` directly (EINVAL). POSIX: npm native.
     const inst = platform.cmdSpawn(['/c', 'npm', 'install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
       { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-    inst.stdout.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
-    inst.stderr.on('data', d => uiSend('acp-install-progress', { id, text: d.toString() }));
+    inst.stdout.on('data', d => uiSend(IPC.ACP_INSTALL_PROGRESS, { id, text: d.toString() }));
+    inst.stderr.on('data', d => uiSend(IPC.ACP_INSTALL_PROGRESS, { id, text: d.toString() }));
     inst.on('close', code => resolve(code === 0));
     inst.on('error', () => resolve(false));
   });
-  if (!ok) { uiSend('acp-error', { id, message: `Failed to install the adapter. Run: npm install -g ${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}` }); return false; }
+  if (!ok) { uiSend(IPC.ACP_ERROR, { id, message: `Failed to install the adapter. Run: npm install -g ${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}` }); return false; }
   _acpAdapterVerified = true;
   return true;
 }
@@ -1443,7 +1444,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   try {
     ({ proc, version: acpVersion, model: acpModel } = await cfg.launch(modelOverride));
   } catch (err) {
-    uiSend('acp-error', { id, message: `Failed to start ${ACP_LABELS[agentKey] || agentKey}: ${(err && err.message) || err}` });
+    uiSend(IPC.ACP_ERROR, { id, message: `Failed to start ${ACP_LABELS[agentKey] || agentKey}: ${(err && err.message) || err}` });
     return;
   }
   const acpCwd = sessionCwd();
@@ -1462,12 +1463,12 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     if (connected || errorSent) return; // normal exit after use — already handled via conn.closed
     const detail = stderrBuf.trim().split('\n').slice(-3).join(' | ') || `exit ${code ?? signal}`;
     console.error('[acp] early exit:', detail);
-    uiSend('acp-error', { id, message: `Adapter exited before connecting: ${detail}` });
+    uiSend(IPC.ACP_ERROR, { id, message: `Adapter exited before connecting: ${detail}` });
   });
 
   proc.on('error', err => {
     console.error('[acp] proc error:', err);
-    uiSend('acp-error', { id, message: err.message });
+    uiSend(IPC.ACP_ERROR, { id, message: err.message });
   });
 
   const send = uiSend;
@@ -1556,32 +1557,32 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   }
 }
 
-ipcMain.on('acp-spawn', (_, { id, model, agent } = {}) => {
+ipcMain.on(IPC.ACP_SPAWN, (_, { id, model, agent } = {}) => {
   spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
     console.error('[acp] spawn error:', err);
-    uiSend('acp-error', { id, message: err.message });
+    uiSend(IPC.ACP_ERROR, { id, message: err.message });
   });
 });
 
-ipcMain.on('acp-prompt', async (_, { id, text } = {}) => {
+ipcMain.on(IPC.ACP_PROMPT, async (_, { id, text } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   try {
     await s.conn.prompt({ sessionId: s.sessionId, prompt: [{ type: 'text', text }] });
-    uiSend('acp-done', { id });
+    uiSend(IPC.ACP_DONE, { id });
   } catch (err) {
     console.error('[acp] prompt error:', err);
-    uiSend('acp-error', { id, message: err.message });
+    uiSend(IPC.ACP_ERROR, { id, message: err.message });
   }
 });
 
-ipcMain.on('acp-cancel', async (_, { id } = {}) => {
+ipcMain.on(IPC.ACP_CANCEL, async (_, { id } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   try { await s.conn.cancel({ sessionId: s.sessionId }); } catch (_) {}
 });
 
-ipcMain.on('acp-kill', (_, { id } = {}) => {
+ipcMain.on(IPC.ACP_KILL, (_, { id } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   safeKill(s.proc);
@@ -1723,7 +1724,7 @@ async function computeUsage(file) {
   };
 }
 
-ipcMain.handle('get-usage', async (_, { cwd } = {}) => {
+ipcMain.handle(IPC.GET_USAGE, async (_, { cwd } = {}) => {
   try {
     // Reuse the cached transcript path; rescan the projects tree at most every
     // USAGE_RELOCATE_MS (catches a new session's transcript appearing).
@@ -1767,7 +1768,7 @@ function httpsGetJson(host, reqPath, headers) {
 }
 
 // Live subscription rate-limit usage — same data Claude Code's /usage shows
-ipcMain.handle('get-rate-limits', async () => {
+ipcMain.handle(IPC.GET_RATE_LIMITS, async () => {
   const tok = await claudeOauthToken();
   if (!tok) return { ok: false, reason: 'no-token' };
   try {
@@ -1794,7 +1795,7 @@ ipcMain.handle('get-rate-limits', async () => {
 });
 
 // ── IPC: browser ──────────────────────────────────────────────────
-ipcMain.on('browser-navigate', (_, url) => {
+ipcMain.on(IPC.BROWSER_NAVIGATE, (_, url) => {
   let target = (url || '').trim();
   // about:blank must not be scheme-prefixed into "https://about:blank"
   if (!target || target === 'about:blank') {
@@ -1807,12 +1808,12 @@ ipcMain.on('browser-navigate', (_, url) => {
   }
   browserView.webContents.loadURL(target).catch(() => {});
 });
-ipcMain.on('set-browser-empty', (_, empty) => {
+ipcMain.on(IPC.SET_BROWSER_EMPTY, (_, empty) => {
   browserEmpty = !!empty;
   repositionBrowserView();
 });
-ipcMain.on('browser-reload', () => browserView.webContents.reloadIgnoringCache());
-ipcMain.on('browser-toggle-devtools', () => {
+ipcMain.on(IPC.BROWSER_RELOAD, () => browserView.webContents.reloadIgnoringCache());
+ipcMain.on(IPC.BROWSER_TOGGLE_DEVTOOLS, () => {
   if (devToolsOpening) return;   // mid-open: closing now would race the async open path
   if (devToolsOpen || devToolsView) animateDevTools(false);
   else openDevToolsPanel();
@@ -1830,9 +1831,9 @@ function setEmulation(d, notify = true) {
   else if (!d || d.responsive || !d.name) deviceEmulation = { name: '', fit: !(d && d.width), width: (d && d.width) || 0, height: (d && d.height) || 0 };
   else deviceEmulation = { name: d.name, fit: false, width: d.width, height: d.height };
   repositionBrowserView();
-  if (notify) uiSend('device-changed', { name: deviceEmulation ? deviceEmulation.name : '', default: deviceEmulation === null });
+  if (notify) uiSend(IPC.DEVICE_CHANGED, { name: deviceEmulation ? deviceEmulation.name : '', default: deviceEmulation === null });
 }
-ipcMain.on('show-device-menu', (_, { x, y, devices, activeName, defaultView } = {}) => {
+ipcMain.on(IPC.SHOW_DEVICE_MENU, (_, { x, y, devices, activeName, defaultView } = {}) => {
   const tpl = [{ label: 'Default view', type: 'checkbox', checked: !!defaultView, click: () => setEmulation({ default: true }) }];
   tpl.push({ type: 'separator' });
   tpl.push({ label: 'Responsive', type: 'checkbox', checked: !defaultView && !activeName, click: () => setEmulation({ responsive: true }) });
@@ -1840,41 +1841,41 @@ ipcMain.on('show-device-menu', (_, { x, y, devices, activeName, defaultView } = 
     tpl.push({ label: d.name, type: 'checkbox', checked: d.name === activeName, click: () => setEmulation(d) });
   }
   tpl.push({ type: 'separator' });
-  tpl.push({ label: 'Edit…', click: () => uiSend('settings-action', 'edit-devices') });
+  tpl.push({ label: 'Edit…', click: () => uiSend(IPC.SETTINGS_ACTION, 'edit-devices') });
   // x is the renderer's right-aligned origin (button right edge − menu width).
   Menu.buildFromTemplate(tpl).popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
 });
 // Apply a persisted device on startup (renderer drives persistence, so no notify).
-ipcMain.on('set-device', (_, d) => setEmulation(d || null, false));
+ipcMain.on(IPC.SET_DEVICE, (_, d) => setEmulation(d || null, false));
 
 // Resize-handle drag: hide the view while a ghost frame is dragged, then apply
 // the dragged size as a custom (Responsive) viewport on release.
-ipcMain.on('device-resize-start', () => { resizingDevice = true; repositionBrowserView(); });
-ipcMain.on('device-resize-end', (_, { width, height } = {}) => {
+ipcMain.on(IPC.DEVICE_RESIZE_START, () => { resizingDevice = true; repositionBrowserView(); });
+ipcMain.on(IPC.DEVICE_RESIZE_END, (_, { width, height } = {}) => {
   resizingDevice = false;
   if (width > 0 && height > 0) deviceEmulation = { name: '', fit: false, width, height };
   repositionBrowserView();
 });
 
 // ── IPC: layout ───────────────────────────────────────────────────
-ipcMain.on('split-changed', (_, fraction) => {
+ipcMain.on(IPC.SPLIT_CHANGED, (_, fraction) => {
   splitFraction = fraction;
   repositionAll();
   broadcastLayout();
 });
 
 // Single-pane (collapsed) mode toggle: 'browser' | 'chat' | null (normal split).
-ipcMain.on('single-pane', (_, mode) => {
+ipcMain.on(IPC.SINGLE_PANE, (_, mode) => {
   singlePane = (mode === 'browser' || mode === 'chat') ? mode : null;
   repositionAll();
   broadcastLayout();
 });
 
 // Native menus can't take CSS — match their light/dark appearance to the theme.
-ipcMain.on('native-theme', (_, source) => {
+ipcMain.on(IPC.NATIVE_THEME, (_, source) => {
   if (source === 'light' || source === 'dark') nativeTheme.themeSource = source;
 });
-ipcMain.on('renderer-ready', () => {
+ipcMain.on(IPC.RENDERER_READY, () => {
   repositionBrowserView();
   broadcastLayout();
   // Re-sync the renderer with the restored browser URL. At boot the renderer registers
@@ -1883,7 +1884,7 @@ ipcMain.on('renderer-ready', () => {
   try {
     let u = (browserView && !browserView.webContents.isDestroyed()) ? browserView.webContents.getURL() : '';
     if (!u || u === 'about:blank') u = loadLastURL();
-    if (u && u !== 'about:blank') mainWindow.webContents.send('browser-url-changed', u);
+    if (u && u !== 'about:blank') mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, u);
   } catch (_) {}
 });
 
@@ -1983,11 +1984,11 @@ function buildMcpAddCmd(agent, entry, hasToken) {
   return parts.map(shq).join(' ').replaceAll(TOK, `'"$CATHODE_MCP_SECRET"'`);
 }
 
-ipcMain.handle('clipboard-read', () => { try { return clipboard.readText(); } catch (_) { return ''; } });
+ipcMain.handle(IPC.CLIPBOARD_READ, () => { try { return clipboard.readText(); } catch (_) { return ''; } });
 
 // Fast check (no health-check) whether a given MCP server is configured in any
 // agent's user-scope config. Reads the config files directly.
-ipcMain.handle('mcp-has-server', async (_, { name } = {}) => {
+ipcMain.handle(IPC.MCP_HAS_SERVER, async (_, { name } = {}) => {
   const r = await wslRun(
     'cat ~/.claude.json 2>/dev/null; echo "==SPLIT=="; cat ~/.gemini/settings.json 2>/dev/null; echo "==SPLIT=="; cat ~/.codex/config.toml 2>/dev/null',
     8000);
@@ -2013,7 +2014,7 @@ function buildCustomEntry(c) {
 }
 
 // Connect: add the server to every installed agent at user scope
-ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom } = {}) => {
+ipcMain.handle(IPC.MCP_CONNECT, async (_, { catalogKey, token, custom } = {}) => {
   const entry = catalogKey === 'custom' ? buildCustomEntry(custom) : MCP_CATALOG[catalogKey];
   if (!entry) return { ok: false, error: 'Unknown service' };
   const agents = await detectMcpAgents();
@@ -2032,7 +2033,7 @@ ipcMain.handle('mcp-connect', async (_, { catalogKey, token, custom } = {}) => {
 });
 
 // Disconnect: remove from every agent
-ipcMain.handle('mcp-disconnect', async (_, { serverName } = {}) => {
+ipcMain.handle(IPC.MCP_DISCONNECT, async (_, { serverName } = {}) => {
   for (const agent of await detectMcpAgents()) {
     await wslRun(`${agent.cli} mcp remove ${shq(serverName)} -s user`, T_MCP_PROBE);
   }
@@ -2040,7 +2041,7 @@ ipcMain.handle('mcp-disconnect', async (_, { serverName } = {}) => {
 });
 
 // Status: parse `<cli> mcp list` per agent → { servers, agents }
-ipcMain.handle('mcp-status', async () => {
+ipcMain.handle(IPC.MCP_STATUS, async () => {
   const agents = await detectMcpAgents();
   const SKIP = new Set(['Checking', 'Configured', 'No', 'Usage', 'Warning', 'User', 'Positionals', 'Options', 'Commands']);
   const servers = {};
@@ -2061,14 +2062,14 @@ ipcMain.handle('mcp-status', async () => {
   return { agents: agents.map(a => ({ key: a.key, label: a.label })), servers: Object.values(servers) };
 });
 
-ipcMain.handle('show-file-dialog', async () => {
+ipcMain.handle(IPC.SHOW_FILE_DIALOG, async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile', 'multiSelections'],
   });
   return filePaths || [];
 });
 
-ipcMain.handle('show-folder-dialog', async () => {
+ipcMain.handle(IPC.SHOW_FOLDER_DIALOG, async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
   });
@@ -2076,7 +2077,7 @@ ipcMain.handle('show-folder-dialog', async () => {
 });
 
 // Pick a single image file (for the box-select image properties → passed to the agent by path).
-ipcMain.handle('pick-image-file', async () => {
+ipcMain.handle(IPC.PICK_IMAGE_FILE, async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico'] }],
@@ -2099,9 +2100,9 @@ function codeSafeJoin(rel) {
   return target;
 }
 
-ipcMain.handle('get-project-dir', () => currentProjectDir || '');
+ipcMain.handle(IPC.GET_PROJECT_DIR, () => currentProjectDir || '');
 
-ipcMain.handle('pick-project-dir', async () => {
+ipcMain.handle(IPC.PICK_PROJECT_DIR, async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
   const dir = (filePaths && filePaths[0]) || '';
   if (dir) currentProjectDir = dir;
@@ -2111,7 +2112,7 @@ ipcMain.handle('pick-project-dir', async () => {
 // All async (fs.promises): the project dir is usually a \\wsl.localhost UNC
 // path where each sync FS call blocks the main thread for a network
 // round-trip — code-poll alone fired several of those every 1.2 s.
-ipcMain.handle('code-list', async (_, { rel } = {}) => {
+ipcMain.handle(IPC.CODE_LIST, async (_, { rel } = {}) => {
   try {
     const dir = codeSafeJoin(rel);
     if (!dir) return { entries: [], error: currentProjectDir ? 'Invalid path' : 'No project folder' };
@@ -2127,7 +2128,7 @@ ipcMain.handle('code-list', async (_, { rel } = {}) => {
   } catch (e) { return { entries: [], error: String(e.message || e) }; }
 });
 
-ipcMain.handle('code-read', async (_, { rel } = {}) => {
+ipcMain.handle(IPC.CODE_READ, async (_, { rel } = {}) => {
   try {
     const file = codeSafeJoin(rel);
     if (!file) return { error: currentProjectDir ? 'Invalid path' : 'No project folder' };
@@ -2158,7 +2159,7 @@ function gitExec(args, { maxBuffer = 8 << 20, timeout = 15000, dir } = {}) {
 }
 function looksBinary(s) { return s.indexOf('\u0000') !== -1; }
 
-ipcMain.handle('diff-status', async () => {
+ipcMain.handle(IPC.DIFF_STATUS, async () => {
   if (!currentProjectDir) return { ok: false, reason: 'no-folder' };
   const inside = await gitExec(['rev-parse', '--is-inside-work-tree']);
   if (inside.failed) return { ok: false, reason: inside.code === 'ENOENT' ? 'no-git' : 'not-git' };
@@ -2191,7 +2192,7 @@ ipcMain.handle('diff-status', async () => {
   return { ok: true, branch, files };
 });
 
-ipcMain.handle('diff-file', async (_, { rel, status } = {}) => {
+ipcMain.handle(IPC.DIFF_FILE, async (_, { rel, status } = {}) => {
   let before = '', after = '';
   const gitPath = String(rel).replace(/\\/g, '/');
   if (status !== 'added') {
@@ -2208,7 +2209,7 @@ ipcMain.handle('diff-file', async (_, { rel, status } = {}) => {
 // Lightweight mtime probe for live-reload polling. Returns { rel: mtimeMs|null }.
 // File content edits bump the file's mtime; entry add/delete/rename bumps the
 // dir's. Stats run in parallel — over UNC each one is a network round-trip.
-ipcMain.handle('code-poll', async (_, { paths } = {}) => {
+ipcMain.handle(IPC.CODE_POLL, async (_, { paths } = {}) => {
   const out = {};
   if (!currentProjectDir || !Array.isArray(paths)) return out;
   await Promise.all(paths.map(async rel => {
@@ -2247,7 +2248,7 @@ function loadSavedApiKey() {
   } catch (_) {}
 }
 
-ipcMain.on('set-api-key', (_, key) => {
+ipcMain.on(IPC.SET_API_KEY, (_, key) => {
   process.env.ANTHROPIC_API_KEY = key || '';
   try { encryptToFile(getApiKeyFile(), key || ''); } catch (e) { logErr('save api key', e); }
 });
@@ -2256,14 +2257,14 @@ ipcMain.on('set-api-key', (_, key) => {
 // encrypted at rest. Synchronous so the renderer keeps its sync storage API. The
 // "v1:" prefix marks sealed values, so legacy plaintext is read as-is and
 // re-sealed on the next write.
-ipcMain.on('secret-seal', (e, plaintext) => {
+ipcMain.on(IPC.SECRET_SEAL, (e, plaintext) => {
   try {
     e.returnValue = safeStorage.isEncryptionAvailable()
       ? 'v1:' + safeStorage.encryptString(String(plaintext)).toString('base64')
       : String(plaintext);
   } catch (_) { e.returnValue = String(plaintext); }
 });
-ipcMain.on('secret-open', (e, sealed) => {
+ipcMain.on(IPC.SECRET_OPEN, (e, sealed) => {
   try {
     e.returnValue = (typeof sealed === 'string' && sealed.startsWith('v1:') && safeStorage.isEncryptionAvailable())
       ? safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64'))
@@ -2335,14 +2336,14 @@ async function startupUpdateCheck() {
     const counts = await gitExec(['rev-list', '--left-right', '--count', 'HEAD...@{u}'], { dir });
     if (counts.failed) return;
     const behind = +(counts.stdout.trim().split(/\s+/)[1]) || 0;
-    if (behind > 0) uiSend('update-available', { behind });
+    if (behind > 0) uiSend(IPC.UPDATE_AVAILABLE, { behind });
   } catch (_) { /* never let a background check throw */ }
 }
 // Let the toast / gear trigger the full (dialog-driven) update flow.
-ipcMain.on('app-check-updates', () => { checkForAppUpdate().catch(() => {}); });
+ipcMain.on(IPC.APP_CHECK_UPDATES, () => { checkForAppUpdate().catch(() => {}); });
 
-ipcMain.on('show-settings-menu', (_, pos) => {
-  const act = id => () => uiSend('settings-action', id);
+ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
+  const act = id => () => uiSend(IPC.SETTINGS_ACTION, id);
   const menu = Menu.buildFromTemplate([
     { label: 'Get Started (Setup & Tools)', click: act('get-started') },
     { type: 'separator' },
@@ -2360,9 +2361,9 @@ ipcMain.on('show-settings-menu', (_, pos) => {
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
 
-ipcMain.on('show-sb-bar-menu', (_, { x, y } = {}) => {
+ipcMain.on(IPC.SHOW_SB_BAR_MENU, (_, { x, y } = {}) => {
   const menu = Menu.buildFromTemplate([
-    { label: 'Open in browser', click: () => uiSend('sb-bar-menu-action', 'external') },
+    { label: 'Open in browser', click: () => uiSend(IPC.SB_BAR_MENU_ACTION, 'external') },
     { label: 'Detect running Storybooks…', click: async () => {
       const found = await scanPorts(new Set([...sbServers.values()].map(s => s.port)));
       const tmpl = found.length ? found.map(f => ({ label: `Adopt Storybook on :${f.port}`, click: () => adoptPort(f.port) }))
@@ -2370,12 +2371,12 @@ ipcMain.on('show-sb-bar-menu', (_, { x, y } = {}) => {
       Menu.buildFromTemplate(tmpl).popup({ window: mainWindow });
     }},
     { type: 'separator' },
-    { label: 'Stop Storybook',  click: () => uiSend('sb-bar-menu-action', 'stop') },
+    { label: 'Stop Storybook',  click: () => uiSend(IPC.SB_BAR_MENU_ACTION, 'stop') },
   ]);
   menu.popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
 });
 
-ipcMain.handle('auth-status-read', async () => {
+ipcMain.handle(IPC.AUTH_STATUS_READ, async () => {
   const raw = await wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/.credentials.json 2>/dev/null'], 5000);
   try { return JSON.parse(raw); } catch (_) { return null; }
 });
@@ -2397,7 +2398,7 @@ async function agentMemoryTarget(agent) {
   return { mode: 'wsl', rel: `~/${m.dir}/${m.file}`, file: m.file };
 }
 
-ipcMain.handle('agent-md-read', async (_, { agent } = {}) => {
+ipcMain.handle(IPC.AGENT_MD_READ, async (_, { agent } = {}) => {
   try {
     const t = await agentMemoryTarget(agent);
     if (t.mode === 'fs') { try { return fs.readFileSync(t.path, 'utf8'); } catch (_) { return ''; } }
@@ -2405,7 +2406,7 @@ ipcMain.handle('agent-md-read', async (_, { agent } = {}) => {
   } catch (_) { return ''; }
 });
 
-ipcMain.handle('agent-md-write', async (_, { agent, content } = {}) => {
+ipcMain.handle(IPC.AGENT_MD_WRITE, async (_, { agent, content } = {}) => {
   try {
     const t = await agentMemoryTarget(agent);
     if (t.mode === 'fs') {
@@ -2418,23 +2419,23 @@ ipcMain.handle('agent-md-write', async (_, { agent, content } = {}) => {
   } catch (_) { return false; }
 });
 
-ipcMain.on('show-tabs-context-menu', (_, pos) => {
+ipcMain.on(IPC.SHOW_TABS_CONTEXT_MENU, (_, pos) => {
   const menu = Menu.buildFromTemplate([
-    { label: 'Edit Tabs', click: () => mainWindow.webContents.send('settings-action', 'edit-tabs') },
+    { label: 'Edit Tabs', click: () => mainWindow.webContents.send(IPC.SETTINGS_ACTION, 'edit-tabs') },
   ]);
   menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
 });
 
 // ── Custom window controls (frameless titlebar) ──────────────────
-ipcMain.on('window-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); });
-ipcMain.on('window-maximize-toggle', (e) => {
+ipcMain.on(IPC.WINDOW_MINIMIZE, (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); });
+ipcMain.on(IPC.WINDOW_MAXIMIZE_TOGGLE, (e) => {
   const w = BrowserWindow.fromWebContents(e.sender);
   if (!w) return;
   if (w.isMaximized()) w.unmaximize(); else w.maximize();
 });
-ipcMain.on('window-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
+ipcMain.on(IPC.WINDOW_CLOSE, (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
 
-ipcMain.on('new-window', () => {
+ipcMain.on(IPC.NEW_WINDOW, () => {
   // Launch a separate app instance. An in-process BrowserWindow would share
   // the mainWindow-bound globals (browserView, ptyProcesses, IPC routing) and
   // its sessions/views would silently target the first window.
@@ -2474,13 +2475,13 @@ function pageSource() {
 }
 
 // ── IPC: element picker ───────────────────────────────────────────
-ipcMain.on('pick-start', async (_, mode) => {
+ipcMain.on(IPC.PICK_START, async (_, mode) => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     // Phase 1: user draws selection
     const picked = await view.webContents.executeJavaScript(getPickerScript(mode));
-    if (!picked) { uiSend('pick-cancelled'); return; }
+    if (!picked) { uiSend(IPC.PICK_CANCELLED); return; }
 
     const { cx, cy, mouseUpX, mouseUpY, bounds, mode: pickedMode, wholePage } = picked;
 
@@ -2502,13 +2503,13 @@ ipcMain.on('pick-start', async (_, mode) => {
 
     if (usePanel) {
       if (!result || !result.items || !result.items.length) {
-        uiSend('pick-cancelled');
+        uiSend(IPC.PICK_CANCELLED);
         await clearPanelHighlight(view);
         return;
       }
       if (mode === 'aidev') {
         pendingExtract = { view, items: result.items };
-        uiSend('extract-panel-open', { tool: 'Extract', items: result.items });
+        uiSend(IPC.EXTRACT_PANEL_OPEN, { tool: 'Extract', items: result.items });
         return;   // finalized via extract-panel-send / -cancel
       }
       // CSS source refs now (project view only — source maps only meaningful for local dev)
@@ -2519,11 +2520,11 @@ ipcMain.on('pick-start', async (_, mode) => {
       }
       pendingPanelPick = { view, items: result.items, cssRefs };
       const toolLabel = mode === 'lasso' ? 'Lasso Select' : 'Box Select';
-      uiSend('pick-panel-open', { items: result.items, tool: toolLabel });   // full items incl. cssProps/debugSource
+      uiSend(IPC.PICK_PANEL_OPEN, { items: result.items, tool: toolLabel });   // full items incl. cssProps/debugSource
       return;   // panel stays open; result is finalized via pick-panel-send/-cancel
     }
 
-    uiSend('pick-cancelled'); // clear active button state
+    uiSend(IPC.PICK_CANCELLED); // clear active button state
 
     if (!result) return;
     const { items, instruction, extracts = [], media = null } = result;
@@ -2545,7 +2546,7 @@ ipcMain.on('pick-start', async (_, mode) => {
     // Phase 4: format source-first and write to PTY
     const pageUrl = (extracts.length > 0 || media) ? view.webContents.getURL() : null;
     const srcArgs = { items, cssRefs, extracts, media, mediaSummary, pageUrl };
-    uiSend('pick-send-to-session', {
+    uiSend(IPC.PICK_SEND_TO_SESSION, {
       text:   formatSourceMessage({ ...srcArgs, instruction }),
       body:   (instruction || '').trim(),
       detail: formatSourceMessage({ ...srcArgs, instruction: '' }),
@@ -2554,7 +2555,7 @@ ipcMain.on('pick-start', async (_, mode) => {
 
   } catch (err) {
     console.error('Pick error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
@@ -2568,13 +2569,13 @@ async function clearPanelHighlight(view) {
   if (!wc || wc.isDestroyed()) return;
   try { await wc.executeJavaScript('window.__cathodePanel && window.__cathodePanel.clear()'); } catch (_) {}
 }
-ipcMain.on('pick-panel-update', async (_, { active } = {}) => {
+ipcMain.on(IPC.PICK_PANEL_UPDATE, async (_, { active } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
 // Live style edit from a drawer → apply to the actual page element.
-ipcMain.on('pick-panel-style', async (_, { i, prop, value } = {}) => {
+ipcMain.on(IPC.PICK_PANEL_STYLE, async (_, { i, prop, value } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   const v = (value === null || value === undefined) ? 'null' : JSON.stringify(String(value));
@@ -2601,45 +2602,45 @@ function localAssetNote(items) {
     + '\n\nCopy each of these into the working project directory (e.g. an assets/ folder within the project) and update the url() references to point at the copied paths relative to the project.';
 }
 
-ipcMain.on('pick-panel-send', async (_, { instruction = '', items = [] } = {}) => {
+ipcMain.on(IPC.PICK_PANEL_SEND, async (_, { instruction = '', items = [] } = {}) => {
   const p = pendingPanelPick;
   pendingPanelPick = null;
-  if (!p) { uiSend('pick-cancelled'); return; }
+  if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   await clearPanelHighlight(p.view);
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   if (!items.length && !instruction.trim()) return;
   const note = localAssetNote(items);
   let pageUrl = ''; try { pageUrl = p.view.webContents.getURL(); } catch (_) {}   // the page being viewed
   const text   = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction,      pageUrl }) + note;   // full → agent
   const detail = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction: '',  pageUrl }) + note;   // CSS/DOM without the typed note → drawer
-  uiSend('pick-send-to-session', { text, body: instruction.trim(), detail, label: 'Element Context' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text, body: instruction.trim(), detail, label: 'Element Context' });
 });
-ipcMain.on('pick-panel-cancel', async () => {
+ipcMain.on(IPC.PICK_PANEL_CANCEL, async () => {
   const p = pendingPanelPick;
   pendingPanelPick = null;
   if (p) await clearPanelHighlight(p.view);
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
 });
 
 // ── Extract tool panel ────────────────────────────────────────────
 let pendingExtract = null;   // { view, items }
-ipcMain.on('extract-panel-highlight', async (_, { active } = {}) => {
+ipcMain.on(IPC.EXTRACT_PANEL_HIGHLIGHT, async (_, { active } = {}) => {
   const p = pendingExtract;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
 // Show/hide the persisted box/lasso selection overlay (the panel's "Hide selection" link).
-ipcMain.on('toggle-page-selection', (_, { visible } = {}) => {
+ipcMain.on(IPC.TOGGLE_PAGE_SELECTION, (_, { visible } = {}) => {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed()) return;
   view.webContents.executeJavaScript(`(function(){var s=document.getElementById('__cathode_selection__');if(s)s.style.display=${visible ? "''" : "'none'"};})()`).catch(() => {});
 });
 // Per-element extraction: each entry has its own keys/media chosen in its drawer,
 // extracted independently (scoped to that element), then merged into one message.
-ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' } = {}) => {
+ipcMain.on(IPC.EXTRACT_PANEL_SEND, async (_, { perElement = [], instruction = '' } = {}) => {
   const p = pendingExtract;
   pendingExtract = null;
-  if (!p) { uiSend('pick-cancelled'); return; }
+  if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   const view = p.view;
   const extracts = [];      // { key, label: "Element — Extractor", analysis, data }
   let assets = [], anyDownload = false;
@@ -2665,7 +2666,7 @@ ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' }
     }
   }
   await clearPanelHighlight(view);
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   let media = null, mediaSummary = null;
   if (assets.length) {
     media = { dest: anyDownload ? 'download' : 'chat', types: [...mediaTypeSet], assets };
@@ -2674,28 +2675,28 @@ ipcMain.on('extract-panel-send', async (_, { perElement = [], instruction = '' }
   if (!extracts.length && !media && !instruction.trim()) return;
   const pageUrl = view.webContents.getURL();
   const srcArgs = { items: p.items, cssRefs: [], extracts, media, mediaSummary, pageUrl };
-  uiSend('pick-send-to-session', {
+  uiSend(IPC.PICK_SEND_TO_SESSION, {
     text:   formatSourceMessage({ ...srcArgs, instruction }),
     body:   (instruction || '').trim(),
     detail: formatSourceMessage({ ...srcArgs, instruction: '' }),
     label:  'Element Context',
   });
 });
-ipcMain.on('extract-panel-cancel', async () => {
+ipcMain.on(IPC.EXTRACT_PANEL_CANCEL, async () => {
   const p = pendingExtract;
   pendingExtract = null;
   if (p) await clearPanelHighlight(p.view);
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
 });
 
 // ── IPC: screenshot ───────────────────────────────────────────────
-ipcMain.on('pick-screenshot', async () => {
+ipcMain.on(IPC.PICK_SCREENSHOT, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     // Phase 1: user draws the capture region
     const sel = await view.webContents.executeJavaScript(getScreenshotScript());
-    if (!sel) { uiSend('pick-cancelled'); return; }
+    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }
 
     const { x, y, width, height, mouseUpX, mouseUpY } = sel;
 
@@ -2712,22 +2713,22 @@ ipcMain.on('pick-screenshot', async () => {
 
     // Phase 4: hand off to the left-column panel (preview + instruction).
     pendingScreenshot = { filepath };
-    uiSend('screenshot-panel-open', {
+    uiSend(IPC.SCREENSHOT_PANEL_OPEN, {
       tool: 'Screenshot',
       dataUrl: 'data:image/png;base64,' + pngBuffer.toString('base64'),
       filepath,
     });
   } catch (err) {
     console.error('Screenshot error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
 let pendingScreenshot = null;   // { filepath }
-ipcMain.on('screenshot-panel-send', (_, { instruction = '', compositeDataUrl = null } = {}) => {
+ipcMain.on(IPC.SCREENSHOT_PANEL_SEND, (_, { instruction = '', compositeDataUrl = null } = {}) => {
   const p = pendingScreenshot;
   pendingScreenshot = null;
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   if (!p) return;
   if (compositeDataUrl) {   // marker drawing → overwrite the saved PNG with the annotated composite
     try { fs.writeFileSync(p.filepath, Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')); } catch (_) {}
@@ -2735,26 +2736,26 @@ ipcMain.on('screenshot-panel-send', (_, { instruction = '', compositeDataUrl = n
   const instr = (instruction || '').trim();
   const ssUrl = activePageUrl();
   const shotRef = (ssUrl ? `From ${pageSource()} — ${ssUrl}\n` : '') + `[Screenshot: ${p.filepath}]`;
-  uiSend('pick-send-to-session', { text: instr ? `${shotRef}\n\n${instr}` : shotRef, body: instr, detail: shotRef, label: 'Screenshot' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: instr ? `${shotRef}\n\n${instr}` : shotRef, body: instr, detail: shotRef, label: 'Screenshot' });
 });
-ipcMain.on('screenshot-panel-cancel', () => {
+ipcMain.on(IPC.SCREENSHOT_PANEL_CANCEL, () => {
   const p = pendingScreenshot;
   pendingScreenshot = null;
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   if (p) { try { fs.unlinkSync(p.filepath); } catch (_) {} }   // discard the orphaned capture
 });
 
 // ── IPC: draw tool ────────────────────────────────────────────────
 // Set up the persistent marker layer, then open the in-app brush panel.
-ipcMain.on('pick-draw', async () => {
+ipcMain.on(IPC.PICK_DRAW, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     await view.webContents.executeJavaScript(getDrawScript());
-    uiSend('draw-panel-open');
+    uiSend(IPC.DRAW_PANEL_OPEN);
   } catch (err) {
     console.error('Draw setup error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 function markerCall(method, arg) {
@@ -2763,31 +2764,31 @@ function markerCall(method, arg) {
   const a = arg === undefined ? '' : JSON.stringify(arg);
   view.webContents.executeJavaScript(`window.__cathodeMarker&&window.__cathodeMarker.${method}(${a})`).catch(() => {});
 }
-ipcMain.on('marker-set-color', (_, c) => markerCall('setColor', c));
-ipcMain.on('marker-set-size',  (_, n) => markerCall('setSize', n));
-ipcMain.on('marker-clear', () => markerCall('clear'));
-ipcMain.on('marker-cancel', () => markerCall('teardown'));
+ipcMain.on(IPC.MARKER_SET_COLOR, (_, c) => markerCall('setColor', c));
+ipcMain.on(IPC.MARKER_SET_SIZE,  (_, n) => markerCall('setSize', n));
+ipcMain.on(IPC.MARKER_CLEAR, () => markerCall('clear'));
+ipcMain.on(IPC.MARKER_CANCEL, () => markerCall('teardown'));
 
 // Send: grab the marker layer + a page screenshot, hand to the renderer to
 // composite, then tear the marker down.
-ipcMain.on('marker-send', async (_, { instructions = '' } = {}) => {
+ipcMain.on(IPC.MARKER_SEND, async (_, { instructions = '' } = {}) => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     const canvasDataUrl = await view.webContents.executeJavaScript('window.__cathodeMarker&&window.__cathodeMarker.composite()');
     const pageImage = await view.webContents.capturePage();
     const pageB64   = pageImage.toPNG().toString('base64');
     markerCall('teardown');
-    uiSend('draw-composite', { pageB64, canvasDataUrl, instructions });
+    uiSend(IPC.DRAW_COMPOSITE, { pageB64, canvasDataUrl, instructions });
   } catch (err) {
     console.error('Marker send error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
-ipcMain.on('draw-cancel', () => markerCall('teardown'));
+ipcMain.on(IPC.DRAW_CANCEL, () => markerCall('teardown'));
 
-ipcMain.on('pick-cancel', () => {
+ipcMain.on(IPC.PICK_CANCEL, () => {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed()) return;
   view.webContents.executeJavaScript(
@@ -2795,7 +2796,7 @@ ipcMain.on('pick-cancel', () => {
   ).catch(() => {});
 });
 
-ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions } = {}) => {
+ipcMain.on(IPC.DRAW_COMPOSITE_DONE, (_, { compositeDataUrl, instructions } = {}) => {
   const buf  = Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
   const dir  = require('path').join(require('electron').app.getPath('userData'), 'screenshots');
   require('fs').mkdirSync(dir, { recursive: true });
@@ -2804,7 +2805,7 @@ ipcMain.on('draw-composite-done', (_, { compositeDataUrl, instructions } = {}) =
   const dwUrl = activePageUrl();
   const drawRef = (dwUrl ? `From ${pageSource()} — ${dwUrl}\n` : '') + '[Drawing: ' + file + ']';
   const drawInstr = (instructions || '').trim();
-  uiSend('pick-send-to-session', { text: drawInstr ? `${drawRef}\n\n${drawInstr}` : drawRef, body: drawInstr, detail: drawRef, label: 'Drawing' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: drawInstr ? `${drawRef}\n\n${drawInstr}` : drawRef, body: drawInstr, detail: drawRef, label: 'Drawing' });
 });
 
 // ── IPC: element resize (left-column panel) ───────────────────────
@@ -2820,7 +2821,7 @@ function startResizePoll() {
     if (!p || !p.view || p.view.webContents.isDestroyed()) { stopResizePoll(); return; }
     try {
       const d = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.dims()');
-      if (d) uiSend('resize-panel-dims', d);
+      if (d) uiSend(IPC.RESIZE_PANEL_DIMS, d);
     } catch (_) {}
   }, 150);
 }
@@ -2833,39 +2834,39 @@ async function clearResize(view, reset) {
   try { await wc.executeJavaScript(js); } catch (_) {}
 }
 
-ipcMain.on('pick-resize', async () => {
+ipcMain.on(IPC.PICK_RESIZE, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     const sel = await view.webContents.executeJavaScript(getResizeScript());
-    if (!sel) { uiSend('pick-cancelled'); return; }   // cancelled before selecting
+    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled before selecting
     pendingResize = { view };
-    uiSend('resize-panel-open', { tool: 'Resize', label: sel.label, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
+    uiSend(IPC.RESIZE_PANEL_OPEN, { tool: 'Resize', label: sel.label, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
     startResizePoll();
   } catch (err) {
     console.error('Resize error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
-ipcMain.on('resize-panel-reset', async () => {
+ipcMain.on(IPC.RESIZE_PANEL_RESET, async () => {
   const p = pendingResize;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.reset()'); } catch (_) {}
 });
-ipcMain.on('resize-panel-set', async (_, { dim, value } = {}) => {
+ipcMain.on(IPC.RESIZE_PANEL_SET, async (_, { dim, value } = {}) => {
   const p = pendingResize;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodeResize && window.__cathodeResize.set(${JSON.stringify(String(dim))}, ${Number(value)})`); } catch (_) {}
 });
-ipcMain.on('resize-panel-send', async (_, { instruction = '' } = {}) => {
+ipcMain.on(IPC.RESIZE_PANEL_SEND, async (_, { instruction = '' } = {}) => {
   const p = pendingResize;
   pendingResize = null; stopResizePoll();
-  if (!p) { uiSend('pick-cancelled'); return; }
+  if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   let res = null;
   try { res = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.result()'); } catch (_) {}
   await clearResize(p.view, false);   // keep the resize applied on the page
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   if (!res) return;
   const { selector, snippet, oW, oH, nW, nH } = res;
   const instr = (instruction || '').trim();
@@ -2876,13 +2877,13 @@ ipcMain.on('resize-panel-send', async (_, { instruction = '' } = {}) => {
   const rzUrl = activePageUrl();
   const detail = (rzUrl ? `From ${pageSource()} — ${rzUrl}\n\n` : '') + lines.join('\n');
   const body = (instr ? instr + '\n\n' : '') + 'Update the CSS so this element matches these dimensions.';
-  uiSend('pick-send-to-session', { text: detail + '\n\n' + body, body, detail, label: 'Resize request' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Resize request' });
 });
-ipcMain.on('resize-panel-cancel', async () => {
+ipcMain.on(IPC.RESIZE_PANEL_CANCEL, async () => {
   const p = pendingResize;
   pendingResize = null; stopResizePoll();
   if (p) await clearResize(p.view, true);   // revert the on-page resize
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
 });
 
 // ── IPC: eyedropper (left-column panel) ───────────────────────────
@@ -2896,33 +2897,33 @@ function edExec(js) {
   return p.view.webContents.executeJavaScript(js).catch(() => null);
 }
 
-ipcMain.on('pick-eyedropper', async () => {
+ipcMain.on(IPC.PICK_EYEDROPPER, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     // Snapshot the rendered viewport so the loupe can sample exact pixels.
     const image = await view.webContents.capturePage();
     const sel = await view.webContents.executeJavaScript(getEyedropperScript(image.toDataURL()));
-    if (!sel) { uiSend('pick-cancelled'); return; }   // cancelled during hover
+    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled during hover
     pendingEyedropper = { view };
-    uiSend('eyedropper-panel-open', { tool: 'Eyedropper', ...sel });
+    uiSend(IPC.EYEDROPPER_PANEL_OPEN, { tool: 'Eyedropper', ...sel });
   } catch (err) {
     console.error('Eyedropper error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
-ipcMain.handle('eyedropper-set-prop', (_, { prop } = {}) =>
+ipcMain.handle(IPC.EYEDROPPER_SET_PROP, (_, { prop } = {}) =>
   edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setProp(${JSON.stringify(String(prop))})`));
-ipcMain.on('eyedropper-set-color', (_, { hex } = {}) => {
+ipcMain.on(IPC.EYEDROPPER_SET_COLOR, (_, { hex } = {}) => {
   edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.setColor(${JSON.stringify(String(hex))})`);
 });
-ipcMain.on('eyedropper-send', async (_, { instruction = '' } = {}) => {
-  if (!pendingEyedropper) { uiSend('pick-cancelled'); return; }
+ipcMain.on(IPC.EYEDROPPER_SEND, async (_, { instruction = '' } = {}) => {
+  if (!pendingEyedropper) { uiSend(IPC.PICK_CANCELLED); return; }
   const res = await edExec(`window.__cathodeEyedropper && window.__cathodeEyedropper.result(${JSON.stringify(String(instruction))})`);
   await edExec('window.__cathodeEyedropper && window.__cathodeEyedropper.clear()');   // keep the edit applied
   pendingEyedropper = null;
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
   if (!res) return;
   const { selector, property, fromColor, toColor, changed, pickedColor, instruction: instr } = res;
   let body, detail = '';
@@ -2936,12 +2937,12 @@ ipcMain.on('eyedropper-send', async (_, { instruction = '' } = {}) => {
     detail = edUrl ? `From ${pageSource()} — ${edUrl}` : '';
     body = 'Picked ' + (pickedColor || fromColor) + ' — ' + property + ' on ' + selector + '.' + (instr ? '\n\n' + instr : '');
   }
-  uiSend('pick-send-to-session', { text: detail ? detail + '\n\n' + body : body, body, detail, label: 'Color' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail ? detail + '\n\n' + body : body, body, detail, label: 'Color' });
 });
-ipcMain.on('eyedropper-cancel', async () => {
+ipcMain.on(IPC.EYEDROPPER_CANCEL, async () => {
   if (pendingEyedropper) await edExec('window.__cathodeEyedropper && window.__cathodeEyedropper.cancel()');
   pendingEyedropper = null;
-  uiSend('pick-cancelled');
+  uiSend(IPC.PICK_CANCELLED);
 });
 
 // ── IPC: accessibility checker (left-column panel) ────────────────
@@ -2953,27 +2954,27 @@ function a11yExec(js) {
   if (!p || !p.view || p.view.webContents.isDestroyed()) return Promise.resolve(null);
   return p.view.webContents.executeJavaScript(js).catch(() => null);
 }
-ipcMain.on('pick-a11y', async () => {
+ipcMain.on(IPC.PICK_A11Y, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     const result = await view.webContents.executeJavaScript(getA11yScript());
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
     if (!result) return;
     pendingA11y = { view };
-    uiSend('a11y-panel-open', { tool: 'Accessibility', url: result.url, total: result.total, issues: result.issues });
+    uiSend(IPC.A11Y_PANEL_OPEN, { tool: 'Accessibility', url: result.url, total: result.total, issues: result.issues });
   } catch (err) {
     console.error('A11y check error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
-ipcMain.on('a11y-set-color', (_, { idx, which, hex } = {}) => {
+ipcMain.on(IPC.A11Y_SET_COLOR, (_, { idx, which, hex } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.setColor(${Number(idx)}, ${JSON.stringify(String(which))}, ${JSON.stringify(String(hex))})`);
 });
-ipcMain.on('a11y-flash', (_, { idx } = {}) => {
+ipcMain.on(IPC.A11Y_FLASH, (_, { idx } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.flash(${Number(idx)})`);
 });
-ipcMain.on('a11y-send', async (_, { issues = [], instruction = '' } = {}) => {
+ipcMain.on(IPC.A11Y_SEND, async (_, { issues = [], instruction = '' } = {}) => {
   if (!pendingA11y) { return; }
   await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
   pendingA11y = null;
@@ -2998,9 +2999,9 @@ ipcMain.on('a11y-send', async (_, { issues = [], instruction = '' } = {}) => {
   const a11yUrl = activePageUrl();
   const detail = (a11yUrl ? `From ${pageSource()} — ${a11yUrl}\n\n` : '') + lines.join('\n');
   const body = (instruction.trim() ? instruction.trim() + '\n\n' : '') + 'Fix these so the page meets WCAG AA (contrast ≥ 4.5:1 for normal text / 3:1 for large; every image, control, and link has an accessible name). Where suggested colors are given, apply them.';
-  uiSend('pick-send-to-session', { text: detail + '\n\n' + body, body, detail, label: 'Accessibility check' });
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Accessibility check' });
 });
-ipcMain.on('a11y-cancel', async () => {
+ipcMain.on(IPC.A11Y_CANCEL, async () => {
   if (pendingA11y) await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
   pendingA11y = null;
 });
@@ -3011,7 +3012,7 @@ function clearCpHighlight() {
   if (!view || view.webContents.isDestroyed()) return;
   view.webContents.executeJavaScript("(function(){['__cathode_cp_hl__','__cathode_cp_marker__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});})()").catch(() => {});
 }
-ipcMain.on('cp-highlight-target', (_, { selector } = {}) => {
+ipcMain.on(IPC.CP_HIGHLIGHT_TARGET, (_, { selector } = {}) => {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed() || !selector) return;
   const js = `(function(){
@@ -3026,12 +3027,12 @@ ipcMain.on('cp-highlight-target', (_, { selector } = {}) => {
   })();`;
   view.webContents.executeJavaScript(js).catch(() => {});
 });
-ipcMain.on('cp-clear-target-highlight', () => clearCpHighlight());
+ipcMain.on(IPC.CP_CLEAR_TARGET_HIGHLIGHT, () => clearCpHighlight());
 
 // ── IPC: component picker ─────────────────────────────────────────
-ipcMain.on('pick-component', async () => {
+ipcMain.on(IPC.PICK_COMPONENT, async () => {
   const view = getActivePickView();
-  if (!view) { uiSend('pick-cancelled'); return; }
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
     const result = await view.webContents.executeJavaScript(`
       (function() {
@@ -3078,12 +3079,12 @@ ipcMain.on('pick-component', async () => {
           });
         });
       })()`);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
     if (!result) return;
-    uiSend('pick-component-result', result);
+    uiSend(IPC.PICK_COMPONENT_RESULT, result);
   } catch (err) {
     console.error('Component pick error:', err);
-    uiSend('pick-cancelled');
+    uiSend(IPC.PICK_CANCELLED);
   }
 });
 
