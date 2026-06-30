@@ -91,20 +91,22 @@ function getEyedropperScript(snapshotDataUrl) {
     ov.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive: false });
 
     // ── Loupe ─────────────────────────────────────────────────────────
+    // Circular magnifier with the hex value as a separate pill beneath it.
     var loupe = document.createElement('div');
     loupe.id = '__ed_loupe';
     loupe.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;display:none;'
-      + 'width:140px;border-radius:8px;overflow:hidden;background:#0a0a0a;'
-      + 'border:1px solid #333;box-shadow:0 8px 28px rgba(0,0,0,.8);';
+      + 'flex-direction:column;align-items:center;gap:7px;';
     var lcanvas = document.createElement('canvas');
-    lcanvas.width = 140; lcanvas.height = 120;
-    lcanvas.style.cssText = 'display:block;width:140px;height:120px;';
+    lcanvas.width = 140; lcanvas.height = 140;   // square buffer → clipped to a circle below
+    lcanvas.style.cssText = 'display:block;width:140px;height:140px;border-radius:50%;background:#0a0a0a;'
+      + 'border:1px solid #333;box-shadow:0 8px 28px rgba(0,0,0,.8);';
     loupe.appendChild(lcanvas);
     var lbar = document.createElement('div');
-    lbar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 9px;border-top:1px solid #222;'
+    lbar.style.cssText = 'display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;'
+      + 'background:#0a0a0a;border:1px solid #333;box-shadow:0 4px 14px rgba(0,0,0,.6);'
       + "font-family:Consolas,'Courier New',monospace;";
     var lsw = document.createElement('div');
-    lsw.style.cssText = 'width:16px;height:16px;border-radius:3px;border:1px solid rgba(255,255,255,.25);flex-shrink:0;';
+    lsw.style.cssText = 'width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.25);flex-shrink:0;';
     var lval = document.createElement('span');
     lval.style.cssText = 'font-size:12px;color:#eee;letter-spacing:.05em;';
     lbar.appendChild(lsw); lbar.appendChild(lval);
@@ -238,7 +240,7 @@ function getEyedropperScript(snapshotDataUrl) {
       var lx = cx + 8, ly = cy + 8;
       if (lx + lw > window.innerWidth - 6) lx = cx - lw - 8;
       if (ly + lh > window.innerHeight - 6) ly = cy - lh - 8;
-      loupe.style.left = lx + 'px'; loupe.style.top = ly + 'px'; loupe.style.display = 'block';
+      loupe.style.left = lx + 'px'; loupe.style.top = ly + 'px'; loupe.style.display = 'flex';
     }
     ov.addEventListener('mousemove', function(e) { if (phase === 'hover') drawLoupe(e.clientX, e.clientY); });
     ov.addEventListener('mouseleave', function() { if (phase === 'hover') loupe.style.display = 'none'; });

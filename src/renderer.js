@@ -23,6 +23,12 @@ const { trashIcon, eyeIcon } = require('./icons');
 // macOS uses native traffic lights instead of the custom window controls — flag for CSS.
 if (process.platform === 'darwin') document.documentElement.classList.add('is-mac');
 
+// One shared Escape handler drives every wired modal (see wireModal) — each close()
+// self-guards on .open. Declared up here so wireModal calls during init (which runs
+// before wireModal's textual position) aren't hit by a const TDZ error.
+const _modalClosers = new Set();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') _modalClosers.forEach(c => c()); });
+
 // HTML-escape for any text interpolated into innerHTML templates (escapes
 // quotes too, so it is safe in attribute values). The ONLY escaping helper —
 // don't add per-module copies.
@@ -1774,11 +1780,6 @@ document.querySelectorAll('.profiles-tab').forEach(btn => {
 // backdrop closes (unless disabled), open/close just toggle `.open`. Native
 // views are hidden by the document-level observer above — do NOT send
 // browser-view-hide/show or modal-overlay manually from modal code.
-// One shared Escape handler drives every wired modal — each close() self-guards on
-// .open, so this matches the old per-modal listeners without N permanent handlers.
-const _modalClosers = new Set();
-document.addEventListener('keydown', e => { if (e.key === 'Escape') _modalClosers.forEach(c => c()); });
-
 function wireModal(modal, { backdropClose = true, onClose } = {}) {
   const close = () => {
     if (!modal.classList.contains('open')) return;
