@@ -169,7 +169,7 @@ const THEME_GROUPS = [
 ];
 
 // Saved custom themes: [{ name, colors }]. draftColors/draftName = working copy while editing.
-let savedThemes = (() => { try { return JSON.parse(localStorage.getItem(LS.themesSaved) || '[]'); } catch (_) { return []; } })();
+let savedThemes = safeParse(localStorage.getItem(LS.themesSaved), []);
 (() => {   // one-time migration of the legacy single custom theme → savedThemes
   try {
     const old = JSON.parse(localStorage.getItem(LS.themeCustom) || 'null');
@@ -3572,7 +3572,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
   ];
 
   function customDevices() {
-    try { return JSON.parse(localStorage.getItem(LS.devices) || '[]'); } catch (_) { return []; }
+    return safeParse(localStorage.getItem(LS.devices), []);
   }
   function allDevices() { return [...DEVICE_PRESETS, ...customDevices()]; }
 
@@ -3581,8 +3581,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
   // active emulation descriptor. `default:true` = clean full-panel browser (no
   // handles); name '' (no default) = Responsive (resizable, with handles); name
   // set = a device preset. Default view is the startup default.
-  let active;
-  try { active = JSON.parse(localStorage.getItem(LS.deviceActive)); } catch (_) {}
+  let active = safeParse(localStorage.getItem(LS.deviceActive), null);
   if (!active || typeof active !== 'object') active = { default: true };
 
   function persist() { localStorage.setItem(LS.deviceActive, JSON.stringify(active)); }
@@ -3763,7 +3762,7 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
   cancelBtn.addEventListener('click', ctl.close);
 
   openEditDevicesModal = function() {
-    try { draft = JSON.parse(localStorage.getItem(LS.devices) || '[]'); } catch (_) { draft = []; }
+    draft = safeParse(localStorage.getItem(LS.devices), []);
     nameIn.value = ''; wIn.value = ''; hIn.value = '';
     render();
     ctl.open();
