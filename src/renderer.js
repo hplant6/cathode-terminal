@@ -181,6 +181,17 @@ let draftColors = null, draftName = '';
 function persistThemes() { localStorage.setItem(LS.themesSaved, JSON.stringify(savedThemes)); }
 function isThemeEditable(name) { return name === 'add' || /^saved:/.test(name); }
 let sharedColorPicker = null;   // the iro picker (assigned by initPickPanel) — reused by the theme swatches
+const IRO_CDN = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
+// Lazy-load the iro color-picker library once, shared by the tool panels' swatches.
+// cb runs on load OR error (callers guard window.iro / wrap in try-catch, so a CDN
+// failure simply leaves them on their hex input).
+function ensureIro(cb) {
+  if (window.iro) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = IRO_CDN;
+  s.onload = cb; s.onerror = cb;
+  document.head.appendChild(s);
+}
 
 let activeThemeName = localStorage.getItem(LS.theme) || 'default';
 if (activeThemeName === 'custom') activeThemeName = savedThemes.length ? 'saved:0' : 'default';
@@ -4284,12 +4295,6 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
     let cpEl = null, cpIro = null, applyFn = null, swatchEl = null;
     let syncing = false, mode = 'hex', inputs = null, built = false;
 
-    function ensureIro(cb) {
-      if (window.iro) { cb(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
-      s.onload = cb; document.head.appendChild(s);
-    }
     function sync(color) {
       if (!inputs) return;
       syncing = true;
@@ -4675,12 +4680,6 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
 
   let picker = null, syncing = false, sel = null, origHex = '#000000';
 
-  function ensureIro(cb) {
-    if (window.iro) { cb(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
-    s.onload = cb; s.onerror = cb; document.head.appendChild(s);
-  }
   function buildPicker(initial) {
     iroMount.innerHTML = '';
     picker = new iro.ColorPicker(iroMount, {
