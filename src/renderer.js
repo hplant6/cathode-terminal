@@ -1269,6 +1269,17 @@ function langFor(name) {
   return EXT_LANG[ext] || 'plaintext';
 }
 
+// Close a tool panel on Escape, unless focus is in one of its own text inputs.
+// isTyping(activeElement) returning true means "leave it open" (the user is typing).
+function addPanelEscClose(panel, cancel, isTyping) {
+  document.addEventListener('keydown', (e) => {
+    if (!panel.hidden && e.key === 'Escape' && !isTyping(document.activeElement)) {
+      e.preventDefault();
+      cancel();
+    }
+  });
+}
+
 // Read-only copies of the composer chips (Figma + attach), shown inside the sent
 // user message in the chat — same look, minus the remove button.
 function buildChatChips(figma, attach) {
@@ -4428,9 +4439,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => el === textarea);
 
   ipcRenderer.on(IPC.PICK_PANEL_OPEN, (_, { items, tool }) => open(items || [], tool));
 })();
@@ -4505,9 +4514,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== textarea) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => el === textarea);
 
   ipcRenderer.on(IPC.RESIZE_PANEL_OPEN, (_, data) => open(data || {}));
   ipcRenderer.on(IPC.RESIZE_PANEL_DIMS, (_, d) => { if (!panel.hidden) setDims(d); });
@@ -4639,7 +4646,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
-  document.addEventListener('keydown', (e) => { if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); } });
+  addPanelEscClose(panel, cancel, el => el === instr);
 
   ipcRenderer.on(IPC.EXTRACT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -4738,9 +4745,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr && document.activeElement !== hexInput) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => el === instr || el === hexInput);
 
   ipcRenderer.on(IPC.EYEDROPPER_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -4849,9 +4854,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instrEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && !/^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName)) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => /^(TEXTAREA|INPUT)$/.test(el.tagName));
 
   ipcRenderer.on(IPC.A11Y_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -4955,9 +4958,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   cancelBtn.addEventListener('click', cancel);
   newBtn?.addEventListener('click', () => { pickMode = 'screenshot'; ipcRenderer.send(IPC.PICK_SCREENSHOT); });
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => el === instr);
 
   ipcRenderer.on(IPC.SCREENSHOT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -5466,9 +5467,7 @@ let openDrawPanel = null;
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr) { e.preventDefault(); cancel(); }
-  });
+  addPanelEscClose(panel, cancel, el => el === instr);
 
   ipcRenderer.on(IPC.DRAW_PANEL_OPEN, () => open());
 })();
@@ -6978,9 +6977,7 @@ let openComponentPanel = null;
   insertBtn.addEventListener('click', doInsert);
   cancelBtn.addEventListener('click', close);
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doInsert(); } });
-  document.addEventListener('keydown', (e) => {
-    if (!panel.hidden && e.key === 'Escape' && document.activeElement !== instr && document.activeElement !== searchIn) { e.preventDefault(); close(); }
-  });
+  addPanelEscClose(panel, close, el => el === instr || el === searchIn);
 
   openComponentPanel = async function(tgt, url) {
     clearPickMode();
