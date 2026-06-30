@@ -1,5 +1,15 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, Menu, nativeImage, nativeTheme, dialog, safeStorage, clipboard, net, shell } = require('electron');
-Menu.setApplicationMenu(null);
+// Windows/Linux use custom HTML window chrome → no menu. macOS needs the standard
+// app/edit/window menus or Cmd+Q/C/V/X/A/W and the like won't work at all.
+if (process.platform === 'darwin') {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ]));
+} else {
+  Menu.setApplicationMenu(null);
+}
 nativeTheme.themeSource = 'dark';
 const path = require('path');
 const os = require('os');

@@ -5421,8 +5421,9 @@ ipcRenderer.on('draw-composite', async (_, { pageB64, canvasDataUrl, instruction
 
 // ── Keyboard shortcuts ────────────────────────────────────────────
 document.addEventListener('keydown', e => {
-  if (e.ctrlKey && e.key === 'l') { e.preventDefault(); addressBar.focus(); }
-  if (e.ctrlKey && e.key === 't') { e.preventDefault(); createTab(''); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); addressBar.focus(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 't') { e.preventDefault(); createTab(''); }
+  // Ctrl+W only — on macOS the window menu owns Cmd+W (close window); don't double-bind it to tab-close.
   if (e.ctrlKey && e.key === 'w') { e.preventDefault(); closeTab(activeTabId); }
   if (e.key === 'F5')  ipcRenderer.send('browser-reload');
   if (e.key === 'F12') ipcRenderer.send('browser-toggle-devtools');
@@ -6261,7 +6262,7 @@ function showSPEditMode(editIdx) {
   ta.rows = 4;
   ta.addEventListener('keydown', e => {
     if (e.key === 'Escape')                  { e.preventDefault(); cancelEdit(); }
-    if (e.ctrlKey && e.key === 'Enter')      { e.preventDefault(); saveEdit(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter')      { e.preventDefault(); saveEdit(); }
     e.stopPropagation();
   });
 
@@ -6374,7 +6375,7 @@ uiTextarea.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUiMessage(); return; }
   // Ctrl+1–9 = pick a presented option. Only when the composer is empty, so it
   // can't silently overwrite + send a draft the user was typing.
-  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9' && !uiTextarea.value.trim()) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9' && !uiTextarea.value.trim()) {
     e.preventDefault(); uiTextarea.value = e.key; sendUiMessage(); return;
   }
   // History: arrow up at very start, arrow down at very end
