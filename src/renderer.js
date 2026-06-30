@@ -2306,7 +2306,7 @@ function appendChatImages(el, images) {
   const wrap = document.createElement('div');
   wrap.className = 'chat-msg-imgs';
   images.forEach(p => {
-    const name = String(p).split(/[\\/]/).pop();
+    const name = baseName(p);
     const thumb = document.createElement('img');
     thumb.className = 'chat-img-thumb';
     thumb.alt = name; thumb.title = name;
@@ -5306,7 +5306,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, { behind }) => {
     yml: 'yaml', yaml: 'yaml', xml: 'xml', svg: 'xml', sql: 'sql', vue: 'html', svelte: 'html', toml: 'ini', ini: 'ini',
   };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const base = (p) => String(p).split(/[\\/]/).pop() || p;
+  const base = baseName;   // shared module-level helper (was a local duplicate)
   function langFor(name) {
     const b = name.toLowerCase();
     if (b === 'dockerfile' || b.startsWith('dockerfile.')) return 'dockerfile';
@@ -7353,10 +7353,7 @@ let openOnboarding = null;
     const ext = base.includes('.') ? base.split('.').pop() : '';
     return EXT_LANG[ext] || 'plaintext';
   }
-  function basename(p) {
-    const parts = String(p).replace(/[\\/]+$/, '').split(/[\\/]/);
-    return parts[parts.length - 1] || p;
-  }
+  const basename = baseName;   // shared module-level helper (was a byte-identical duplicate)
 
   const FOLDER = `<svg class="code-ico" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 5.25c0-.69.56-1.25 1.25-1.25h2.4c.4 0 .78.19 1.02.51l.66.88h5.92c.69 0 1.25.56 1.25 1.25v6.36c0 .69-.56 1.25-1.25 1.25H4c-.69 0-1.25-.56-1.25-1.25V5.25Z"/></svg>`;
   const FILE = `<svg class="code-ico" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.25 1.75H5c-.69 0-1.25.56-1.25 1.25v12c0 .69.56 1.25 1.25 1.25h8c.69 0 1.25-.56 1.25-1.25V5.75l-4-4Z"/><path d="M10 1.9V6h4.1"/></svg>`;
