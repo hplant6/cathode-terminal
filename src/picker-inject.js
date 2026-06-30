@@ -1,6 +1,6 @@
 const fs   = require('fs');
 const path = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
 const { Z } = require('./ui-constants');
 const { iconB64 } = require('./read-icon');
 
@@ -66,7 +66,7 @@ function getPickerScript(mode) {
     const label = document.createElement('div');
     label.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
-      'background:#FF5720', 'color:#fff', 'font:bold 11px/18px monospace',
+      'background:${ACCENT}', 'color:#fff', 'font:bold 11px/18px monospace',
       'padding:1px 6px', 'border-radius:2px', 'white-space:nowrap',
     ].join(';');
     document.body.appendChild(label);
@@ -140,14 +140,14 @@ function getPickerScript(mode) {
       } else {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       }
-      shape.setAttribute('fill', 'rgba(255,87,32,0.10)');
-      shape.setAttribute('stroke', '#FF5720');
+      shape.setAttribute('fill', 'rgba(${ACCENT_RGB},0.10)');
+      shape.setAttribute('stroke', '${ACCENT}');
       shape.setAttribute('stroke-width', '1.5');
       shape.setAttribute('stroke-dasharray', '4,3');
       shape.setAttribute('stroke-linejoin', 'round');
       shape.setAttribute('stroke-linecap', 'butt');
       shape.style.animation = 'cathode-march-svg 0.6s linear infinite';   /* marching ants */
-      shape.style.filter = 'drop-shadow(0 0 6px rgba(255,87,32,0.5))';     /* orange glow */
+      shape.style.filter = 'drop-shadow(0 0 6px rgba(${ACCENT_RGB},0.5))';     /* orange glow */
       svg.appendChild(shape);
     });
 

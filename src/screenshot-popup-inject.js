@@ -1,3 +1,5 @@
+const { Z } = require('./ui-constants');
+
 function getScreenshotPopupScript(thumbB64, mouseUpX, mouseUpY) {
   const POPUP_W = 340;
   const thumbData = `data:image/png;base64,${thumbB64}`;
@@ -21,7 +23,7 @@ function getScreenshotPopupScript(thumbB64, mouseUpX, mouseUpY) {
     host.style.cssText = [
       'position:fixed', 'top:0', 'left:0',
       'width:100vw', 'height:100vh',
-      'pointer-events:none', 'z-index:2147483647',
+      'pointer-events:none', 'z-index:${Z.OVERLAY_TOP}',
     ].join(';');
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });

@@ -8,8 +8,9 @@
 // Resolves with { selector, tag, property, fromColor, toColor, changed,
 //   pickedColor, instruction } or null.
 const fs   = require('fs');
+const { Z } = require('./ui-constants');
 const path = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
 const { iconB64 } = require('./read-icon');
 
 const ED_CURSOR_B64 = iconB64(path.join(__dirname, 'icons', 'eyedropper-cursor.svg'));
@@ -85,7 +86,7 @@ function getEyedropperScript(snapshotDataUrl) {
     // ── Overlay (custom eyedropper cursor; locks scroll so the snapshot holds)
     var ov = document.createElement('div');
     ov.id = '__ed_ov';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:${ED_CURSOR};';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${ED_CURSOR};';
     document.body.appendChild(ov);
     ov.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive: false });
 
@@ -94,9 +95,9 @@ function getEyedropperScript(snapshotDataUrl) {
     // with a centered crosshair reticle → hex value beneath, all inside the shell.
     var loupe = document.createElement('div');
     loupe.id = '__ed_loupe';
-    loupe.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;display:none;'
+    loupe.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_TOP};display:none;'
       + 'flex-direction:column;align-items:center;gap:9px;padding:11px 11px 8px;background:#000;border-radius:22px;'
-      + 'box-shadow:0 0 18px rgba(255,87,32,.55),0 0 0 1px rgba(255,87,32,.40),0 10px 30px rgba(0,0,0,.7);';
+      + 'box-shadow:0 0 18px rgba(${ACCENT_RGB},.55),0 0 0 1px rgba(${ACCENT_RGB},.40),0 10px 30px rgba(0,0,0,.7);';
     var lmag = document.createElement('div');
     lmag.style.cssText = 'position:relative;width:150px;height:150px;border-radius:20px;overflow:hidden;background:#0a0a0a;';
     var lcanvas = document.createElement('canvas');
@@ -332,7 +333,7 @@ function getEyedropperScript(snapshotDataUrl) {
     function buildCard(el) {
       var card = document.createElement('div');
       card.id = '__ed_pop';
-      card.style.cssText = 'position:fixed;z-index:2147483647;width:236px;background:#080808;'
+      card.style.cssText = 'position:fixed;z-index:${Z.OVERLAY_TOP};width:236px;background:#080808;'
         + 'border:1px solid #222;border-radius:6px;overflow:hidden;'
         + 'box-shadow:0 16px 56px rgba(0,0,0,.92),0 0 0 1px rgba(255,255,255,.04);'
         + "font-family:Consolas,'Courier New',monospace;color:#888;user-select:none;";
@@ -392,7 +393,7 @@ function getEyedropperScript(snapshotDataUrl) {
       // targeted-element link → hover to outline it on the page
       var hl = document.createElement('div');
       hl.id = '__ed_hl__';
-      hl.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;display:none;${MARCH_OUTLINE_CSS}';
+      hl.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_MID};box-sizing:border-box;display:none;${MARCH_OUTLINE_CSS}';
       document.body.appendChild(hl);
       meta.addEventListener('mouseenter', function(){
         var rr = selEl.getBoundingClientRect();
@@ -462,7 +463,7 @@ function getEyedropperScript(snapshotDataUrl) {
       function buildPickerModal() {
         cpModal = document.createElement('div');
         cpModal.id = '__ed_cp__';
-        cpModal.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:2147483647;width:224px;background:#0d0d0d;'
+        cpModal.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:${Z.OVERLAY_TOP};width:224px;background:#0d0d0d;'
           + 'border:1px solid #2a2a2a;border-radius:8px;overflow:hidden;box-shadow:0 12px 44px rgba(0,0,0,.9);'
           + "font-family:Consolas,'Courier New',monospace;color:#888;user-select:none;";
         cpModal.innerHTML =

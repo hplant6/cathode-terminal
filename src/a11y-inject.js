@@ -3,6 +3,8 @@
 // unlabeled controls, empty controls), marks each on the page, and shows a
 // results panel. Resolves with { issues, url, total } on "Send" or null.
 const SHARED = require('./inject-shared');
+const { Z } = require('./ui-constants');
+const { ACCENT, ACCENT_RGB } = require('./inject-styles');
 
 function getA11yScript() {
   return `(function() {
@@ -116,17 +118,17 @@ ${SHARED.selectorHelper('__a11y')}
     // ── Markers on the page ───────────────────────────────────────────
     var layer = document.createElement('div');
     layer.id = '__a11y_layer__';
-    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646;';
+    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:${Z.OVERLAY_MID};';
     document.body.appendChild(layer);
 
     issues.forEach(function(iss, i){
       var b = document.createElement('div');
-      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid #FF5720;'
+      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid ${ACCENT};'
         + 'border-radius:2px;pointer-events:none;transition:background .1s;';
       var badge = document.createElement('div');
       badge.textContent = (i + 1);
       badge.style.cssText = 'position:absolute;top:-12px;left:-4px;min-width:24px;height:24px;padding:0 5px;'
-        + 'box-sizing:border-box;background:#FF5720;color:#fff;font:700 12px/24px system-ui,sans-serif;'
+        + 'box-sizing:border-box;background:${ACCENT};color:#fff;font:700 12px/24px system-ui,sans-serif;'
         + 'text-align:center;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
       b.appendChild(badge);
       layer.appendChild(b);

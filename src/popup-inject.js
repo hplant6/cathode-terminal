@@ -1,4 +1,5 @@
 const SHARED = require('./inject-shared');
+const { Z } = require('./ui-constants');
 
 function getPopupScript(elements, mouseUpX, mouseUpY) {
   const elementsJSON = JSON.stringify(elements);
@@ -23,7 +24,7 @@ function getPopupScript(elements, mouseUpX, mouseUpY) {
 
     const host = document.createElement('div');
     host.id = '__cathode_popup_host__';
-    host.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483647;pointer-events:none;';
+    host.style.cssText = 'position:fixed;top:0;left:0;z-index:${Z.OVERLAY_TOP};pointer-events:none;';
     document.body.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
 

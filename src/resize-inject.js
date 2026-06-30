@@ -1,6 +1,7 @@
 const fs     = require('fs');
+const { Z } = require('./ui-constants');
 const path   = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
 const SHARED = require('./inject-shared');
 const { iconB64 } = require('./read-icon');
 
@@ -41,12 +42,12 @@ function getResizeScript() {
     // ── Hover overlay ─────────────────────────────────────────────────
     var ov = document.createElement('div');
     ov.id = '__cr_ov';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:${RESIZE_CURSOR}';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${RESIZE_CURSOR}';
     document.body.appendChild(ov);
 
     var hv = document.createElement('div');
     hv.id = '__cr_hv';
-    hv.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;display:none;' +
+    hv.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_MID};box-sizing:border-box;display:none;' +
       'transition:left 40ms,top 40ms,width 40ms,height 40ms;${MARCH_OUTLINE_CSS}';
     document.body.appendChild(hv);
 
@@ -137,13 +138,13 @@ function getResizeScript() {
     function buildHandles() {
       hr = document.createElement('div');
       hr.id = '__cr_hr';
-      hr.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;overflow:visible;';
+      hr.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:${Z.OVERLAY_TOP};overflow:visible;';
       document.body.appendChild(hr);
 
       box = document.createElement('div');
       box.id = '__cr_box';
-      box.style.cssText = 'position:absolute;border:1.5px solid #FF5720;box-sizing:border-box;pointer-events:none;' +
-        'box-shadow:0 0 14px 2px rgba(255,87,32,0.45),0 0 30px 6px rgba(255,87,32,0.22);';
+      box.style.cssText = 'position:absolute;border:1.5px solid ${ACCENT};box-sizing:border-box;pointer-events:none;' +
+        'box-shadow:0 0 14px 2px rgba(${ACCENT_RGB},0.45),0 0 30px 6px rgba(${ACCENT_RGB},0.22);';
       hr.appendChild(box);
 
       var handles = [
@@ -157,13 +158,13 @@ function getResizeScript() {
         h.dataset.h = def.id;
         h.style.cssText = 'position:absolute;width:10px;height:10px;background:#fff;border:none;' +
           'border-radius:2px;box-sizing:border-box;pointer-events:auto;cursor:' + def.cursor + ';' +
-          'box-shadow:0 0 8px 2px rgba(255,87,32,0.6);';
+          'box-shadow:0 0 8px 2px rgba(${ACCENT_RGB},0.6);';
         h.addEventListener('mousedown', function(e) { startDrag(e, def.id); }, true);
         box.appendChild(h);
       });
 
       sizeLabel = document.createElement('div');
-      sizeLabel.style.cssText = 'position:absolute;pointer-events:none;background:#FF5720;border:none;' +
+      sizeLabel.style.cssText = 'position:absolute;pointer-events:none;background:${ACCENT};border:none;' +
         'border-radius:4px;color:#fff;font:700 11px/1.4 monospace;padding:2px 7px;white-space:nowrap;' +
         'font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.5);';
       hr.appendChild(sizeLabel);

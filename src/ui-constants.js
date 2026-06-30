@@ -14,6 +14,12 @@ const Z = {
   ROW_HIGHLIGHT:   2147483645,  // element highlight driven from popup rows
   HOVER_HIGHLIGHT: 2147483646,  // live hover box + tag label while picking
   OVERLAY:         2147483647,  // capture overlay & the popup itself (top)
+  // Single-use tools (resize/eyedropper/draw/a11y/screenshot/popups) run one at a
+  // time and reuse the top band with their own base/mid/top stack — same values as
+  // the ladder above, named generically so each tool's intent reads clearly.
+  OVERLAY_BASE:    2147483645,  // a tool's full-page capture / draw surface
+  OVERLAY_MID:     2147483646,  // hover box / canvas / mid layer
+  OVERLAY_TOP:     2147483647,  // handles / loupe / card / popup (top)
 };
 
 module.exports = { Z };

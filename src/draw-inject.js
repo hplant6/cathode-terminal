@@ -1,6 +1,7 @@
 'use strict';
 
 const fs   = require('fs');
+const { Z } = require('./ui-constants');
 const path = require('path');
 const { iconB64 } = require('./read-icon');
 
@@ -21,14 +22,14 @@ function getDrawScript() {
     canvas.id = '__cathode_draw_canvas__';
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-    canvas.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483646;pointer-events:none;';
+    canvas.style.cssText = 'position:fixed;top:0;left:0;z-index:${Z.OVERLAY_MID};pointer-events:none;';
     document.body.appendChild(canvas);
     var ctx = canvas.getContext('2d');
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     var overlay = document.createElement('div');
     overlay.id = '__cathode_draw_overlay__';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483645;cursor:${MARKER_CURSOR}';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${MARKER_CURSOR}';
     document.body.appendChild(overlay);
 
     function drawDot(x, y) { ctx.beginPath(); ctx.arc(x, y, lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); }

@@ -1,6 +1,7 @@
 const fs = require('fs');
+const { Z } = require('./ui-constants');
 const path = require('path');
-const { MARCH_BORDER_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const { MARCH_BORDER_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
 const { iconText } = require('./read-icon');
 
 // Build the camera cursor data URL once at require time
@@ -30,7 +31,7 @@ function getScreenshotScript() {
     const overlay = document.createElement('div');
     overlay.id = '__cathode_shot__';
     overlay.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:2147483647',
+      'position:fixed', 'inset:0', 'z-index:${Z.OVERLAY_TOP}',
       'cursor:${CURSOR_URL}',
     ].join(';');
     document.documentElement.appendChild(overlay);
@@ -47,7 +48,7 @@ function getScreenshotScript() {
     const lbl = document.createElement('div');
     lbl.style.cssText = [
       'position:fixed', 'pointer-events:none',
-      'background:#FF5720', 'color:#fff',
+      'background:${ACCENT}', 'color:#fff',
       'font:700 10px/16px monospace', 'padding:1px 6px',
       'border-radius:0 0 3px 3px', 'display:none',
     ].join(';');
