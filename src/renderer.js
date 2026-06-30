@@ -6994,11 +6994,19 @@ let openOnboarding = null;
   const toolsEl = document.getElementById('onb-tools-grid');
   if (!modal) return;
 
+  const IS_WIN = process.platform === 'win32';
+  // The WSL step + "inside WSL" copy are Windows-only — on macOS/Linux agents run
+  // in the native login shell, so there's no Linux env to install.
+  const introEl = document.getElementById('onb-setup-intro');
+  if (introEl) introEl.textContent = IS_WIN
+    ? "Cathode runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red."
+    : "Cathode runs AI coding agents in your shell. Install what's missing below — each step checks itself and only what's needed stays red.";
+
   const ONB_STEPS = [
-    { id: 'wsl', detect: 'wsl', manual: true, title: 'WSL 2 + Ubuntu',
+    ...(IS_WIN ? [{ id: 'wsl', detect: 'wsl', manual: true, title: 'WSL 2 + Ubuntu',
       desc: 'The Linux environment Cathode runs your agents in. One-time — needs admin & a reboot.',
       cmd: 'wsl --install',
-      manualHtml: 'Open <b>Windows PowerShell as Administrator</b>, run the command below, then <b>reboot</b>. After Ubuntu finishes its first-time setup, come back and press <b>Re-check</b>.' },
+      manualHtml: 'Open <b>Windows PowerShell as Administrator</b>, run the command below, then <b>reboot</b>. After Ubuntu finishes its first-time setup, come back and press <b>Re-check</b>.' }] : []),
     { id: 'node', detect: 'node', title: 'Node.js',
       desc: 'Runtime for Claude Code and MCP servers (installs via nvm — no admin needed).',
       cmd: 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install --lts' },
