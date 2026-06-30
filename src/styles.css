@@ -118,6 +118,11 @@
 ::-webkit-scrollbar-thumb        { background: var(--scrollbar-thumb); border-radius: var(--radius-sm); }
 ::-webkit-scrollbar-thumb:hover  { background: var(--scrollbar-thumb-hover); }
 
+/* Focus ring — orange accent (replaces the browser-default gold :focus-visible ring).
+   Inputs/textareas keep their border-color focus style, so no ring on them. */
+:focus-visible { outline: 2px solid var(--spec-accent); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible, [contenteditable]:focus-visible { outline: none; }
+
 html, body {
   height: 100%;
   overflow: hidden;
@@ -281,7 +286,7 @@ html, body {
   border: none;
   color: var(--text-dim);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 0;   /* square hover background */
   flex-shrink: 0;
   -webkit-app-region: no-drag;
   transition: color 0.12s, background 0.12s;
@@ -1570,8 +1575,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
-  flex-shrink: 0;
+  flex-shrink: 0;   /* right-aligned by #pty-tabs-container's flex:1 spacer — no margin-left:auto (it conflicts with flex-grow and overlapped the restart button) */
 }
 #audit-wrap {
   position: relative;
@@ -2073,13 +2077,13 @@ html, body {
   background: var(--spec-toolbar-bg);
   flex-shrink: 0;
 }
-/* icon buttons (code · attach · folder · usage) — transparent, roomy, 3px radius */
+/* icon buttons (attach · folder · usage) — transparent, roomy, 3px radius */
 #ui-toolbar > button {
   width: 34px; height: 34px; flex-shrink: 0;   /* square, matched to the dropdown button height */
   display: flex; align-items: center; justify-content: center;
   background: transparent; border: none; border-radius: var(--radius-sm); box-shadow: none;
   color: var(--spec-text-dim); cursor: pointer;
-  font: 600 14px var(--font-mono);   /* btn-ui-code is the "</>" glyph */
+  font: 600 14px var(--font-mono);
   transition: background 0.12s, color 0.12s;
 }
 #ui-toolbar > button:hover { color: var(--spec-text); }
@@ -3004,7 +3008,7 @@ html, body {
 .panel-collapsed.pane-chat    #right-panel { flex: 0 0 0; width: 0; min-width: 0; overflow: hidden; }
 .panel-collapsed .rail-dots, .panel-collapsed .resize-grip, .panel-collapsed .border-close { display: none; }   /* no dots / drag / close when collapsed */
 /* tools: bare icons, centered (h + v) in the strip */
-.panel-collapsed #tool-rail { top: 390px; left: 0; right: 0; align-items: center; justify-content: center; }   /* centered in the 50px strip, below the tabs */
+.panel-collapsed #tool-rail { top: 390px; left: 0; right: 0; align-items: center; justify-content: flex-start; }   /* top-anchored just below the tabs → the reopen button stays put; tools flow below it */
 .panel-collapsed #toolbar { margin: 0; padding: 4px 0; background: none; box-shadow: none; border-radius: 0; }
 .panel-collapsed #toolbar.no-page-tools { display: flex; }   /* keep the reopen (>>) button in the collapsed strip even on Changes/Console/Code (their pick-tools are already hidden individually) */
 /* open (reopen panels) button — only in the collapsed strip, above the tools */
@@ -4396,6 +4400,8 @@ button:active { background: var(--btn-active); }
   flex: 1; min-height: 0;
   flex-direction: column;
   position: relative;
+  margin: 8px -2px -2px 0;        /* 8px top/right/bottom, left flush — matches the Changes panel */
+  border-radius: 22px; overflow: hidden;   /* rounded card; clips the top corners to the panel chrome */
   background: var(--bg-browser);
 }
 

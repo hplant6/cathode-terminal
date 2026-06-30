@@ -6520,20 +6520,6 @@ function sendUiMessage() {
 document.getElementById('btn-ui-send').addEventListener('click', sendUiMessage);
 
 // Code block wrap
-document.getElementById('btn-ui-code').addEventListener('click', () => {
-  const start = uiTextarea.selectionStart;
-  const end   = uiTextarea.selectionEnd;
-  const val   = uiTextarea.value;
-  const sel   = val.slice(start, end);
-  const multi = sel.includes('\n');
-  const wrapped = multi ? '```\n' + sel + '\n```' : '`' + sel + '`';
-  uiTextarea.value = val.slice(0, start) + wrapped + val.slice(end);
-  uiTextarea.selectionStart = start + (multi ? 4 : 1);
-  uiTextarea.selectionEnd   = start + (multi ? 4 : 1) + sel.length;
-  autoResize(uiTextarea);
-  uiTextarea.focus();
-});
-
 // File attach — opens native file dialog, adds the paths as chips
 document.getElementById('btn-ui-attach').addEventListener('click', async () => {
   const paths = await ipcRenderer.invoke('show-file-dialog');

@@ -368,16 +368,17 @@ function createWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   mainWindow.contentView.addChildView(browserView);
-  // Rounded container: 22px corners on the native browser view (Electron 35+).
+  // Square the native browser view so its top edge meets the tab bar without a corner
+  // notch. (setBorderRadius is uniform, so a square view reads as full-bleed in every view.)
   // Guarded so an older build just stays square instead of throwing.
-  if (typeof browserView.setBorderRadius === 'function') browserView.setBorderRadius(22);
+  if (typeof browserView.setBorderRadius === 'function') browserView.setBorderRadius(0);
   attachConsoleCapture();
   browserView.webContents.loadURL(loadLastURL()).catch(() => {});
-  // Style the Working File page's scrollbar to match the app — shade 7 track + arrow buttons, shade 4 thumb/arrows
+  // Style the Working File page's scrollbar to match the app — shade 7 track + arrow buttons, shade 3 thumb (the grab handle)
   const WF_SCROLLBAR_CSS = [
     '::-webkit-scrollbar { width: 16px; height: 16px; }',
     '::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: #08090C; }',
-    '::-webkit-scrollbar-thumb { background: #212026; }',
+    '::-webkit-scrollbar-thumb { background: #28262F; }',
     "::-webkit-scrollbar-button:single-button { background: #08090C; display: block; height: 16px; width: 16px; background-repeat: no-repeat; background-position: center; background-size: 8px; }",
     "::-webkit-scrollbar-button:single-button:vertical:decrement { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,8 6,5 9,8'/></svg>\"); }",
     "::-webkit-scrollbar-button:single-button:vertical:increment { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='3,5 6,8 9,5'/></svg>\"); }",
