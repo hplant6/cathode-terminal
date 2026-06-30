@@ -2960,7 +2960,7 @@ html, body {
 #tool-rail #toolbar, #tool-rail .border-close { flex-shrink: 0; }
 .resize-grip {
   width: 10px; flex: 1; min-height: 24px; margin-right: 0;   /* repeating pattern fills the divider length */
-  background-color: var(--spec-structural);   /* shade 3 (static) */
+  background-color: transparent;   /* the continuous .rail-dots renders the pattern; grips only highlight on hover (avoids a doubled/squished pattern when the toolbar is hidden) */
   -webkit-mask: url('icons/grab-pattern.svg') repeat-y center / 16px auto;
   mask: url('icons/grab-pattern.svg') repeat-y center / 16px auto;
   transition: background-color 0.15s;
