@@ -1248,6 +1248,27 @@ function baseName(p) {
   return parts[parts.length - 1] || p;
 }
 
+// File extension -> Monaco language id, shared by the Changes diff + Code viewer.
+const EXT_LANG = {
+  js:'javascript', jsx:'javascript', mjs:'javascript', cjs:'javascript',
+  ts:'typescript', tsx:'typescript', json:'json', jsonc:'json',
+  html:'html', htm:'html', vue:'html', svelte:'html',
+  css:'css', scss:'scss', sass:'scss', less:'less',
+  md:'markdown', markdown:'markdown', py:'python', rb:'ruby', go:'go', rs:'rust',
+  java:'java', c:'c', h:'c', cpp:'cpp', cc:'cpp', cxx:'cpp', hpp:'cpp', hh:'cpp',
+  cs:'csharp', php:'php', sh:'shell', bash:'shell', zsh:'shell',
+  yml:'yaml', yaml:'yaml', xml:'xml', svg:'xml', sql:'sql',
+  toml:'ini', ini:'ini', conf:'ini', lua:'lua', swift:'swift', kt:'kotlin',
+  dart:'dart', r:'r', pl:'perl', ps1:'powershell', bat:'bat', graphql:'graphql', gql:'graphql',
+};
+function langFor(name) {
+  const lc = name.toLowerCase();
+  if (lc === 'dockerfile' || lc.startsWith('dockerfile.')) return 'dockerfile';
+  if (lc === 'makefile') return 'plaintext';
+  const ext = lc.includes('.') ? lc.split('.').pop() : '';
+  return EXT_LANG[ext] || 'plaintext';
+}
+
 // Read-only copies of the composer chips (Figma + attach), shown inside the sent
 // user message in the chat — same look, minus the remove button.
 function buildChatChips(figma, attach) {
@@ -5297,22 +5318,8 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, { behind }) => {
   let files = [], selected = null;
   let reqToken = 0;   // guards against out-of-order diff-file responses
 
-  const EXT_LANG = {
-    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-    ts: 'typescript', tsx: 'typescript', json: 'json', html: 'html', htm: 'html',
-    css: 'css', scss: 'scss', less: 'less', md: 'markdown', markdown: 'markdown',
-    py: 'python', go: 'go', rs: 'rust', java: 'java', c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp',
-    cs: 'csharp', php: 'php', rb: 'ruby', sh: 'shell', bash: 'shell', zsh: 'shell',
-    yml: 'yaml', yaml: 'yaml', xml: 'xml', svg: 'xml', sql: 'sql', vue: 'html', svelte: 'html', toml: 'ini', ini: 'ini',
-  };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const base = baseName;   // shared module-level helper (was a local duplicate)
-  function langFor(name) {
-    const b = name.toLowerCase();
-    if (b === 'dockerfile' || b.startsWith('dockerfile.')) return 'dockerfile';
-    const ext = b.includes('.') ? b.split('.').pop() : '';
-    return EXT_LANG[ext] || 'plaintext';
-  }
   function loadMonaco() {
     return new Promise(res => {
       if (window.monaco) return res(window.monaco);
@@ -7334,25 +7341,6 @@ let openOnboarding = null;
   let pollTimer = null, polling = false, flashTimer = null;
   const updatedEl = document.getElementById('code-updated');
 
-  const EXT_LANG = {
-    js:'javascript', jsx:'javascript', mjs:'javascript', cjs:'javascript',
-    ts:'typescript', tsx:'typescript', json:'json', jsonc:'json',
-    html:'html', htm:'html', vue:'html', svelte:'html',
-    css:'css', scss:'scss', sass:'scss', less:'less',
-    md:'markdown', markdown:'markdown', py:'python', rb:'ruby', go:'go', rs:'rust',
-    java:'java', c:'c', h:'c', cpp:'cpp', cc:'cpp', cxx:'cpp', hpp:'cpp', hh:'cpp',
-    cs:'csharp', php:'php', sh:'shell', bash:'shell', zsh:'shell',
-    yml:'yaml', yaml:'yaml', xml:'xml', svg:'xml', sql:'sql',
-    toml:'ini', ini:'ini', conf:'ini', lua:'lua', swift:'swift', kt:'kotlin',
-    dart:'dart', r:'r', pl:'perl', ps1:'powershell', bat:'bat', graphql:'graphql', gql:'graphql',
-  };
-  function langFor(name) {
-    const base = name.toLowerCase();
-    if (base === 'dockerfile' || base.startsWith('dockerfile.')) return 'dockerfile';
-    if (base === 'makefile') return 'plaintext';
-    const ext = base.includes('.') ? base.split('.').pop() : '';
-    return EXT_LANG[ext] || 'plaintext';
-  }
   const basename = baseName;   // shared module-level helper (was a byte-identical duplicate)
 
   const FOLDER = `<svg class="code-ico" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.75 5.25c0-.69.56-1.25 1.25-1.25h2.4c.4 0 .78.19 1.02.51l.66.88h5.92c.69 0 1.25.56 1.25 1.25v6.36c0 .69-.56 1.25-1.25 1.25H4c-.69 0-1.25-.56-1.25-1.25V5.25Z"/></svg>`;
