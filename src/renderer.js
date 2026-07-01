@@ -1505,6 +1505,7 @@ const AVAILABLE_MODELS = [
   { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
   { id: 'aider',  name: 'Aider',             desc: 'AI pair programming in your terminal',            install: 'curl -fsSL https://aider.chat/install.sh | sh',                                             command: 'aider',  acp: false },
   { id: 'llm',    name: 'LLM CLI',           desc: 'Multi-model CLI tool, supports many providers',   install: 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install llm',       command: 'llm',    acp: false },
+  { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic coding CLI (ACP)",        install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes',      acp: true  },
 ];
 
 // ── Per-tool model catalog ────────────────────────────────────────
@@ -2552,7 +2553,7 @@ ipcRenderer.on(IPC.ACP_CLOSED, (_, { id }) => {
   if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'closed'); }
 });
 
-ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message }) => {
+ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message, setupCmd, setupLabel }) => {
   const s = acpSession(id);
   if (!s) return;
   if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; s._pendingModelLabel = null; }
@@ -2562,6 +2563,15 @@ ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message }) => {
   el.className = 'acp-msg error';
   el.textContent = `Error: ${message}`;
   s.msgsEl.appendChild(el);
+  // Un-configured agent → one-click terminal that runs its interactive setup.
+  // Complete it there, then start a new session for that agent.
+  if (setupCmd) {
+    const btn = document.createElement('button');
+    btn.className = 'acp-setup-btn';
+    btn.textContent = `Set up ${setupLabel || 'agent'}`;
+    btn.addEventListener('click', () => createSession(`${setupLabel || 'Agent'} Setup`, setupCmd, false));
+    s.msgsEl.appendChild(btn);
+  }
   acpScrollEnd(s);
 });
 

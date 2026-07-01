@@ -1275,7 +1275,9 @@ ipcMain.on(IPC.SET_ACTIVE_PTY, (_, { id } = {}) => { activePtyId = id; });
 ipcMain.handle(IPC.CHECK_MODEL, (_, { command } = {}) => {
   return new Promise(resolve => {
     try {
-      const safe = command.replace(/[^a-zA-Z0-9\-_.]/g, '');
+      // Detect on the base binary: launch commands may carry a subcommand
+      // (e.g. 'hermes chat'), but `command -v` needs just the executable name.
+      const safe = String(command || '').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9\-_.]/g, '');
       const p = platform.nixSpawn(['bash', '-lic', `command -v ${safe} >/dev/null 2>&1`]);
       p.on('close', code => resolve(code === 0));
       p.on('error', () => resolve(false));
@@ -1390,7 +1392,10 @@ const acpTermResolvers = new Map(); // termId  → resolve
 // differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
 // Gemini/Codex speak ACP themselves and run inside WSL (bash -lic for the nvm
 // PATH, like the PTY tools). Each launcher returns { proc, version, model }.
-const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
+const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex', hermes: 'Hermes' };
+// Terminal command that configures an agent, surfaced when its initialize reply
+// advertises auth/config methods (installed but not yet set up).
+const ACP_SETUP_CMD = { hermes: 'hermes acp --setup' };
 
 async function ensureClaudeAdapter(id) {
   let needInstall = false;
@@ -1461,6 +1466,7 @@ const ACP_LAUNCH = {
   claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
   gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
   codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
+  hermes: { launch: () => launchAcpAgent('hermes', ['acp', '--accept-hooks'], 'hermes') },
 };
 
 async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
@@ -1561,10 +1567,28 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   }, CONNECT_TIMEOUT);
 
   try {
-    await conn.initialize({
+    const initResult = await conn.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+      clientInfo: { name: 'Cathode Terminal', version: app.getVersion() },
     });
+    // If the agent advertises auth/config methods, it's installed but not ready
+    // for a session (e.g. Hermes returns a terminal "--setup" method when no
+    // provider/model is configured). newSession would fail opaquely and leave an
+    // empty tab, so surface the agent's own guidance + the setup command instead.
+    const authMethods = initResult && initResult.authMethods;
+    if (Array.isArray(authMethods) && authMethods.length) {
+      clearTimeout(connectTimer);
+      errorSent = true;
+      const label = ACP_LABELS[agentKey] || agentKey;
+      const cmd = ACP_SETUP_CMD[agentKey];
+      const desc = authMethods[0].description || authMethods[0].name || 'configuration required';
+      // setupCmd drives a one-click "Set up …" button in the renderer that opens
+      // a terminal running the interactive setup; message is the plain fallback.
+      send('acp-error', { id, message: `${label} needs to be set up first — ${desc}`, setupCmd: cmd || null, setupLabel: label });
+      safeKill(proc);
+      return;
+    }
     const { sessionId } = await conn.newSession({ cwd: sessionCwd(), mcpServers: [] });
     clearTimeout(connectTimer);
     connected = true;
