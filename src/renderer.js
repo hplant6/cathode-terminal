@@ -5125,10 +5125,15 @@ function renderSysperfBars(m) {
     const pct = document.getElementById(`sysperf-${key}-pct`);
     if (!bar || !pct) return;
     const n = Math.max(20, Math.round((bar.clientWidth || 200) / 4));   // ~2px segs + 2px gaps
-    if (val == null || isNaN(val)) { bar.innerHTML = usageSegments(0, n); pct.textContent = '—'; return; }
-    const v = Math.max(0, Math.min(100, Math.round(val)));
-    bar.innerHTML   = usageSegments(v, n);   // same segmented LED style as the usage bars
-    pct.textContent = v + '%';
+    const v = (val == null || isNaN(val)) ? null : Math.max(0, Math.min(100, Math.round(val)));
+    // Skip the ~n-span innerHTML rebuild + reparse when value and width are
+    // unchanged since last tick (sysperf values are slow-moving rounded ints).
+    // The signature lives on the element, so a recreated bar re-renders.
+    const sig = n + ':' + v;
+    if (bar._sysSig === sig) return;
+    bar._sysSig = sig;
+    bar.innerHTML   = usageSegments(v == null ? 0 : v, n);   // same segmented LED style as the usage bars
+    pct.textContent = v == null ? '—' : v + '%';
   };
   set('cpu', m && m.cpu); set('ram', m && m.ram); set('gpu', m && m.gpu);
 }
