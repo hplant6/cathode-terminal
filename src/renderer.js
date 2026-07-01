@@ -3941,7 +3941,7 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   const sendBtn     = document.getElementById('pick-panel-send');
   const cancelBtn   = document.getElementById('pick-panel-cancel-btn');
   const toggleSelBtn = document.getElementById('pick-panel-toggle-sel');
-  let selVisible = true;   // drives the page-side 20% selection overlay (Hide/Show selection link)
+  let selVisible = false;   // pinned state; selection is hidden by default and previewed on hover of the Show/Hide selection link
   if (!panel) return;
 
   let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
@@ -4400,8 +4400,9 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
     render();
     pushHighlight();         // nothing highlighted until hover/open
     panel.hidden = false;
-    selVisible = true;   // a fresh selection is always shown
-    if (toggleSelBtn) toggleSelBtn.textContent = 'Hide Selection';
+    selVisible = false;   // hidden by default — hover the Show Selection link to preview it
+    if (toggleSelBtn) toggleSelBtn.textContent = 'Show Selection';
+    ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: false });
     document.getElementById('toolbar')?.classList.add('hidden-by-pick');   // hide the floating tool palette while the menu is open
     setTimeout(() => textarea.focus(), 0);
   }
@@ -4435,6 +4436,10 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
   cancelBtn.addEventListener('click', cancel);
   // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
   document.getElementById('pick-panel-new')?.addEventListener('click', () => setPickMode(lastDrawMode));
+  // Hover the link to preview the selection; leaving restores the pinned state.
+  // Click pins it shown (or hides it again).
+  toggleSelBtn?.addEventListener('mouseenter', () => ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: true }));
+  toggleSelBtn?.addEventListener('mouseleave', () => ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible }));
   toggleSelBtn?.addEventListener('click', () => {
     selVisible = !selVisible;
     toggleSelBtn.textContent = selVisible ? 'Hide Selection' : 'Show Selection';

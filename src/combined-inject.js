@@ -32,7 +32,7 @@ function cathodeCombinedPage(OPTS) {
   if (!document.getElementById('__cathode_march_style__')) {
     const __ms = document.createElement('style');
     __ms.id = '__cathode_march_style__';
-    __ms.textContent = '@keyframes cathode-march{from{background-position:0 0,0 100%,0 0,100% 0}to{background-position:7px 0,-7px 100%,0 -7px,100% 7px}}';
+    __ms.textContent = '@keyframes cathode-march{from{background-position:0 0,0 100%,0 0,100% 0}to{background-position:7px 0,-7px 100%,0 -7px,100% 7px}}@keyframes cathode-march-svg{to{stroke-dashoffset:-7}}';
     document.documentElement.appendChild(__ms);
   }
   const MARCH_CSS = [
@@ -396,12 +396,16 @@ function cathodeCombinedPage(OPTS) {
     phost.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:' + Z.OVERLAY + ';';
     document.documentElement.appendChild(phost);
     const psel = document.getElementById('__cathode_selection__');
-    if (psel) {   // keep the drawn selection as a static 40% fill so the user can still see what they selected
+    if (psel) {   // keep the drawn selection with its marching-ants border; hidden
+                  // by default and revealed on hover of the Show Selection link
+      psel.style.display = 'none';
       psel.querySelectorAll('rect,path').forEach(function (s) {
-        s.setAttribute('fill', 'rgba(255,87,32,0.20)');
-        s.setAttribute('stroke', 'none');
-        s.style.animation = 'none';
-        s.style.filter = 'none';
+        s.setAttribute('fill', 'rgba(255,87,32,0.12)');
+        s.setAttribute('stroke', '#FF5720');
+        s.setAttribute('stroke-width', '1.5');
+        s.setAttribute('stroke-dasharray', '4,3');
+        s.style.animation = 'cathode-march-svg 0.6s linear infinite';   // dancing ants
+        s.style.filter = 'drop-shadow(0 0 6px rgba(255,87,32,0.5))';
       });
     }
 
