@@ -1392,10 +1392,10 @@ const acpTermResolvers = new Map(); // termId  → resolve
 // differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
 // Gemini/Codex speak ACP themselves and run inside WSL (bash -lic for the nvm
 // PATH, like the PTY tools). Each launcher returns { proc, version, model }.
-const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex', hermes: 'Hermes' };
+const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
 // Terminal command that configures an agent, surfaced when its initialize reply
 // advertises auth/config methods (installed but not yet set up).
-const ACP_SETUP_CMD = { hermes: 'hermes acp --setup' };
+const ACP_SETUP_CMD = {};
 
 async function ensureClaudeAdapter(id) {
   let needInstall = false;
@@ -1471,7 +1471,6 @@ const ACP_LAUNCH = {
   claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
   gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
   codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
-  hermes: { launch: () => launchAcpAgent('hermes', ['acp', '--accept-hooks'], 'hermes', { bridgeStdin: true }) },
 };
 
 async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
@@ -1577,7 +1576,6 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
       clientInfo: { name: 'Cathode Terminal', version: app.getVersion() },
     });
-    console.error(`[acp] ${agentKey} initialize returned — authMethods=${JSON.stringify((initResult && initResult.authMethods) || [])}`);
     // If the agent advertises auth/config methods, it's installed but not ready
     // for a session (e.g. Hermes returns a terminal "--setup" method when no
     // provider/model is configured). newSession would fail opaquely and leave an
