@@ -949,7 +949,7 @@ html, body {
 }
 .pty-tab:hover .pty-tab-close,
 .pty-tab.active .pty-tab-close { color: var(--text-dim); }
-.pty-tab-close:hover { background: var(--btn-hover); color: var(--text) !important; }
+.pty-tab-close:hover { color: var(--text) !important; }
 
 .pty-tab-rename {
   flex: 1; min-width: 0;

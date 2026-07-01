@@ -1433,8 +1433,7 @@ function renderPtyTabs() {
     nameEl.title = s.name;
     nameEl.addEventListener('click', e => {
       e.stopPropagation();
-      if (id !== activeId) { switchSession(id); return; }
-      startRename(nameEl, id);
+      if (id !== activeId) switchSession(id);
     });
     tab.appendChild(nameEl);
 
