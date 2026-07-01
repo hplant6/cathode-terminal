@@ -9,7 +9,7 @@ export default {
 };
 
 // The real Claude-Code setup sequence (WSL/Node/CLI/adapter/auth) + a couple of
-// verification steps, so the list reads like Hermes'.
+// verification steps, so the list reads like a full auto-install.
 const base = [
   { label: 'Verifying WSL 2 + Ubuntu' },
   { label: 'Verifying Node.js' },
@@ -25,6 +25,7 @@ export const ReadyToStart = {
   name: 'Ready to start',
   args: {
     primaryLabel: 'Set up automatically',
+    primaryVariant: 'primary',
     steps: base.map((b) => ({ ...b, state: 'pending' })),
   },
 };
@@ -33,6 +34,7 @@ export const InProgress = {
   name: 'In progress',
   args: {
     primaryLabel: 'Cancel',
+    primaryVariant: 'secondary',
     steps: [
       s(0, 'done', { time: '2.1s' }),
       s(1, 'done', { time: '318ms' }),
@@ -49,6 +51,7 @@ export const NeedsSignIn = {
   name: 'Paused — sign in',
   args: {
     primaryLabel: 'Cancel',
+    primaryVariant: 'secondary',
     steps: [
       s(0, 'done', { time: '2.1s' }),
       s(1, 'done', { time: '318ms' }),
@@ -65,6 +68,7 @@ export const Complete = {
   args: {
     subtitle: 'Everything is installed and you’re signed in.',
     primaryLabel: 'Start using Cathode',
+    primaryVariant: 'primary',
     steps: base.map((b, i) => ({ ...b, state: 'done', time: ['2.1s', '318ms', '6.4s', '19.5s', '1.2s', '—', '120ms'][i] })),
   },
 };
@@ -73,6 +77,7 @@ export const DetailsExpanded = {
   name: 'Details expanded',
   args: {
     primaryLabel: 'Cancel',
+    primaryVariant: 'secondary',
     showDetails: true,
     detailLog:
       '$ npm install -g @anthropic-ai/claude-code\n\nadded 142 packages in 6s\n\n$ acp-adapter --version\n0.25.1\n',

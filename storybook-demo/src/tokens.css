@@ -67,7 +67,7 @@
 
   /* Typography */
   --font-ui:   'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-mono: 'Geist Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 
   /* Spacing scale */
   --space-1:  4px;

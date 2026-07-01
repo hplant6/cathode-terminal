@@ -1,33 +1,37 @@
 import React from 'react';
 import './Onboarding.css';
 
-/* The 7-bar "domino" loader — the same working/ready animation from the chat status bar. */
-export function Domino({ running = true }) {
+/* Square fill-and-flip loader — running-step indicator, tinted with the app orange. */
+export function StepLoader({ size = 15, color = '#FF5720' }) {
+  const border = Math.max(2, Math.round(size / 7.5));
   return (
-    <ul className={'ob-domino' + (running ? ' running' : '')} role="presentation">
-      {Array.from({ length: 7 }).map((_, i) => <li key={i} />)}
-    </ul>
+    <span className="ob-loader" style={{ width: size, height: size, border: `${border}px solid ${color}` }}>
+      <span className="ob-loader-inner" style={{ background: color }} />
+    </span>
   );
 }
 
+/* Checkmark — the app's own icon (src/icons/check.svg). */
 const Check = () => (
-  <svg viewBox="0 0 12 12" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="2,6.5 5,9 10,3" />
+  <svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 7L5 11L13 1" />
   </svg>
 );
 const Cross = () => (
-  <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-    <path d="M3 3l6 6M9 3l-6 6" />
+  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3L9 9M9 3L3 9" />
   </svg>
 );
 
 function StepIcon({ state }) {
-  if (state === 'running') return <span className="ob-step-ic ob-running"><Domino running /></span>;
-  if (state === 'done')    return <span className="ob-step-ic ob-done"><Check /></span>;
-  if (state === 'error')   return <span className="ob-step-ic ob-error"><Cross /></span>;
-  if (state === 'action')  return <span className="ob-step-ic ob-action">!</span>;
-  return <span className="ob-step-ic ob-pending" />;
+  if (state === 'running') return <span className="ob-step-ic"><StepLoader /></span>;
+  if (state === 'done')    return <span className="ob-step-ic ob-i-done"><Check /></span>;
+  if (state === 'error')   return <span className="ob-step-ic ob-i-error"><Cross /></span>;
+  if (state === 'action')  return <span className="ob-step-ic ob-i-action" />;
+  return <span className="ob-step-ic ob-i-pending" />;
 }
+
+const BTN = { primary: 'ob-btn-primary', secondary: 'ob-btn-secondary' };
 
 /**
  * Auto-runner onboarding modal.
@@ -38,7 +42,7 @@ export function Onboarding({
   subtitle = 'Installing the environment your agents run in — sit back.',
   steps = [],
   primaryLabel = 'Cancel',
-  primaryGhost = false,
+  primaryVariant = 'primary',
   onPrimary,
   showDetails = false,
   detailLog = '',
@@ -58,10 +62,7 @@ export function Onboarding({
 
       <div className="ob-progress-head">
         <div className="ob-progress-row">
-          <span className="ob-progress-label">
-            {active && active.state === 'running' && <Domino running />}
-            {activeLabel}
-          </span>
+          <span className="ob-progress-label">{activeLabel}</span>
           <span className="ob-progress-count">{done} of {total} steps</span>
         </div>
         <div className="ob-progress-track"><div className="ob-progress-fill" style={{ width: pct + '%' }} /></div>
@@ -76,7 +77,7 @@ export function Onboarding({
               {s.sub && <div className="ob-step-sub">{s.sub}</div>}
             </div>
             {s.state === 'action' && s.actionLabel
-              ? <button className="ob-step-action">{s.actionLabel}</button>
+              ? <button className="ob-btn ob-btn-sm ob-btn-primary">{s.actionLabel}</button>
               : s.time && <span className="ob-step-time">{s.time}</span>}
           </div>
         ))}
@@ -91,7 +92,7 @@ export function Onboarding({
           </svg>
           {showDetails ? 'Hide details' : 'Show details'}
         </button>
-        <button className={'ob-primary' + (primaryGhost ? ' ghost' : '')} onClick={onPrimary}>{primaryLabel}</button>
+        <button className={'ob-btn ob-btn-md ' + (BTN[primaryVariant] || BTN.primary)} onClick={onPrimary}>{primaryLabel}</button>
       </div>
     </div>
   );

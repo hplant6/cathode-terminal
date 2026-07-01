@@ -1,119 +1,95 @@
-/* ── Onboarding auto-runner modal (mirrors CathodeTerminal) ────────── */
+/* ── Onboarding auto-runner modal — Cathode aesthetic (spec ramp + orange) ── */
 
 .ob-panel {
-  width: 620px;
+  width: 560px;
   max-height: 560px;
   display: flex;
   flex-direction: column;
-  background: var(--spec-header-bg);
+  background: var(--spec-header-bg);           /* shade 6 */
   border: 1px solid var(--spec-structural);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  font-family: var(--font-ui);
   color: var(--spec-text);
+  font-family: var(--font-ui);
 }
 
-.ob-head {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--spec-structural);
-}
-.ob-title {
-  font-family: var(--font-title);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.01em;
-}
-.ob-subtitle { margin-top: 3px; font-size: 12px; color: var(--spec-text-dim); }
+.ob-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--spec-structural); }
+.ob-title { font-family: var(--font-title); font-stretch: 112.5%; font-weight: 600; font-size: 15px; color: var(--spec-text); }
+.ob-subtitle { margin-top: 4px; font-size: 12px; color: var(--spec-text-dim); }
 
 /* progress */
-.ob-progress-head { padding: 14px 20px 12px; }
-.ob-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.ob-progress-label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--spec-text); min-height: 18px; }
-.ob-progress-count { font: 11px var(--font-mono); color: var(--spec-text-dim); flex-shrink: 0; }
-.ob-progress-track { height: 4px; border-radius: 2px; background: var(--spec-input-bg); overflow: hidden; }
-.ob-progress-fill  { height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.4s ease; }
+.ob-progress-head { padding: 16px 20px 12px; }
+.ob-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; min-height: 20px; }
+.ob-progress-label { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--spec-text); }
+.ob-progress-count { font: 11px var(--font-mono); color: var(--spec-text-dim); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.ob-progress-track { height: 6px; border-radius: 3px; background: var(--spec-input-bg); overflow: hidden; }
+.ob-progress-fill  { height: 100%; border-radius: 3px; background: #FF5720; transition: width 0.35s ease; }
 
 /* step list */
-.ob-list { flex: 1; overflow-y: auto; padding: 4px 12px 8px; }
+.ob-list { flex: 1; overflow-y: auto; padding: 6px 12px 10px; }
 .ob-step {
-  display: flex; align-items: center; gap: 12px;
-  padding: 9px 8px; border-radius: 8px;
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 10px; border-radius: var(--radius-md);
   font-size: 13px; color: var(--spec-text-dim);
 }
 .ob-step.ob-done    { color: var(--spec-text); }
-.ob-step.ob-running { color: var(--spec-text); background: var(--spec-toolbar-bg); box-shadow: inset 0 0 0 1px var(--spec-structural); }
-.ob-step.ob-action  { color: var(--spec-text); }
+.ob-step.ob-running { color: var(--spec-text); background: rgba(255,87,32,0.09); box-shadow: inset 0 0 0 1px rgba(255,87,32,0.32); }
+.ob-step.ob-action  { color: var(--spec-text); background: var(--spec-dropdown-bg); }
 .ob-step-label { flex: 1; line-height: 1.35; }
-.ob-step-sub   { font-size: 11px; color: var(--spec-text-dim); margin-top: 1px; }
-.ob-step-time  { font: 11px var(--font-mono); color: var(--spec-text-dim); flex-shrink: 0; }
+.ob-step-sub   { font-size: 11px; color: var(--spec-text-dim); margin-top: 2px; }
+.ob-step-time  { font: 11px var(--font-mono); color: var(--spec-text-dim); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
-/* status icon column (fixed width so labels align; wide enough for the domino) */
-.ob-step-ic { width: 34px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-.ob-step-ic.ob-pending::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--spec-text-faint); }
-.ob-step-ic.ob-done  { color: var(--success); }
-.ob-step-ic.ob-error { color: var(--danger); }
-.ob-step-ic.ob-action { color: var(--warning); font-weight: 700; }
-
-.ob-step-action {
-  flex-shrink: 0; font-family: var(--font-title); font-weight: 600; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 5px 11px; border-radius: 6px; border: none; cursor: pointer;
-  background: var(--accent-dark); color: #fff;
-}
-.ob-step-action:hover { background: var(--accent); }
+/* status icon column */
+.ob-step-ic { width: 22px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.ob-step-ic.ob-i-pending::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--spec-text-faint); }
+.ob-step-ic.ob-i-action::before  { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #FF5720; }
+.ob-step-ic.ob-i-done  { color: #fff; }
+.ob-step-ic.ob-i-error { color: var(--danger); }
 
 /* footer */
-.ob-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-top: 1px solid var(--spec-structural); }
-.ob-details { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--spec-text-dim); font-size: 12px; cursor: pointer; }
+.ob-footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--spec-structural); gap: 12px; }
+.ob-details { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--spec-text-dim); font-size: 12px; cursor: pointer; font-family: var(--font-ui); }
 .ob-details:hover { color: var(--spec-text); }
-.ob-primary {
-  font-family: var(--font-title); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
-  background: var(--accent-dark); color: #fff;
+
+/* buttons — Zalando SemiExpanded uppercase, orange primary (matches PanelFooter) */
+.ob-btn {
+  border: none; cursor: pointer; border-radius: var(--radius-md);
+  font-family: var(--font-title); font-stretch: 112.5%;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  transition: background 0.12s, color 0.12s;
 }
-.ob-primary:hover { background: var(--accent); }
-.ob-primary.ghost { background: var(--spec-toolbar-bg); color: var(--spec-text); }
-.ob-primary.ghost:hover { background: var(--btn-hover); }
+.ob-btn-sm { height: 26px; padding: 0 12px; }
+.ob-btn-md { height: 32px; padding: 0 18px; }
+.ob-btn-primary   { background: #4C2112; color: var(--spec-text); }
+.ob-btn-primary:hover   { background: #FF5720; color: #fff; }
+.ob-btn-secondary { background: var(--spec-dropdown-bg); color: var(--spec-text-dim); }
+.ob-btn-secondary:hover { background: var(--spec-structural); color: var(--spec-text); }
 
 /* combined log (Show details) */
 .ob-log {
-  margin: 0 12px 10px; padding: 10px 12px; border-radius: 8px;
+  margin: 0 12px 10px; padding: 10px 12px; border-radius: var(--radius-md);
   background: var(--spec-input-bg); border: 1px solid var(--spec-structural);
   font: 11px/1.5 var(--font-mono); color: var(--spec-text-dim);
   white-space: pre-wrap; max-height: 140px; overflow-y: auto;
 }
 
-/* ── domino loader (the chat working/ready animation) ──────────────── */
-.ob-domino {
-  position: relative; list-style: none; margin: 0; padding: 0;
-  width: 100px; height: 22px;
-  transform: scale(0.32); transform-origin: center;
-  flex-shrink: 0;
-}
-.ob-domino li {
-  display: block; position: absolute; right: 0; bottom: 0;
-  width: 3px; height: 22px; border-radius: 1px;
-  transform-origin: 50% 100%;
-  background: linear-gradient(var(--spec-text), var(--spec-structural));
-  transition: transform 0.5s cubic-bezier(0.2,0.85,0.25,1), opacity 0.5s ease;
-  will-change: transform;
-}
-.ob-domino.running li { animation: ob-domino linear 2.8s infinite; }
-.ob-domino li:nth-child(1) { transform: translateX(0)       rotate(0deg); opacity: 1;   }
-.ob-domino li:nth-child(2) { transform: translateX(-7.5px)  rotate(0deg); opacity: .85; animation-delay: -0.4s; }
-.ob-domino li:nth-child(3) { transform: translateX(-15px)   rotate(0deg); opacity: .70; animation-delay: -0.8s; }
-.ob-domino li:nth-child(4) { transform: translateX(-22.5px) rotate(0deg); opacity: .55; animation-delay: -1.2s; }
-.ob-domino li:nth-child(5) { transform: translateX(-30px)   rotate(0deg); opacity: .40; animation-delay: -1.6s; }
-.ob-domino li:nth-child(6) { transform: translateX(-37.5px) rotate(0deg); opacity: .25; animation-delay: -2.0s; }
-.ob-domino li:nth-child(7) { transform: translateX(-45px)   rotate(0deg); opacity: .10; animation-delay: -2.4s; }
+/* ── square fill-and-flip loader (running step) ────────────────────────
+   Outer square rotates 180° per half-cycle while the inner fills top→bottom
+   then empties. Size / border / colour set inline in JSX. */
+.ob-loader { display: inline-block; position: relative; box-sizing: border-box; flex-shrink: 0; animation: ob-loader 2s infinite ease; }
+.ob-loader-inner { display: block; width: 100%; animation: ob-loader-inner 2s infinite ease-in; }
 
-@keyframes ob-domino {
-  0%     { transform: translateX(0)       rotate(0deg);  opacity: 0; }
-  14.28% { transform: translateX(-7.5px)  rotate(0deg);  opacity: 1; }
-  28.56% { transform: translateX(-15px)   rotate(0deg);  opacity: 1; }
-  37.12% { transform: translateX(-19.5px) rotate(0deg);  opacity: 1; }
-  42.84% { transform: translateX(-22.5px) rotate(10deg); opacity: 1; }
-  57.12% { transform: translateX(-37.5px) rotate(40deg); opacity: 1; }
-  71.4%  { transform: translateX(-52.5px) rotate(62deg); opacity: 1; }
-  85.68% { transform: translateX(-67.5px) rotate(72deg); opacity: 1; }
-  100%   { transform: translateX(-82.5px) rotate(74deg); opacity: 0; }
+@keyframes ob-loader {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(180deg); }
+  50%  { transform: rotate(180deg); }
+  75%  { transform: rotate(360deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes ob-loader-inner {
+  0%   { height: 0%; }
+  25%  { height: 0%; }
+  50%  { height: 100%; }
+  75%  { height: 100%; }
+  100% { height: 0%; }
 }
