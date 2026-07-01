@@ -84,6 +84,7 @@ function getPickerScript(mode) {
 
     let drawing = false, startX = 0, startY = 0;
     let pathPoints = [];
+    let pathD = '';
     let shape = null;
     const MODE = ${JSON.stringify(mode)};
     const isBox = MODE === 'box' || MODE === 'aidev';
@@ -134,6 +135,7 @@ function getPickerScript(mode) {
       label.style.display = 'none';
       startX = e.clientX; startY = e.clientY;
       pathPoints = [{ x: e.clientX, y: e.clientY }];
+      pathD = 'M' + e.clientX + ' ' + e.clientY;
 
       if (isBox) {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -159,9 +161,14 @@ function getPickerScript(mode) {
         shape.setAttribute('width', Math.abs(e.clientX - startX));
         shape.setAttribute('height', Math.abs(e.clientY - startY));
       } else {
+        // Decimate: ignore moves < 4px from the last point, and extend the path
+        // string incrementally (rebuilding it from every point each move was O(n^2)).
+        const last = pathPoints[pathPoints.length - 1];
+        const dx = e.clientX - last.x, dy = e.clientY - last.y;
+        if (dx * dx + dy * dy < 16) return;
         pathPoints.push({ x: e.clientX, y: e.clientY });
-        const d = pathPoints.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ' ' + p.y).join(' ') + ' Z';
-        shape.setAttribute('d', d);
+        pathD += ' L' + e.clientX + ' ' + e.clientY;
+        shape.setAttribute('d', pathD + ' Z');
       }
     });
 
