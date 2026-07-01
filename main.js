@@ -1448,7 +1448,7 @@ async function launchClaudeAcp(modelOverride) {
 // Gemini/Codex speak ACP themselves. They run where they're installed — a real
 // WSL install (bash -lic for the nvm PATH), or a Windows npm install via
 // cmd.exe (the /mnt/c shim can't find node under WSL).
-async function launchAcpAgent(bin, acpArgs, agentKey) {
+async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
   const env = await resolveAgentEnv(bin);
   if (!env) throw new Error(`${ACP_LABELS[agentKey] || agentKey} not found — install it (e.g. \`npm i -g\`).`);
   let proc, version = '';
@@ -1457,7 +1457,12 @@ async function launchAcpAgent(bin, acpArgs, agentKey) {
     proc = platform.cmdSpawn(['/c', bin, ...acpArgs], { stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true });
   } else {
     version = ((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').trim().split('\n').filter(Boolean).pop() || '';
-    proc = platform.nixSpawn(['bash', '-lic', `${bin} ${acpArgs.join(' ')}`], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
+    let cmd = `${bin} ${acpArgs.join(' ')}`;
+    // Hermes' ACP adapter is Python asyncio, which epoll()s stdin — but the
+    // Windows→WSL interop fd isn't epoll-able, so it never reads our requests and
+    // initialize hangs. Bridge stdin through `cat` so it sees a real pipe.
+    if (opts.bridgeStdin) cmd = `${cmd} < <(cat)`;
+    proc = platform.nixSpawn(['bash', '-lic', cmd], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
   }
   return { proc, version, model: '' };
 }
@@ -1466,7 +1471,7 @@ const ACP_LAUNCH = {
   claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
   gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
   codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
-  hermes: { launch: () => launchAcpAgent('hermes', ['acp', '--accept-hooks'], 'hermes') },
+  hermes: { launch: () => launchAcpAgent('hermes', ['acp', '--accept-hooks'], 'hermes', { bridgeStdin: true }) },
 };
 
 async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
@@ -1572,6 +1577,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
       clientInfo: { name: 'Cathode Terminal', version: app.getVersion() },
     });
+    console.error(`[acp] ${agentKey} initialize returned — authMethods=${JSON.stringify((initResult && initResult.authMethods) || [])}`);
     // If the agent advertises auth/config methods, it's installed but not ready
     // for a session (e.g. Hermes returns a terminal "--setup" method when no
     // provider/model is configured). newSession would fail opaquely and leave an
