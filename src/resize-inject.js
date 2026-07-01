@@ -134,7 +134,7 @@ function getResizeScript() {
     }
 
     // ── Handles UI (no toolbar — just box + 8 handles + size label) ───
-    var hr = null, box = null, sizeLabel = null;
+    var hr = null, box = null, sizeLabel = null, lastRect = null;
     function buildHandles() {
       hr = document.createElement('div');
       hr.id = '__cr_hr';
@@ -175,6 +175,11 @@ function getResizeScript() {
     function positionAll() {
       if (!selEl || !hr) return;
       var r = selEl.getBoundingClientRect();
+      // The rafLoop runs continuously while an element is selected, but most frames
+      // are idle. Skip the reposition work (8 handle writes + a forced offsetHeight
+      // read + style writes) when the element hasn't moved/resized since last frame.
+      if (lastRect && r.left === lastRect.left && r.top === lastRect.top && r.width === lastRect.width && r.height === lastRect.height) return;
+      lastRect = { left: r.left, top: r.top, width: r.width, height: r.height };
       if (box) {
         box.style.left   = r.left   + 'px';
         box.style.top    = r.top    + 'px';
