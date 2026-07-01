@@ -1151,8 +1151,8 @@ function repositionBrowserView(overrideFraction) {
   // single-pane browser → the browser sits right of the fixed left strip;
   // otherwise it follows the split (left-panel width + 10px divider).
   const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + 11);   // +1 = right-column left inset (matches #right-panel padding-left)
-  const panelY = topOffset + PAD;   // 8px top inset
-  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD * 2;
+  const panelY = topOffset;   // flush with the browser chrome — no top gap
+  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD;
 
   if (deviceEmulation) {
     // Device emulation: viewport centered horizontally, top-anchored (like
