@@ -567,9 +567,18 @@ function openInlinePopup(url) {
   mainWindow.contentView.addChildView(popupContentView);
 }
 
+// Free a WebContentsView's underlying webContents. removeChildView only detaches
+// it from the layout tree — without this the renderer process (plus its timers,
+// listeners, and network) leaks until unreliable GC. close() destroys it
+// immediately (no beforeunload wait by default, so an arbitrary custom-URL page
+// can't block teardown). Guarded so a bad/absent state can't throw.
+function freeView(view) {
+  try { const wc = view && view.webContents; if (wc && !wc.isDestroyed()) wc.close(); } catch (_) {}
+}
+
 function closeInlinePopup(removeBackdrop = true) {
-  if (popupBarView)     { mainWindow.contentView.removeChildView(popupBarView);     popupBarView = null; }
-  if (popupContentView) { mainWindow.contentView.removeChildView(popupContentView); popupContentView = null; }
+  if (popupBarView)     { mainWindow.contentView.removeChildView(popupBarView);     freeView(popupBarView);     popupBarView = null; }
+  if (popupContentView) { mainWindow.contentView.removeChildView(popupContentView); freeView(popupContentView); popupContentView = null; }
   if (removeBackdrop) {
     browserView.webContents.executeJavaScript(
       `const bd=document.getElementById('__cathode_backdrop__');if(bd)bd.remove();`
@@ -615,7 +624,7 @@ function ensureCustomView(url) {
 function destroyCustomView(url) {
   const view = customViews.get(url);
   if (!view) return;
-  try { mainWindow.contentView.removeChildView(view); } catch (_) {}
+  try { mainWindow.contentView.removeChildView(view); freeView(view); } catch (_) {}
   customViews.delete(url);
 }
 
@@ -733,6 +742,7 @@ function animateDevTools(open) {
       devToolsOpen  = open;
       if (!open && devToolsView) {
         mainWindow.contentView.removeChildView(devToolsView);
+        freeView(devToolsView);
         devToolsView = null;
       }
       mainWindow.webContents.send(open ? 'devtools-opened' : 'devtools-closed');
@@ -757,7 +767,7 @@ async function openDevToolsPanel(inspectX, inspectY) {
     repositionDevToolsView();
     devToolsView.webContents.loadURL(url).catch(() => {});
     devToolsView.webContents.once('did-fail-load', () => {
-      if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); devToolsView = null; }
+      if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); freeView(devToolsView); devToolsView = null; }
       devToolsOpen = false;
     });
     devToolsView.webContents.once('did-finish-load', () => {
@@ -775,7 +785,7 @@ async function openDevToolsPanel(inspectX, inspectY) {
     animateDevTools(true);
   } catch (err) {
     console.error('[DevTools]', err.message);
-    if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); devToolsView = null; }
+    if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); freeView(devToolsView); devToolsView = null; }
   } finally {
     devToolsOpening = false;
   }
@@ -801,7 +811,7 @@ function createStorybookView(url) {
 
 function destroyStorybookView() {
   if (!storybookView) return;
-  try { mainWindow.contentView.removeChildView(storybookView); } catch (_) {}
+  try { mainWindow.contentView.removeChildView(storybookView); freeView(storybookView); } catch (_) {}
   storybookView = null;
   repositionRightPanelView();
 }
