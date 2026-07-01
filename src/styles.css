@@ -2961,7 +2961,13 @@ html, body {
   position: absolute; top: 8px; bottom: 12px; right: 0;   /* top aligns with the tab's top; bottom with the column padding */
   display: flex; flex-direction: column; align-items: flex-end; gap: 0;   /* pattern runs right up to the close buttons */
   z-index: 30;
+  /* The rail's box width = the toolbar's, so it overhangs the chat column's right
+     edge. Make the rail itself click-through so its empty area can't swallow clicks
+     meant for the chat (DevTools toggle, AUDIT, BAR/DIAL); the real tools/grips
+     re-enable pointer-events below. */
+  pointer-events: none;
 }
+#tool-rail > *:not(.rail-dots) { pointer-events: auto; }
 #tool-rail #toolbar, #tool-rail .border-close { flex-shrink: 0; }
 .resize-grip {
   width: 10px; flex: 1; min-height: 24px; margin-right: 0;   /* repeating pattern fills the divider length */
