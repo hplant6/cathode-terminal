@@ -486,11 +486,12 @@ function createSession(name, command, acp) {
   ro.observe(termEl);
 
   ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
-  sessions.set(id, {
-    name: sName, command: cmd, term, fitAddon, el, termEl, ro,
-    _hermes: /^\s*hermes(\s|$)/.test(cmd), _startedAt: Date.now(),
-  });
+  const sess = { name: sName, command: cmd, term, fitAddon, el, termEl, ro };
+  sessions.set(id, sess);
   switchSession(id);
+  // Hermes' TUI opens but can't chat until a model is connected — surface the
+  // one-time setup card (dismiss hides it for good).
+  if (/^\s*hermes(\s|$)/.test(cmd) && !localStorage.getItem('cathode-hermes-setup-dismissed')) showHermesSetup(sess);
   return id;
 }
 
@@ -1481,28 +1482,21 @@ function startRename(nameEl, id) {
 
 ipcRenderer.on(IPC.PTY_OUTPUT, (_, { id, data }) => {
   const s = sessions.get(id);
-  if (!s) return;
-  s.term.write(data);
-  if (!s._hermes) return;
-  if (/no inference provider|no model connected/i.test(data)) s._noProvider = true;
-  if (data.includes('[Session ended]')) {
-    // Hermes exited without a usable model → show the setup card over the terminal.
-    if (s._noProvider || Date.now() - (s._startedAt || 0) < 8000) showHermesSetup(s);
-  } else if (s._setupCard) {
-    // Fresh output after a restart → drop the card and re-arm the detection.
-    s._setupCard.remove(); s._setupCard = null; s._noProvider = false; s._startedAt = Date.now();
-  }
+  if (s) s.term.write(data);
 });
 
-// Setup card shown when a Hermes terminal exits with no model connected.
+// One-time Hermes setup card — its TUI opens but can't chat until a model is
+// connected. Overlaid on the session; the Copy button copies the setup command,
+// dismiss hides it for good.
 function showHermesSetup(s) {
   if (s._setupCard) return;
   const card = document.createElement('div');
   card.className = 'hermes-setup';
   card.innerHTML =
     '<div class="hermes-setup-inner">' +
+      '<button class="hermes-setup-close" type="button" title="Dismiss">✕</button>' +
       '<div class="hermes-setup-title">Finish setting up Hermes</div>' +
-      '<div class="hermes-setup-desc">Hermes needs a model connected. Run this in a terminal, then restart this session:</div>' +
+      '<div class="hermes-setup-desc">Hermes needs a model connected before you can chat. Run this in a terminal to choose a provider &amp; model, then restart the session:</div>' +
       '<div class="hermes-setup-cmd"><code>hermes model</code><button class="hermes-setup-copy" type="button">Copy</button></div>' +
     '</div>';
   const copyBtn = card.querySelector('.hermes-setup-copy');
@@ -1510,6 +1504,10 @@ function showHermesSetup(s) {
     navigator.clipboard.writeText('hermes model').catch(() => {});
     copyBtn.textContent = 'Copied ✓';
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+  });
+  card.querySelector('.hermes-setup-close').addEventListener('click', () => {
+    card.remove(); s._setupCard = null;
+    localStorage.setItem('cathode-hermes-setup-dismissed', '1');
   });
   s.el.appendChild(card);
   s._setupCard = card;
@@ -1520,8 +1518,6 @@ document.getElementById('btn-restart')?.addEventListener('click', () => {
   const s = sessions.get(activeId);
   if (!s || s.type === 'acp') return;
   s.term.clear();
-  if (s._setupCard) { s._setupCard.remove(); s._setupCard = null; }
-  s._noProvider = false; s._startedAt = Date.now();
   ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
 });
 
