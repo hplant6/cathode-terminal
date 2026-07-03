@@ -1249,8 +1249,14 @@ async function spawnPty(id, command = 'claude') {
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
       });
     }
-    proc.onData(data => { queuePtyOut(id, data); });
-    proc.onExit(() => {
+    console.log(`[pty] spawned id=${id} pid=${proc.pid} env=${env} cmd=${JSON.stringify(command)}`);
+    let loggedFirst = false;
+    proc.onData(data => {
+      if (!loggedFirst) { loggedFirst = true; console.log(`[pty] first output id=${id} (${data.length}B): ${JSON.stringify(data.slice(0, 60))}`); }
+      queuePtyOut(id, data);
+    });
+    proc.onExit(({ exitCode } = {}) => {
+      console.log(`[pty] exit id=${id} code=${exitCode}`);
       // Guard: a restart may have already replaced this id with a new proc —
       // a stale exit must not clobber the new entry (or print into its term).
       if (ptyProcesses[id] !== proc) return;
