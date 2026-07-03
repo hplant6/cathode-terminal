@@ -2340,7 +2340,7 @@ function acpScrollUserToMiddle(s, el) {
   });
 }
 
-const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
+const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex', hermes: 'Hermes' };
 // Per-agent banner art. Agents without an entry get the default block logo
 // inlined beside the info lines (Claude style).
 const AGENT_BANNER_ART = {

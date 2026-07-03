@@ -1516,7 +1516,9 @@ async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
       env: { ...process.env, ...(sbUrl ? { STORYBOOK_URL: sbUrl } : {}) },
     });
   } else {
-    version = ((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').trim().split('\n').filter(Boolean).pop() || '';
+    // Take the first version-looking token — some CLIs (e.g. Hermes) print several
+    // lines and the last one is SDK/toolchain info, not the agent version.
+    version = (((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').match(/\d+\.\d+(?:\.\d+)?/) || [''])[0];
     let cmd = `${bin} ${acpArgs.join(' ')}`;
     // Hermes' ACP adapter is Python asyncio, which epoll()s its stdio — but the
     // Windows→WSL interop fds aren't epoll-able, so it can neither read requests
