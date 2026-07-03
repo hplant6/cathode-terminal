@@ -848,8 +848,8 @@ function usageMiniItem(labelHtml, pct, sub) {
   </div>`;
 }
 
-function renderUsage({ ctx, lim, isClaude }) {
-  usageModelEl.textContent = (ctx && ctx.ok && ctx.model) ? ctx.model : '';
+function renderUsage({ ctx, lim, isClaude, agentCtx, agentLabel }) {
+  usageModelEl.textContent = (ctx && ctx.ok && ctx.model) ? ctx.model : (agentLabel || '');
 
   // Build the shared metric list (each: full label, compact label, %, sub-line)
   const metrics = [];
@@ -858,6 +858,13 @@ function renderUsage({ ctx, lim, isClaude }) {
     metrics.push({
       label: 'Context window', mini: 'Context<br>Window', pct,
       sub: `${fmtTokens(ctx.contextTokens)}/${fmtTokens(ctx.contextWindow)} tokens`,
+    });
+  } else if (agentCtx && agentCtx.size) {
+    // Non-Claude ACP agent (e.g. Hermes) — context fill from its usage_update stream.
+    metrics.push({
+      label: 'Context window', mini: 'Context<br>Window',
+      pct: (agentCtx.used / agentCtx.size) * 100,
+      sub: `${fmtTokens(agentCtx.used)}/${fmtTokens(agentCtx.size)} tokens`,
     });
   }
   if (lim && lim.ok) {
@@ -895,13 +902,19 @@ function renderUsage({ ctx, lim, isClaude }) {
 async function refreshUsage() {
   if (!usageOpen) return;
   const s = sessions.get(activeId);
-  const isClaude = !!(s && s.type === 'acp');
+  const isClaude  = !!(s && s.type === 'acp' && (s.agent || 'claude') === 'claude');
+  const acpOther  = !!(s && s.type === 'acp' && !isClaude);   // hermes/gemini/codex — not Claude's meters
   try {
     const [ctx, lim] = await Promise.all([
       isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '' }) : Promise.resolve(null),
-      ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
+      // Claude's 5h/weekly limits are Anthropic-account numbers — meaningless under another agent.
+      acpOther ? Promise.resolve(null) : ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
     ]);
-    _lastUsage = { ctx, lim, isClaude };
+    _lastUsage = {
+      ctx, lim, isClaude,
+      agentCtx:   acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
+      agentLabel: acpOther ? (s.name || s.agent) : '',
+    };
     renderUsage(_lastUsage);
   } catch (_) { /* a failed usage fetch must not break the panel or reject unhandled */ }
 }
@@ -2634,6 +2647,12 @@ function handleAcpUpdate(s, update) {
       break;
     case 'tool_call':        acpAddToolCard(s, update);    break;
     case 'tool_call_update': acpUpdateToolCard(s, update); break;
+    case 'usage_update':     // e.g. Hermes: { used, size } context fill
+      if (typeof update.used === 'number' && typeof update.size === 'number' && update.size > 0) {
+        s.ctxUsage = { used: update.used, size: update.size };
+        if (sessions.get(activeId) === s) refreshUsage();
+      }
+      break;
   }
 }
 
