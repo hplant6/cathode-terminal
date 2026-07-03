@@ -46,12 +46,12 @@ jobs:
       - name: Build (${{ matrix.script }})
         run: npm run ${{ matrix.script }}
         env:
-          # macOS code signing — base64-encoded Developer ID .p12 + its password.
-          # Add these repo secrets to sign; without them the mac build is
-          # unsigned/ad-hoc (Gatekeeper will warn).
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          # macOS notarization — read by scripts/notarize.js (skipped if unset).
+          # Code signing is OFF for these unsigned CI builds: an empty CSC_LINK makes
+          # electron-builder choke, and ad-hoc signing fails on the runners. To sign
+          # macOS later, add the Developer ID cert as a secret, set CSC_LINK +
+          # CSC_KEY_PASSWORD here, and drop the CSC_IDENTITY_AUTO_DISCOVERY line below.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # macOS notarization — read by scripts/notarize.js (skipped when unset).
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
