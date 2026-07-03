@@ -1255,14 +1255,8 @@ async function spawnPty(id, command = 'claude') {
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
       });
     }
-    console.log(`[pty] spawned id=${id} pid=${proc.pid} env=${env} cmd=${JSON.stringify(command)}`);
-    let loggedFirst = false;
-    proc.onData(data => {
-      if (!loggedFirst) { loggedFirst = true; console.log(`[pty] first output id=${id} (${data.length}B): ${JSON.stringify(data.slice(0, 60))}`); }
-      queuePtyOut(id, data);
-    });
-    proc.onExit(({ exitCode } = {}) => {
-      console.log(`[pty] exit id=${id} code=${exitCode}`);
+    proc.onData(data => { queuePtyOut(id, data); });
+    proc.onExit(() => {
       // Guard: a restart may have already replaced this id with a new proc —
       // a stale exit must not clobber the new entry (or print into its term).
       if (ptyProcesses[id] !== proc) return;
@@ -1283,7 +1277,7 @@ ipcMain.on(IPC.PTY_INPUT,   (_, { id, data })       => { const p = ptyProcesses[
 // node-pty throws synchronously if the pty has already exited (e.g. a refit fires
 // after the process ended) — swallow it so it doesn't crash the main process.
 ipcMain.on(IPC.PTY_RESIZE,  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
-ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => { console.log(`[pty] SPAWN request id=${id} cmd=${JSON.stringify(command)}`); spawnPty(id, command); });
+ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => spawnPty(id, command));
 ipcMain.on(IPC.PTY_KILL,    (_, { id })              => {
   killPty(id);
 });
