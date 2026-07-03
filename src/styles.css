@@ -1277,7 +1277,7 @@ html, body {
 }
 /* Figma: h3 regular — Geist Mono Regular 400, sits below the title */
 .umi-sub { font-family: var(--font-mono); font-weight: 400; font-size: 9.5px; color: var(--spec-text-dim); line-height: 1.2; text-align: left; }
-.gauge { flex: 0 0 44%; width: 44%; height: auto; min-width: 34px; overflow: visible; }  /* let the tip glow spill past the viewBox */
+.gauge { flex: 0 0 44%; width: 44%; height: auto; min-width: 34px; max-width: 92px; overflow: visible; }  /* let the tip glow spill past the viewBox; max-width keeps a lone dial (e.g. Hermes) at the same size as the 3-up layout */
 /* LED gauge ticks — skinny so each reads distinctly */
 .g-tick { stroke: rgba(255,255,255,0.08); stroke-width: 1.4; stroke-linecap: round; }
 .g-tick.on { stroke-width: 1.6; }
