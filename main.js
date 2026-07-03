@@ -1699,8 +1699,10 @@ ipcMain.on(IPC.ACP_PROMPT, async (_, { id, text } = {}) => {
   const s = acpSessions.get(id);
   if (!s) return;
   try {
-    await s.conn.prompt({ sessionId: s.sessionId, prompt: [{ type: 'text', text }] });
-    uiSend(IPC.ACP_DONE, { id });
+    const res = await s.conn.prompt({ sessionId: s.sessionId, prompt: [{ type: 'text', text }] });
+    // Some agents (e.g. Hermes) return per-turn token usage on the prompt result —
+    // forward it so the renderer can total session tokens for non-Claude meters.
+    uiSend(IPC.ACP_DONE, { id, usage: (res && res.usage) || null });
   } catch (err) {
     console.error('[acp] prompt error:', err);
     uiSend(IPC.ACP_ERROR, { id, message: err.message });

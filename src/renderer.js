@@ -848,7 +848,7 @@ function usageMiniItem(labelHtml, pct, sub) {
   </div>`;
 }
 
-function renderUsage({ ctx, lim, isClaude, agentCtx, agentLabel }) {
+function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel }) {
   usageModelEl.textContent = (ctx && ctx.ok && ctx.model) ? ctx.model : (agentLabel || '');
 
   // Build the shared metric list (each: full label, compact label, %, sub-line)
@@ -885,14 +885,19 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentLabel }) {
     usageBody.innerHTML = `<div class="usage-empty"></div>`;
     usageBody.firstChild.textContent = authIssue
       ? 'Sign in to Claude Code to see usage limits.'
-      : (isClaude ? 'No usage data yet for this session.' : 'Usage limits require a Claude sign-in.');
+      : (isClaude || agentLabel ? 'No usage data yet for this session.' : 'Usage limits require a Claude sign-in.');
     return;
   }
 
+  // Claude: dollar cost (priced from its usage log). Other agents: total session
+  // tokens — their provider pricing varies (OpenRouter/MoA/…), so a $ figure
+  // would be a guess.
   const cost = (ctx && ctx.ok) ? fmtCost(ctx.costUsd) : '';
   const costRow = cost
     ? `<div class="usage-cost-row"><span class="usage-cost-label">Session cost</span><span class="usage-cost-val">${cost}</span></div>`
-    : '';
+    : (agentTokens > 0
+      ? `<div class="usage-cost-row"><span class="usage-cost-label">Session tokens</span><span class="usage-cost-val">${fmtTokens(agentTokens)}</span></div>`
+      : '');
 
   usageBody.innerHTML = (usageMini
     ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub)).join('')}</div>`
@@ -912,8 +917,9 @@ async function refreshUsage() {
     ]);
     _lastUsage = {
       ctx, lim, isClaude,
-      agentCtx:   acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
-      agentLabel: acpOther ? (s.name || s.agent) : '',
+      agentCtx:    acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
+      agentTokens: acpOther ? (s.tokenTotal || 0) : 0,       // totalled from prompt-result usage
+      agentLabel:  acpOther ? (s.name || s.agent) : '',
     };
     renderUsage(_lastUsage);
   } catch (_) { /* a failed usage fetch must not break the panel or reject unhandled */ }
@@ -2699,9 +2705,15 @@ ipcRenderer.on(IPC.ACP_UPDATE, (_, { id, update }) => {
   if (s?.type === 'acp') handleAcpUpdate(s, update);
 });
 
-ipcRenderer.on(IPC.ACP_DONE, (_, { id }) => {
+ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
   const s = sessions.get(id);
-  if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'ready'); }
+  if (s?.type === 'acp') {
+    acpFinalizeStream(s); acpSetStatus(s, 'ready');
+    // Total session tokens across turns (agents like Hermes report per-turn usage).
+    const t = usage && typeof usage.totalTokens === 'number' ? usage.totalTokens
+      : usage ? (usage.inputTokens || 0) + (usage.outputTokens || 0) : 0;
+    if (t > 0) s.tokenTotal = (s.tokenTotal || 0) + t;
+  }
   if (id === activeId) refreshUsage();  // update usage after each reply (panel re-reads only if open)
 });
 
