@@ -1614,7 +1614,7 @@ function renderProfileMenu() {
   profileMenu.appendChild(divider);
   const manage = document.createElement('div');
   manage.className = 'profile-item profile-item-manage';
-  manage.textContent = 'Manage profiles…';
+  manage.textContent = 'Manage LLMs…';
   manage.addEventListener('click', () => {
     profileMenu.classList.remove('open');
     openProfilesModal();
