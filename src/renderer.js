@@ -556,6 +556,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   statusEl.addEventListener('click', () => interruptActiveSession());
   chatEl.appendChild(statusEl);
   const eq = makeStatusAnim(specEl);
+  eq.start();   // the session opens in "Connecting…" — animate until ready/error
 
   sessions.set(id, {
     name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
@@ -2246,7 +2247,8 @@ function acpSetStatus(s, state) {
   s.status = state;
   s.statusTextEl.textContent = labels[state] || state;
   if (s.statusEl) s.statusEl.classList.toggle('working', state === 'thinking');
-  if (s.eq) { if (state === 'thinking') s.eq.start(); else s.eq.stop(); }
+  // Animate the bars in every busy state (working, connecting, installing).
+  if (s.eq) { if (state === 'thinking' || state === 'connecting' || state === 'installing') s.eq.start(); else s.eq.stop(); }
   // Alerts: error (task-complete is covered by the per-message sound on finalize)
   if (state === 'error' && prev !== 'error') Notif.play('error');
 }
