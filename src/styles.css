@@ -221,7 +221,7 @@ html, body {
   flex-shrink: 0;
 }
 #app-bar-logo img { height: 28px; width: auto; display: block; -webkit-app-region: drag; }
-#app-bar-logo #btn-settings { color: var(--spec-text-dim); margin-left: 0; }
+#app-bar-logo #btn-settings { color: var(--spec-text-dim); margin-left: 0; width: 22px; min-width: 22px; height: 22px; border-radius: 3px; }   /* square hover seat, 3px corners */
 #app-bar-logo #btn-settings:hover { color: var(--spec-text); background: rgba(255,255,255,0.08); }
 #app-bar-logo img {
   height: 100%;
