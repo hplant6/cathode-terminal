@@ -11,6 +11,7 @@
     "dist": "electron-builder --win --x64",
     "dist:win": "electron-builder --win --x64",
     "dist:mac": "electron-builder --mac --arm64 --x64",
+    "dist:linux": "electron-builder --linux --x64",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
@@ -99,6 +100,36 @@
           "target": "zip",
           "arch": [
             "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "files": [
+        "!node_modules/node-pty/prebuilds/darwin-*/**",
+        "!node_modules/node-pty/prebuilds/win32-*/**"
+      ],
+      "category": "Development",
+      "icon": "icon.png",
+      "synopsis": "Split chat + browser dev tool for AI coding agents",
+      "maintainer": "hplan <hplant6@users.noreply.github.com>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
             "x64"
           ]
         }
