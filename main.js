@@ -115,7 +115,11 @@ const POPUP_BAR_HEIGHT  = 36;
 
 // Safe send to the main renderer — async handlers can outlive the window.
 function uiSend(channel, data) {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data);
+  } catch (err) {
+    console.error(`[uiSend] FAILED channel=${channel}:`, err.message);
+  }
 }
 
 // Most failures here are deliberately best-effort. Route the ones worth
@@ -1217,7 +1221,10 @@ function flushPtyOut() {
   for (const id in ptyOutBuf) {
     const data = ptyOutBuf[id];
     delete ptyOutBuf[id];
-    if (data) uiSend(IPC.PTY_OUTPUT, { id, data });
+    if (data) {
+      console.log(`[pty] flush→renderer id=${id} ${data.length}B (win=${mainWindow ? (mainWindow.isDestroyed() ? 'DESTROYED' : 'ok') : 'NULL'})`);
+      uiSend(IPC.PTY_OUTPUT, { id, data });
+    }
   }
 }
 function queuePtyOut(id, data) {
@@ -1276,7 +1283,7 @@ ipcMain.on(IPC.PTY_INPUT,   (_, { id, data })       => { const p = ptyProcesses[
 // node-pty throws synchronously if the pty has already exited (e.g. a refit fires
 // after the process ended) — swallow it so it doesn't crash the main process.
 ipcMain.on(IPC.PTY_RESIZE,  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
-ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => spawnPty(id, command));
+ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => { console.log(`[pty] SPAWN request id=${id} cmd=${JSON.stringify(command)}`); spawnPty(id, command); });
 ipcMain.on(IPC.PTY_KILL,    (_, { id })              => {
   killPty(id);
 });
