@@ -1750,7 +1750,9 @@ function renderInstallModels() {
         btn.textContent = 'Install';
         btn.addEventListener('click', () => {
           btn.disabled = true;
-          btn.textContent = 'Installing…';
+          btn.classList.add('im-btn-loading');
+          btn.title = 'Installing…';
+          btn.innerHTML = '<span class="im-spinner"><span class="im-ball"></span><span class="im-ball"></span><span class="im-ball"></span></span>';
           badge.textContent = 'Installing…';
           badge.className = 'im-badge checking';
           progressEl.style.display = '';
@@ -1768,6 +1770,8 @@ function renderInstallModels() {
             cleanup();
             badge.textContent = 'Installed';
             badge.className = 'im-badge installed';
+            btn.classList.remove('im-btn-loading');
+            btn.title = '';
             btn.textContent = 'Added ✓';
             btn.classList.add('added');
             progressEl.textContent += '\n✓ Done';
@@ -1782,6 +1786,8 @@ function renderInstallModels() {
             badge.textContent = 'Failed';
             badge.className = 'im-badge not-installed';
             btn.disabled = false;
+            btn.classList.remove('im-btn-loading');
+            btn.title = '';
             btn.textContent = 'Retry';
             progressEl.textContent += `\n✗ Failed (exit ${code ?? ''} ${message ?? ''})`;
           };
