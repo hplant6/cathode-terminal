@@ -1583,6 +1583,14 @@ let sessionProfiles = (() => {
         localStorage.setItem('cathode-profiles-acpv2', '1');
         localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
       }
+      // Dedup by name, keeping the most recent — changing an agent's launch
+      // command over time otherwise stacks multiple same-named entries.
+      const byName = new Map();
+      for (const p of parsed) byName.set(p.name, p);
+      if (byName.size !== parsed.length) {
+        parsed = Array.from(byName.values());
+        localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
+      }
       return parsed;
     }
   } catch (_) {}
