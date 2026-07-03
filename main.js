@@ -1207,28 +1207,27 @@ function winCwd() { return platform.agentCwd(sessionCwd(), homeDir()); }
 
 // ── PTY sessions ──────────────────────────────────────────────────
 function safeKill(proc) { try { proc && proc.kill(); } catch (_) {} }
-function killPty(id)    { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; delete ptyOutBuf[id]; }
+function killPty(id)    { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; ptyOutBuf.delete(id); }
 
 // Coalesce pty output: node-pty emits one chunk per read, so heavy output (large
 // file dumps, verbose builds) otherwise floods the IPC boundary with thousands of
 // tiny messages/sec — each a serialize/deserialize + event-loop wake on both
 // processes. Buffer per-id and flush once per frame: cuts IPC volume 1-2 orders of
 // magnitude with imperceptible (<=16ms) latency. xterm already batches rendering.
-const ptyOutBuf = Object.create(null);   // id -> pending output string
+// NB: a Map, NOT a plain object — object keys stringify the numeric session ids,
+// and the renderer's sessions Map is keyed by number, so `sessions.get("1")`
+// misses and all output is silently dropped.
+const ptyOutBuf = new Map();   // id -> pending output string (original id type preserved)
 let ptyFlushTimer = null;
 function flushPtyOut() {
   ptyFlushTimer = null;
-  for (const id in ptyOutBuf) {
-    const data = ptyOutBuf[id];
-    delete ptyOutBuf[id];
-    if (data) {
-      console.log(`[pty] flush→renderer id=${id} ${data.length}B (win=${mainWindow ? (mainWindow.isDestroyed() ? 'DESTROYED' : 'ok') : 'NULL'})`);
-      uiSend(IPC.PTY_OUTPUT, { id, data });
-    }
+  for (const [id, data] of [...ptyOutBuf]) {
+    ptyOutBuf.delete(id);
+    if (data) uiSend(IPC.PTY_OUTPUT, { id, data });
   }
 }
 function queuePtyOut(id, data) {
-  ptyOutBuf[id] = (ptyOutBuf[id] || '') + data;
+  ptyOutBuf.set(id, (ptyOutBuf.get(id) || '') + data);
   if (!ptyFlushTimer) ptyFlushTimer = setTimeout(flushPtyOut, 16);
 }
 
@@ -1268,7 +1267,8 @@ async function spawnPty(id, command = 'claude') {
       // a stale exit must not clobber the new entry (or print into its term).
       if (ptyProcesses[id] !== proc) return;
       // Flush any buffered output before the end marker so order is preserved.
-      if (ptyOutBuf[id]) { uiSend(IPC.PTY_OUTPUT, { id, data: ptyOutBuf[id] }); delete ptyOutBuf[id]; }
+      const pending = ptyOutBuf.get(id);
+      if (pending) { uiSend(IPC.PTY_OUTPUT, { id, data: pending }); ptyOutBuf.delete(id); }
       uiSend(IPC.PTY_OUTPUT, { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
       delete ptyProcesses[id];
     });
