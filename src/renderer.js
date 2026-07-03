@@ -453,7 +453,20 @@ function sessionAgent(s) {
   return (s.command || '').trim().split(/\s+/)[0].replace(/.*\//, '') || 'claude';
 }
 
-function createSession(name, command, acp) {
+// ── Open-session persistence — reopen last session tabs on launch ──
+// Transient sessions (one-shot setup/auth terminals) are excluded.
+const OPEN_SESSIONS_KEY = 'cathode-open-sessions';
+function saveOpenSessions() {
+  try {
+    const entries = [...sessions.entries()].filter(([, s]) => !s.transient);
+    localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify({
+      list: entries.map(([, s]) => ({ name: s.name, command: s.command, acp: s.type === 'acp' })),
+      active: entries.findIndex(([sid]) => sid === activeId),
+    }));
+  } catch (_) {}
+}
+
+function createSession(name, command, acp, transient) {
   const profile = getDefaultProfile();
   const cmd     = command != null ? command : profile.command;
   const wantAcp = acp != null ? (acp === true) : (command == null && profile.acp === true);
@@ -464,6 +477,8 @@ function createSession(name, command, acp) {
 
   if (isAcp) {
     createAcpSession(id, sName, agent, cmd);
+    if (transient) sessions.get(id).transient = true;
+    saveOpenSessions();
     return id;
   }
 
@@ -489,8 +504,9 @@ function createSession(name, command, acp) {
   ro.observe(termEl);
 
   ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
-  const sess = { name: sName, command: cmd, term, fitAddon, el, termEl, ro };
+  const sess = { name: sName, command: cmd, term, fitAddon, el, termEl, ro, transient: transient === true };
   sessions.set(id, sess);
+  saveOpenSessions();
   switchSession(id);
   // Hermes' TUI opens but can't chat until a model is connected — surface the
   // one-time setup card (dismiss hides it for good).
@@ -591,6 +607,7 @@ function closeSession(id) {
   s.el.remove();
   sessions.delete(id);
   renderPtyTabs();
+  saveOpenSessions();
 }
 
 const svtEl    = document.getElementById('session-view-toggle');
@@ -1425,6 +1442,7 @@ function switchSession(id) {
   ensureSessionModel();
   refreshUsage();
   renderPtyTabs();
+  saveOpenSessions();   // remember the active tab across launches
 }
 
 function renderPtyTabs() {
@@ -2689,7 +2707,7 @@ ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message, setupCmd, setupLabel }) => {
     const btn = document.createElement('button');
     btn.className = 'acp-setup-btn';
     btn.textContent = `Set up ${setupLabel || 'agent'}`;
-    btn.addEventListener('click', () => createSession(`${setupLabel || 'Agent'} Setup`, setupCmd, false));
+    btn.addEventListener('click', () => createSession(`${setupLabel || 'Agent'} Setup`, setupCmd, false, true));
     s.msgsEl.appendChild(btn);
   }
   acpScrollEnd(s);
@@ -2740,8 +2758,18 @@ ipcRenderer.on(IPC.ACP_TERM_RELEASE, (_, { id, termId }) => {
   if (tc) { tc.statusEl.className = 'acp-tool-status done'; tc.statusEl.textContent = 'Done'; }
 });
 
-// Boot first session
-createSession();
+// Boot: reopen the sessions from last launch (default profile on first run)
+(() => {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(OPEN_SESSIONS_KEY) || 'null'); } catch (_) {}
+  if (saved && Array.isArray(saved.list) && saved.list.length) {
+    const ids = saved.list.map(t => { try { return createSession(t.name, t.command, t.acp); } catch (_) { return null; } }).filter(v => v != null);
+    if (!ids.length) { createSession(); return; }
+    switchSession(ids[saved.active] ?? ids[0]);
+  } else {
+    createSession();
+  }
+})();
 
 // ── Divider drag ──────────────────────────────────────────────────
 const divider   = document.getElementById('divider');
@@ -3090,7 +3118,7 @@ async function renderAuthAccountSection() {
   `;
   el.querySelector('.auth-reauth-btn').addEventListener('click', () => {
     authModalCtl.close();
-    createSession('Claude Auth', 'claude auth login', false);
+    createSession('Claude Auth', 'claude auth login', false, true);
   });
 }
 
