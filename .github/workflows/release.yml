@@ -46,10 +46,11 @@ jobs:
       - name: Build (${{ matrix.script }})
         run: npm run ${{ matrix.script }}
         env:
-          # Code signing is OFF for these unsigned CI builds: an empty CSC_LINK makes
-          # electron-builder choke, and ad-hoc signing fails on the runners. To sign
-          # macOS later, add the Developer ID cert as a secret, set CSC_LINK +
-          # CSC_KEY_PASSWORD here, and drop the CSC_IDENTITY_AUTO_DISCOVERY line below.
+          # electron-builder's own signing is off here (an empty CSC_LINK made it
+          # choke); scripts/adhoc-sign.js ad-hoc signs the .app instead so it runs on
+          # Apple Silicon (users just clear quarantine with `xattr -cr`). To sign for
+          # real later: add the Developer ID cert as a secret, set CSC_LINK +
+          # CSC_KEY_PASSWORD here, and drop this CSC_IDENTITY_AUTO_DISCOVERY line.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           # macOS notarization — read by scripts/notarize.js (skipped when unset).
           APPLE_ID: ${{ secrets.APPLE_ID }}

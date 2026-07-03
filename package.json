@@ -1,6 +1,6 @@
 {
   "name": "cathode-terminal",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Split chat + browser dev tool for AI coding agents",
   "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
   "author": "hplan",
@@ -45,6 +45,7 @@
     "productName": "Cathode Terminal",
     "copyright": "Copyright © 2025",
     "afterSign": "scripts/notarize.js",
+    "afterPack": "scripts/adhoc-sign.js",
     "publish": {
       "provider": "github",
       "owner": "hplant6",
