@@ -1001,7 +1001,33 @@ html, body {
   overflow: hidden;
   min-height: 70px;   /* floor so the chat never collapses below the status bar */
 }
-.pty-session { display: none; flex: 1; flex-direction: row; overflow: hidden; min-height: 0; }
+.pty-session { display: none; flex: 1; flex-direction: row; overflow: hidden; min-height: 0; position: relative; }
+/* Hermes "connect a model" setup card, overlaid when its terminal exits unconfigured */
+.hermes-setup {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: var(--spec-input-bg);
+}
+.hermes-setup-inner {
+  max-width: 440px; width: 100%; text-align: center;
+  background: var(--spec-header-bg); border: 1px solid var(--spec-structural);
+  border-radius: var(--radius-lg); padding: 24px 26px;
+}
+.hermes-setup-title { font-family: var(--font-title); font-stretch: 112.5%; font-weight: 600; font-size: 15px; color: var(--spec-text); margin-bottom: 8px; }
+.hermes-setup-desc { font-size: 12.5px; color: var(--spec-text-dim); line-height: 1.5; margin-bottom: 16px; }
+.hermes-setup-cmd {
+  display: flex; align-items: stretch; gap: 8px;
+  background: var(--spec-input-bg); border: 1px solid var(--spec-structural);
+  border-radius: var(--radius-md); padding: 6px 6px 6px 12px;
+}
+.hermes-setup-cmd code { flex: 1; align-self: center; text-align: left; font: 12px var(--font-mono); color: var(--spec-text); white-space: nowrap; overflow-x: auto; }
+.hermes-setup-copy {
+  flex-shrink: 0; height: 30px; padding: 0 16px; border: none; cursor: pointer; border-radius: var(--radius-sm);
+  background: var(--spec-accent); color: #fff;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  transition: filter 0.12s;
+}
+.hermes-setup-copy:hover { filter: brightness(1.12); }
 .pty-session.active { display: flex; }
 
 .pty-term-wrap {

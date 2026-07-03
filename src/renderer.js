@@ -488,6 +488,7 @@ function createSession(name, command, acp) {
   ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
   sessions.set(id, {
     name: sName, command: cmd, term, fitAddon, el, termEl, ro,
+    _hermes: /^\s*hermes(\s|$)/.test(cmd), _startedAt: Date.now(),
   });
   switchSession(id);
   return id;
@@ -1480,14 +1481,47 @@ function startRename(nameEl, id) {
 
 ipcRenderer.on(IPC.PTY_OUTPUT, (_, { id, data }) => {
   const s = sessions.get(id);
-  if (s) s.term.write(data);
+  if (!s) return;
+  s.term.write(data);
+  if (!s._hermes) return;
+  if (/no inference provider|no model connected/i.test(data)) s._noProvider = true;
+  if (data.includes('[Session ended]')) {
+    // Hermes exited without a usable model → show the setup card over the terminal.
+    if (s._noProvider || Date.now() - (s._startedAt || 0) < 8000) showHermesSetup(s);
+  } else if (s._setupCard) {
+    // Fresh output after a restart → drop the card and re-arm the detection.
+    s._setupCard.remove(); s._setupCard = null; s._noProvider = false; s._startedAt = Date.now();
+  }
 });
+
+// Setup card shown when a Hermes terminal exits with no model connected.
+function showHermesSetup(s) {
+  if (s._setupCard) return;
+  const card = document.createElement('div');
+  card.className = 'hermes-setup';
+  card.innerHTML =
+    '<div class="hermes-setup-inner">' +
+      '<div class="hermes-setup-title">Finish setting up Hermes</div>' +
+      '<div class="hermes-setup-desc">Hermes needs a model connected. Run this in a terminal, then restart this session:</div>' +
+      '<div class="hermes-setup-cmd"><code>hermes model</code><button class="hermes-setup-copy" type="button">Copy</button></div>' +
+    '</div>';
+  const copyBtn = card.querySelector('.hermes-setup-copy');
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText('hermes model').catch(() => {});
+    copyBtn.textContent = 'Copied ✓';
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+  });
+  s.el.appendChild(card);
+  s._setupCard = card;
+}
 
 
 document.getElementById('btn-restart')?.addEventListener('click', () => {
   const s = sessions.get(activeId);
   if (!s || s.type === 'acp') return;
   s.term.clear();
+  if (s._setupCard) { s._setupCard.remove(); s._setupCard = null; }
+  s._noProvider = false; s._startedAt = Date.now();
   ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
 });
 
