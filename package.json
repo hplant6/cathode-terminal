@@ -1,9 +1,18 @@
 {
   "name": "cathode-terminal",
   "version": "1.0.0",
-  "description": "Split chat + browser dev tool for Claude Code",
+  "description": "Split chat + browser dev tool for AI coding agents",
   "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
   "author": "hplan",
+  "license": "MIT",
+  "homepage": "https://github.com/hplant6/cathode-terminal#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hplant6/cathode-terminal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hplant6/cathode-terminal/issues"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
