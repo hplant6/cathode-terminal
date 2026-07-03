@@ -170,6 +170,14 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const ctrl = input.control || input.meta;
 
+    // F12 — toggle DevTools for the APP window itself (debugging the app UI,
+    // not the browsed page — that has its own DevTools panel).
+    if (input.key === 'F12') {
+      event.preventDefault();
+      mainWindow.webContents.toggleDevTools();
+      return;
+    }
+
     // Ctrl/Cmd+Shift+←/→ — tab switching (all views)
     if (ctrl && input.shift && !input.alt) {
       if (input.key === 'ArrowLeft' || input.key === 'ArrowRight') {
