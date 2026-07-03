@@ -251,9 +251,32 @@ function topProcsMac(by) {
   });
 }
 
+// Linux: sum %cpu / rss per command via ps — same shape as macOS.
+function topProcsLinux(by) {
+  const cpu = by === 'cpu';
+  const field = cpu ? '%cpu' : 'rss';
+  return new Promise(resolve => {
+    execFile('ps', ['-eo', `${field}=,comm=`], { encoding: 'utf8', maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
+      if (err || !stdout) { resolve({ ok: false }); return; }
+      const sums = new Map();
+      for (const line of stdout.split('\n')) {
+        const m = line.trim().match(/^([\d.]+)\s+(.+)$/);
+        if (!m) continue;
+        const name = m[2].replace(/.*\//, '');   // basename of the exec path
+        sums.set(name, (sums.get(name) || 0) + (parseFloat(m[1]) || 0));
+      }
+      const procs = [...sums.entries()]
+        .map(([name, v]) => ({ name, value: cpu ? Math.round(v * 10) / 10 : v * 1024 }))   // rss KB → bytes (match Windows WorkingSet64)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6);
+      resolve({ ok: true, by: cpu ? 'cpu' : 'ram', procs });
+    });
+  });
+}
+
 function topProcs(by) {
   if (IS_MAC) return topProcsMac(by);
-  if (!IS_WIN) return Promise.resolve({ ok: false });   // Linux: native ps breakdown is a later step
+  if (!IS_WIN) return topProcsLinux(by);
   const cpu = by === 'cpu';
   const cmd = cpu
     ? "$n=(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors;" +
