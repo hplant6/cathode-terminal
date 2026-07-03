@@ -17,8 +17,7 @@
 
 ## Screenshot
 
-<!-- Replace with a real screenshot or demo GIF: drop it in docs/ and update the path below. -->
-> _Screenshot coming soon — a split view with an agent chat on the left and the embedded browser on the right._
+![Cathode Terminal — agent chat + usage gauges on the left, the code viewer on the right](docs/screenshot.png)
 
 ## Features
 
