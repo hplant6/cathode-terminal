@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-03
+
 ### Added
 - Automatic updates on Windows and Linux (electron-updater) — installed apps check GitHub Releases on launch, download in the background, and install on restart. macOS auto-update awaits code signing.
 
@@ -24,5 +26,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.1
 [1.0.0]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.0
