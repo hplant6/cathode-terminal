@@ -441,7 +441,7 @@ function getDefaultProfile() {
 
 // Agents that speak ACP (and thus get the chat front-end). Aider (a REPL) and
 // LLM (one-shot) have no agent protocol — they stay terminal-only.
-const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex']);
+const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex', 'hermes']);
 function acpAgentFor(command) {
   const base = (command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
   return ACP_AGENT_KEYS.has(base) ? base : null;
@@ -1537,7 +1537,7 @@ const AVAILABLE_MODELS = [
   { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
   { id: 'aider',  name: 'Aider',             desc: 'AI pair programming in your terminal',            install: 'curl -fsSL https://aider.chat/install.sh | sh',                                             command: 'aider',  acp: false },
   { id: 'llm',    name: 'LLM CLI',           desc: 'Multi-model CLI tool, supports many providers',   install: 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install llm',       command: 'llm',    acp: false },
-  { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic CLI (terminal TUI)",      install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes chat; [ "$SECONDS" -lt 5 ] && { echo; echo "Hermes has no model connected. Run:  hermes model  (or add an API key to ~/.hermes/.env), then restart this session."; }', acp: false },
+  { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic CLI",                     install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes',  acp: true },
 ];
 
 // ── Per-tool model catalog ────────────────────────────────────────
@@ -1620,10 +1620,16 @@ let sessionProfiles = (() => {
       // command over time otherwise stacks multiple same-named entries.
       const byName = new Map();
       for (const p of parsed) byName.set(p.name, p);
-      if (byName.size !== parsed.length) {
-        parsed = Array.from(byName.values());
-        localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
+      let dirty = byName.size !== parsed.length;
+      parsed = Array.from(byName.values());
+      // Migrate saved Hermes profiles from the old terminal-TUI command (with the
+      // "$SECONDS" no-model hint) to the ACP chat agent.
+      for (const p of parsed) {
+        if (/^\s*hermes(\s|;|$)/.test(p.command || '') && p.acp !== true) {
+          p.command = 'hermes'; p.acp = true; dirty = true;
+        }
       }
+      if (dirty) localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
       return parsed;
     }
   } catch (_) {}
