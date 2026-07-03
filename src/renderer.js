@@ -14,7 +14,10 @@ try { window.iro = require('@jaames/iro'); } catch (_) {}
 // elements per frame during heavy output. Canvas keeps that off the DOM
 // entirely. Optional — falls back to the DOM renderer if it can't load.
 let CanvasAddon = null;
-try { ({ CanvasAddon } = require('@xterm/addon-canvas')); } catch (_) {}
+// DISABLED: the deprecated canvas renderer can silently fail its text layer
+// (cursor draws, text never does — blank terminals). xterm's DOM renderer is
+// plenty fast for these sessions. Re-enable deliberately if ever needed.
+// try { ({ CanvasAddon } = require('@xterm/addon-canvas')); } catch (_) {}
 function attachCanvasRenderer(term) {
   if (!CanvasAddon) return;
   try { term.loadAddon(new CanvasAddon()); } catch (_) {}
