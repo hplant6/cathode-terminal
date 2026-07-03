@@ -1130,8 +1130,22 @@ html, body {
   color: var(--spec-text); font-family: var(--font-ui); line-height: 1.6;
 }
 .cfs-row { display: flex; align-items: center; gap: 14px; }
-.cfs-slider { flex: 1; accent-color: var(--spec-accent); cursor: pointer; }
 .cfs-value { min-width: 46px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); }
+/* Range input styled to match the Storybook PropertySlider:
+   shade-5 10px track + shade-2 18×30 pill knob with grip dots. */
+.cfs-slider { -webkit-appearance: none; appearance: none; flex: 1; height: 30px; background: transparent; cursor: pointer; }
+.cfs-slider::-webkit-slider-runnable-track {
+  height: 10px; border-radius: 999px; background: var(--spec-toolbar-bg);
+}
+.cfs-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 30px; margin-top: -10px; border-radius: 999px; border: none;
+  background-color: var(--spec-text-faint);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 18 18' fill='%23817E89'%3E%3Ccircle cx='6.75' cy='3.75' r='1.1'/%3E%3Ccircle cx='11.25' cy='3.75' r='1.1'/%3E%3Ccircle cx='6.75' cy='9' r='1.1'/%3E%3Ccircle cx='11.25' cy='9' r='1.1'/%3E%3Ccircle cx='6.75' cy='14.25' r='1.1'/%3E%3Ccircle cx='11.25' cy='14.25' r='1.1'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center;
+  cursor: grab;
+}
+.cfs-slider::-webkit-slider-thumb:active { cursor: grabbing; }
 /* Copy-to-clipboard button — slides out of the assistant message's lower-left
    corner on hover. */
 .acp-copy-btn {
