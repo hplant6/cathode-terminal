@@ -2,11 +2,12 @@ import React from 'react';
 import './Onboarding.css';
 
 /* Square fill-and-flip loader — running-step indicator, tinted with the app orange. */
-export function StepLoader({ size = 15, color = '#FF5720' }) {
-  const border = Math.max(2, Math.round(size / 7.5));
+export function StepLoader() {
   return (
-    <span className="ob-loader" style={{ width: size, height: size, border: `${border}px solid ${color}` }}>
-      <span className="ob-loader-inner" style={{ background: color }} />
+    <span className="ob-juggle">
+      <span className="ob-ball" />
+      <span className="ob-ball" />
+      <span className="ob-ball" />
     </span>
   );
 }
