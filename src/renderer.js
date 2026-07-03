@@ -1797,7 +1797,48 @@ function renderInstallModels() {
   });
 }
 
-document.getElementById('profiles-add')?.addEventListener('click', () => addProfileCard('', '', true));
+// "+ Add Profile" → a menu of known models not already listed (re-add without
+// retyping), plus a Custom option for a manual name/command.
+function showAddProfileMenu(btn) {
+  document.querySelector('.ap-add-menu')?.remove();
+  const present = new Set(
+    Array.from(profilesList.querySelectorAll('.profile-cmd')).map(i => i.value.trim()).filter(Boolean)
+  );
+  const known = [{ name: 'Claude Code', command: 'claude' },
+    ...AVAILABLE_MODELS.map(m => ({ name: m.name, command: m.command }))];
+  const avail = known.filter(m => !present.has(m.command));
+
+  const menu = document.createElement('div');
+  menu.className = 'ap-add-menu';
+  avail.forEach(m => {
+    const it = document.createElement('button');
+    it.className = 'ap-add-item';
+    it.textContent = m.name;
+    it.addEventListener('click', () => { menu.remove(); addProfileCard(m.name, m.command, false); });
+    menu.appendChild(it);
+  });
+  const custom = document.createElement('button');
+  custom.className = 'ap-add-item ap-add-custom';
+  custom.textContent = 'Custom…';
+  custom.addEventListener('click', () => { menu.remove(); addProfileCard('', '', true); });
+  menu.appendChild(custom);
+
+  document.body.appendChild(menu);
+  const r = btn.getBoundingClientRect();
+  menu.style.left  = Math.round(r.left) + 'px';
+  menu.style.width = Math.round(r.width) + 'px';
+  menu.style.top   = Math.round(r.top - menu.offsetHeight - 4) + 'px';   // pop upward (button sits near the modal bottom)
+  const close = (ev) => {
+    if (menu.contains(ev.target) || ev.target === btn) return;
+    menu.remove();
+    document.removeEventListener('mousedown', close, true);
+  };
+  setTimeout(() => document.addEventListener('mousedown', close, true), 0);
+}
+document.getElementById('profiles-add')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  showAddProfileMenu(e.currentTarget);
+});
 
 document.getElementById('profiles-save')?.addEventListener('click', () => {
   const cards = profilesList.querySelectorAll('.ap-card');
