@@ -2339,6 +2339,31 @@ async function checkForAppUpdate() {
   const info = (message, detail, type = 'info') =>
     dialog.showMessageBox(mainWindow, { type, message, detail: detail || '', buttons: ['OK'] });
 
+  // Packaged Windows/Linux → electron-updater, not git.
+  if (updaterSupported()) {
+    const up = getAutoUpdater();
+    if (!up) return info('Update check unavailable', 'The updater could not be loaded.', 'warning');
+    if (updateDownloaded) {
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'info', message: 'Update ready',
+        detail: `Version ${updateDownloaded.version || ''} has been downloaded. Restart now to install it?`,
+        buttons: ['Restart now', 'Later'], defaultId: 0, cancelId: 1,
+      });
+      if (response === 0) setImmediate(() => up.quitAndInstall());
+      return;
+    }
+    try {
+      const r = await up.checkForUpdates();
+      const v = r && r.updateInfo && r.updateInfo.version;
+      if (v && v !== app.getVersion()) {
+        return info('Downloading update', `Version ${v} is downloading in the background — you'll be prompted to restart when it's ready.`);
+      }
+      return info('You’re up to date', 'No new updates are available.');
+    } catch (e) {
+      return info('Could not check for updates', String((e && e.message) || 'Update check failed').slice(0, 300), 'warning');
+    }
+  }
+
   const inside = await gitExec(['rev-parse', '--is-inside-work-tree'], { dir, timeout: 8000 });
   if (inside.failed) {
     return info('In-app update unavailable',
@@ -2386,7 +2411,34 @@ async function checkForAppUpdate() {
 
 // Quiet check a few seconds after launch — surfaces "N available" without a
 // dialog (renderer shows a dismissible toast + a dot on the gear).
+// ── Auto-update (electron-updater) — packaged Windows/Linux only. macOS needs a
+// signed app for Squirrel.Mac, so it stays on the git/manual flow below.
+let _autoUpdater;
+let _updaterTried = false;
+let updateDownloaded = null;   // UpdateInfo once a download is ready to install
+function updaterSupported() { return app.isPackaged && process.platform !== 'darwin'; }
+function getAutoUpdater() {
+  if (_updaterTried) return _autoUpdater || null;
+  _updaterTried = true;
+  try {
+    _autoUpdater = require('electron-updater').autoUpdater;
+    _autoUpdater.autoDownload = true;
+    _autoUpdater.autoInstallOnAppQuit = true;
+    _autoUpdater.on('update-downloaded', (info) => {
+      updateDownloaded = info || {};
+      uiSend(IPC.UPDATE_AVAILABLE, { version: info && info.version });   // reuse the toast
+    });
+    _autoUpdater.on('error', (e) => console.log('[updater]', (e && e.message) || e));
+  } catch (e) { console.log('[updater] unavailable:', (e && e.message) || e); }
+  return _autoUpdater || null;
+}
+
 async function startupUpdateCheck() {
+  if (updaterSupported()) {
+    const up = getAutoUpdater();
+    if (up) up.checkForUpdates().catch(() => {});   // silent; downloads + notifies via events
+    return;
+  }
   try {
     const dir = app.getAppPath();
     if ((await gitExec(['rev-parse', '--is-inside-work-tree'], { dir, timeout: 8000 })).failed) return;

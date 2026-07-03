@@ -5284,10 +5284,14 @@ ipcRenderer.on(IPC.PICK_SEND_TO_SESSION, (_, message) => {
 
 // Passive update indicator: a dismissible toast (click → run the update flow)
 // plus a persistent dot on the settings gear.
-ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, { behind }) => {
+ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   const gear = document.getElementById('btn-settings');
   if (gear) gear.classList.add('has-update');
-  const t = showToast(`↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`, { duration: 9000 });
+  const behind = info && info.behind;
+  const msg = info && info.version
+    ? `↑ Update ${info.version} ready — click to install`
+    : `↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`;
+  const t = showToast(msg, { duration: 9000 });
   if (t && t.el) {
     t.el.style.cursor = 'pointer';
     t.el.addEventListener('click', () => { ipcRenderer.send(IPC.APP_CHECK_UPDATES); t.dismiss(); });

@@ -29,6 +29,7 @@
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "electron-updater": "^6.8.9",
     "gsap": "^3.15.0",
     "monaco-editor": "^0.52.2",
     "node-pty": "^1.1.0",
@@ -44,6 +45,11 @@
     "productName": "Cathode Terminal",
     "copyright": "Copyright © 2025",
     "afterSign": "scripts/notarize.js",
+    "publish": {
+      "provider": "github",
+      "owner": "hplant6",
+      "repo": "cathode-terminal"
+    },
     "directories": {
       "buildResources": "assets",
       "output": "dist"
