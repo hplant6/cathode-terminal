@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-03
+
+### Fixed
+- **Terminal output was silently dropped** — the PTY output coalescing buffer stringified session ids, so every terminal (agent TUIs, the chat/terminal toggle) rendered blank. All terminals work again.
+- Replaced the deprecated canvas terminal renderer (silent blank-text failure mode) with xterm's DOM renderer.
+- Usage meters are now agent-aware: non-Claude agents show their own context-window dial and a session-token count instead of Claude's context/limits/cost; a lone dial no longer renders oversized.
+
+### Added
+- **Hermes now runs as a chat agent (ACP)** with its own CLI-style banner — via a bidirectional stdio bridge and authenticate-first connection.
+- Session tabs are restored on launch (which tabs were open + which was active).
+- Multi-project Storybook resolution: `.cathode/storybook.json` manifest per project + `STORYBOOK_URL` injected into agent sessions.
+- Chat font size slider (Settings → Chat Font Size…), styled after the design-system slider.
+- F12 toggles DevTools for the app window itself.
+
+### Changed
+- Status-bar loader animates while connecting/installing, not just while working.
+- Small UI polish: square logo-chevron hover (3px radius), no fill on agent-tab close-button hover.
+
 ## [1.0.2] - 2026-07-03
 
 ### Fixed
@@ -31,7 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.3
 [1.0.2]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.2
 [1.0.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.1
 [1.0.0]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.0
