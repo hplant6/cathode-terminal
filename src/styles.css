@@ -1116,13 +1116,22 @@ html, body {
 .acp-msg {
   max-width: 86%;
   line-height: 1.6;
-  font-size: 12px;
+  font-size: var(--chat-font-size, 12px);   /* adjustable via Settings → Chat Font Size */
   word-break: break-word;
   position: relative;
   -webkit-user-select: text;
   user-select: text;
   cursor: text;
 }
+/* Chat font-size modal (slider + live preview) */
+.cfs-preview {
+  padding: 14px 16px; margin-bottom: 16px;
+  background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
+  color: var(--spec-text); font-family: var(--font-ui); line-height: 1.6;
+}
+.cfs-row { display: flex; align-items: center; gap: 14px; }
+.cfs-slider { flex: 1; accent-color: var(--spec-accent); cursor: pointer; }
+.cfs-value { min-width: 46px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); }
 /* Copy-to-clipboard button — slides out of the assistant message's lower-left
    corner on hover. */
 .acp-copy-btn {

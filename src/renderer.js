@@ -2887,12 +2887,47 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'keyboard-shortcuts': openKeyboardShortcutsModal?.(); break;
     case 'edit-devices':       openEditDevicesModal?.();       break;
     case 'theme':         openThemeModal?.();    break;
+    case 'chat-font':     openChatFontModal?.(); break;
     case 'new-window':    ipcRenderer.send(IPC.NEW_WINDOW); break;
   }
 });
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
 const closeApiKeyModal = apiKeyModalCtl.close;
+
+// ── Chat font size (Settings → Chat Font Size) ────────────────────
+const CHAT_FONT_KEY = 'cathode-chat-font-size';
+const CHAT_FONT_DEFAULT = 12, CHAT_FONT_MIN = 11, CHAT_FONT_MAX = 22;
+const readChatFont = () => { const v = parseFloat(localStorage.getItem(CHAT_FONT_KEY)); return Number.isFinite(v) ? Math.min(CHAT_FONT_MAX, Math.max(CHAT_FONT_MIN, v)) : CHAT_FONT_DEFAULT; };
+const applyChatFont = (px) => document.documentElement.style.setProperty('--chat-font-size', px + 'px');
+applyChatFont(readChatFont());   // apply the saved size on load
+
+let openChatFontModal = null;
+(function initChatFontModal() {
+  const modal = document.getElementById('chat-font-modal');
+  if (!modal) return;
+  const ctl = wireModal(modal);
+  const slider  = document.getElementById('chat-font-slider');
+  const valEl   = document.getElementById('chat-font-value');
+  const preview = document.getElementById('chat-font-preview');
+  const set = (px, persist) => {
+    px = Math.min(CHAT_FONT_MAX, Math.max(CHAT_FONT_MIN, px));
+    applyChatFont(px);
+    if (valEl) valEl.textContent = px + 'px';
+    if (preview) preview.style.fontSize = px + 'px';
+    if (persist) localStorage.setItem(CHAT_FONT_KEY, String(px));
+  };
+  slider?.addEventListener('input', () => set(parseFloat(slider.value), true));
+  document.getElementById('chat-font-reset')?.addEventListener('click', () => { if (slider) slider.value = String(CHAT_FONT_DEFAULT); set(CHAT_FONT_DEFAULT, true); });
+  document.getElementById('chat-font-done')?.addEventListener('click', ctl.close);
+  document.getElementById('chat-font-close')?.addEventListener('click', ctl.close);
+  openChatFontModal = () => {
+    const cur = readChatFont();
+    if (slider) slider.value = String(cur);
+    set(cur, false);
+    ctl.open();
+  };
+})();
 
 document.getElementById('api-key-cancel')?.addEventListener('click', closeApiKeyModal);
 

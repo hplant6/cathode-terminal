@@ -2460,6 +2460,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Authentication',     click: act('auth') },
     { label: 'Manage LLMs',        click: act('manage-llms') },
     { label: 'Color Themes',       click: act('theme') },
+    { label: 'Chat Font Size…',    click: act('chat-font') },
     { label: 'Audit Prompts',      click: act('audit-prompts') },
     { label: 'Edit Tabs',          click: act('edit-tabs') },
     { label: 'MCP Tool Tokens',    click: act('mcp-tools') },

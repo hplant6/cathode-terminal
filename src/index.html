@@ -911,6 +911,24 @@
     </div>
   </div>
 
+  <!-- Chat font size modal -->
+  <div id="chat-font-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <button id="chat-font-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Chat Font Size</div>
+      <p class="modal-desc">Adjust the size of chat message text.</p>
+      <div class="cfs-preview" id="chat-font-preview">The quick brown fox jumps over the lazy dog.</div>
+      <div class="cfs-row">
+        <input type="range" id="chat-font-slider" class="cfs-slider" min="11" max="22" step="0.5" value="12" />
+        <span class="cfs-value" id="chat-font-value">12px</span>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="chat-font-reset">Reset</button>
+        <button class="modal-btn-confirm" id="chat-font-done">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Theme modal -->
   <div id="theme-modal" class="modal-backdrop">
     <div class="modal-box" id="theme-modal-box">
