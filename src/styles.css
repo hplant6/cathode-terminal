@@ -1094,6 +1094,15 @@ html, body {
   white-space: pre;
 }
 .acp-logo-art { color: var(--spec-accent); }   /* orange ASCII blocks (Figma fill_WKJSN2) */
+/* Full-width figlet header (per-agent art, e.g. Hermes) — tiny mono so the
+   ~100-char art fits the chat column; hide any overflow instead of scrolling. */
+.acp-banner-art {
+  font-size: 7.5px;
+  line-height: 1.25;
+  font-weight: 400;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
 .acp-banner-notices {
   margin-top: 8px;
   display: flex;

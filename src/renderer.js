@@ -2302,6 +2302,19 @@ function acpScrollUserToMiddle(s, el) {
 }
 
 const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
+// Per-agent banner art. Agents without an entry get the default block logo
+// inlined beside the info lines (Claude style).
+const AGENT_BANNER_ART = {
+  hermes: [
+    '██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗',
+    '██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝',
+    '███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗█████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║',
+    '██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║',
+    '██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║',
+    '╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝',
+  ].join('\n'),
+};
+
 function renderAcpBanner(s, version, model, cwd) {
   // Drop any prior banner (e.g. when respawning after a model switch)
   s.msgsEl.querySelector('.acp-banner')?.remove();
@@ -2311,10 +2324,22 @@ function renderAcpBanner(s, version, model, cwd) {
   const agentLabel = ACP_LABELS[s.agent] || 'Agent';
   const versionStr = version ? `v${version}` : '';
   const modelLine  = model || agentLabel;
+  const art = AGENT_BANNER_ART[s.agent];
+  if (art) {
+    // Agent's own figlet header (orange) + plain info lines beneath.
+    const artEl = document.createElement('pre');
+    artEl.className = 'acp-banner-logo acp-banner-art acp-logo-art';
+    artEl.textContent = art;
+    banner.appendChild(artEl);
+  }
   const logo = document.createElement('pre');
   logo.className = 'acp-banner-logo';
   // ASCII blocks → orange (.acp-logo-art); the version/model/path text → shade 0
-  logo.innerHTML = [
+  logo.innerHTML = art ? [
+    escHtml(`${agentLabel} ${versionStr}`.trim()),
+    escHtml(modelLine),
+    escHtml(cwd),
+  ].join('\n') : [
     `<span class="acp-logo-art"> ▐▛███▜▌   </span>${escHtml(`${agentLabel} ${versionStr}`)}`,
     `<span class="acp-logo-art">▝▜█████▛▘  </span>${escHtml(modelLine)}`,
     `<span class="acp-logo-art">  ▘▘ ▝▝    </span>${escHtml(cwd)}`,
