@@ -867,6 +867,34 @@ function pickActiveOrHide() {
 const nodeNet = require('net');   // Node's net (Electron's `net` above is the Chromium client)
 const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'storybook-demo') : path.join(__dirname, 'storybook-demo');
 function sbStateFile() { return path.join(app.getPath('userData'), 'storybook-server.json'); }
+
+// ── Project manifest (<project>/.cathode/storybook.json) ─────────
+// Written while a managed Storybook is running for that project and removed when
+// it stops — agents resolve "this project's Storybook" from it (see the user-level
+// CLAUDE.md/AGENTS.md guidance). Best-effort: never let manifest IO break the server.
+function writeSbManifest(inst) {
+  if (!inst || !inst.dir) return;   // adopted instances have no known project dir
+  try {
+    const d = path.join(inst.dir, '.cathode');
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'storybook.json'), JSON.stringify({
+      url: inst.url, port: inst.port, label: inst.label, managed: inst.managed,
+      startedAt: new Date().toISOString(),
+    }, null, 2) + '\n');
+  } catch (_) {}
+}
+function clearSbManifest(dir) {
+  if (!dir) return;
+  try { fs.unlinkSync(path.join(dir, '.cathode', 'storybook.json')); } catch (_) {}
+}
+
+// The Storybook URL for a project dir: its own running instance first, else the
+// active instance. Injected as STORYBOOK_URL when agent sessions spawn.
+function storybookUrlFor(dir) {
+  for (const s of sbServers.values()) if (dir && s.dir === dir && s.status === 'ready') return s.url;
+  const act = sbServers.get(activeSbId);
+  return act && act.status === 'ready' ? act.url : '';
+}
 function tailLines(s, n) { return (s || '').split('\n').filter(Boolean).slice(-n).join('\n'); }
 
 // Find a free TCP port from `start` upward, so a busy 6006 doesn't block us.
@@ -925,10 +953,14 @@ function stopInstance(id) {
   sbServers.delete(id);
   if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) { try { inst.proc.kill(); } catch (_) {} } }
   writeSbState();
+  clearSbManifest(inst.dir);
   if (activeSbId === id) pickActiveOrHide(); else emitInstances();
 }
 function stopAllStorybook() {
-  for (const inst of sbServers.values()) { if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) {} } }
+  for (const inst of sbServers.values()) {
+    if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) {} }
+    clearSbManifest(inst.dir);
+  }
   sbServers.clear(); activeSbId = null; clearSbState();
 }
 
@@ -1003,7 +1035,7 @@ ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   if (proc.stderr) proc.stderr.on('data', onLog);
   proc.on('exit', (code) => {
     if (!sbServers.has(id)) return;
-    sbServers.delete(id); writeSbState();
+    sbServers.delete(id); writeSbState(); clearSbManifest(inst.dir);
     sbStatus('stopped', { code, log: tailLines(inst.log, 8) });
     if (activeSbId === id) pickActiveOrHide(); else emitInstances();
   });
@@ -1012,6 +1044,7 @@ ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   if (!sbServers.has(id)) return { ok: false, error: 'stopped' };            // stopped during startup
   if (!ready) { stopInstance(id); sbStatus('error', { message: 'Storybook didn’t come up on ' + url + '.', log: tailLines(inst.log, 8) }); return { ok: false, error: 'timeout' }; }
   inst.status = 'ready';
+  writeSbManifest(inst);                                             // agents resolve the project's URL from this
   setActiveStorybook(id);                                            // auto-connect the live view
   sbStatus('ready', { url, dir: projectDir });
   return { ok: true, url };
@@ -1072,8 +1105,11 @@ function storybookBlock(url) {
   return [
     SB_START,
     '## Design System (Storybook)',
-    `Reference the Storybook at ${url} before making any UI changes.`,
-    'Use its design tokens, component APIs, and visual styles to keep the UI consistent with the existing design system.',
+    "Each project has its own Storybook. Resolve this project's URL in this order:",
+    '1. `$STORYBOOK_URL` — set in your environment by Cathode for the active project',
+    "2. `.cathode/storybook.json` in the project root (`url` field) — present while this project's Storybook is running",
+    `3. Fallback: ${url}`,
+    'Reference it before making any UI changes — use its design tokens, component APIs, and visual styles to keep the UI consistent with the existing design system.',
     SB_END,
   ].join('\n');
 }
@@ -1237,17 +1273,18 @@ async function spawnPty(id, command = 'claude') {
     const pty  = require('node-pty');
     const base = command.trim().split(/\s+/)[0].replace(/.*\//, '');
     const env  = DUAL_ENV_BINS.has(base) ? await resolveAgentEnv(base) : 'wsl';
+    const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
     let proc;
     if (env === 'win') {
       // Windows-installed agent (e.g. Gemini/Codex via Windows npm) → run on Windows.
       const { file, args } = platform.cmdFileArgs(['/c', command]);
       proc = pty.spawn(file, args, {
         name: 'xterm-256color', cols: 80, rows: 24,
-        cwd: winCwd(), env: process.env,
+        cwd: winCwd(), env: { ...process.env, ...(sbUrl ? { STORYBOOK_URL: sbUrl } : {}) },
       });
     } else {
       // Prepend pip/pipx user-install dir so tools like aider are found
-      const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH"; ${command}`;
+      const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH";${sbUrl ? ` export STORYBOOK_URL="${sbUrl}";` : ''} ${command}`;
       const { file, args } = platform.nixFileArgs(['bash', '-lic', wrappedCmd]);
       proc = pty.spawn(file, args, {
         name: 'xterm-256color', cols: 80, rows: 24,
@@ -1448,11 +1485,15 @@ async function launchClaudeAcp(modelOverride) {
   let model = '';
   try { model = JSON.parse(setOut).model || ''; } catch (_) {}
   if (modelOverride) model = modelOverride;
+  const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
   const proc = platform.cmdSpawn(['/c', 'claude-agent-acp'], {
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
       ...(wslClaudeConfigDir ? { CLAUDE_CONFIG_DIR: wslClaudeConfigDir } : {}),
+      // STORYBOOK_URL must survive the adapter's Windows→WSL hop, so list it in
+      // WSLENV (wsl.exe only forwards vars named there).
+      ...(sbUrl ? { STORYBOOK_URL: sbUrl, WSLENV: (process.env.WSLENV ? process.env.WSLENV + ':' : '') + 'STORYBOOK_URL' } : {}),
       ...(modelOverride ? { ANTHROPIC_MODEL: modelOverride } : {}),
     },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -1466,10 +1507,14 @@ async function launchClaudeAcp(modelOverride) {
 async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
   const env = await resolveAgentEnv(bin);
   if (!env) throw new Error(`${ACP_LABELS[agentKey] || agentKey} not found — install it (e.g. \`npm i -g\`).`);
+  const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
   let proc, version = '';
   if (env === 'win') {
     version = await winVersion(bin);
-    proc = platform.cmdSpawn(['/c', bin, ...acpArgs], { stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true });
+    proc = platform.cmdSpawn(['/c', bin, ...acpArgs], {
+      stdio: ['pipe', 'pipe', 'pipe'], cwd: winCwd(), windowsHide: true,
+      env: { ...process.env, ...(sbUrl ? { STORYBOOK_URL: sbUrl } : {}) },
+    });
   } else {
     version = ((await wslExecFile(['bash', '-lic', `${bin} --version 2>/dev/null`], 6000)) || '').trim().split('\n').filter(Boolean).pop() || '';
     let cmd = `${bin} ${acpArgs.join(' ')}`;
@@ -1479,6 +1524,7 @@ async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
     // `cat` so the adapter sees real WSL pipes (stdin-only bridging is not enough
     // — the response still dies on the stdout side).
     if (opts.bridgeStdio) cmd = `cat | ${cmd} | cat`;
+    if (sbUrl) cmd = `export STORYBOOK_URL="${sbUrl}"; ${cmd}`;
     proc = platform.nixSpawn(['bash', '-lic', cmd], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd() });
   }
   return { proc, version, model: '' };
