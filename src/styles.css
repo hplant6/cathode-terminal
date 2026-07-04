@@ -3750,7 +3750,7 @@ button:active { background: var(--btn-active); }
 .sb-hero-icon { color: var(--accent); opacity: 0.6; margin-bottom: 16px; }
 .sb-title { font-family: var(--font-title); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); margin: 0 0 10px; text-align: center; }
 .sb-desc  { font-size: 12px; color: var(--text-dim); line-height: 1.65; text-align: center; margin: 0 0 24px; max-width: 480px; }
-.sb-folder-field { width: 100%; max-width: 520px; margin-bottom: 18px; }   /* shared folder picker above the tabs */
+.sb-folder-field { width: 100%; max-width: 520px; margin: 10px 0 16px; }   /* shared folder picker (under the tabs) — the project to run/generate a Storybook for */
 .sb-ways-check { margin-top: 14px; max-width: 520px; }
 /* 4 longer labels → smaller/tighter than the browser tabs so they fit on one line */
 .sb-ways .wf-tab { font-size: 11px; gap: 6px; padding: 12px 6px; }

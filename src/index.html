@@ -669,6 +669,7 @@
                     <button class="sb-fw-toggle" type="button" tabindex="-1" aria-label="Choose framework"><span class="ui-chev"></span></button>
                     <div class="sb-fw-menu" hidden>
                       <div class="sb-fw-opt" data-val="">Auto-detect (recommended)</div>
+                      <div class="sb-fw-opt" data-val="HTML / static site">HTML / static site</div>
                       <div class="sb-fw-opt" data-val="React">React</div>
                       <div class="sb-fw-opt" data-val="Vue">Vue</div>
                       <div class="sb-fw-opt" data-val="Angular">Angular</div>
@@ -694,20 +695,21 @@
               </div>
             </div>
 
+            <div class="sb-folder-field sb-field" data-tip-now title="The folder Cathode runs the agent in, and writes CLAUDE.md / AGENTS.md / GEMINI.md into so every model references your Storybook.">
+              <label class="sb-label">Project folder</label>
+              <div class="sb-folder-row">
+                <input id="sb-folder" type="text" class="sb-input" placeholder="Bundled demo Storybook" spellcheck="false" readonly/>
+                <button id="sb-folder-pick" class="sb-folder-btn" title="Choose project folder">Browse…</button>
+              </div>
+              <div class="sb-folder-hint">Defaults to the bundled demo — pick your project to run or generate its Storybook.</div>
+            </div>
+
             <div id="sb-status" class="sb-status" hidden></div>
 
             <!-- Project folder + reminder, tucked into a Settings drawer -->
             <details class="sb-settings">
               <summary><span class="sb-settings-chev ui-chev"></span>Settings</summary>
               <div class="sb-settings-body">
-                <div class="sb-field" data-tip-now title="Writes CLAUDE.md / AGENTS.md / GEMINI.md here so every model references your Storybook.">
-                  <label class="sb-label">Project folder</label>
-                  <div class="sb-folder-row">
-                    <input id="sb-folder" type="text" class="sb-input" placeholder="Bundled demo Storybook" spellcheck="false" readonly/>
-                    <button id="sb-folder-pick" class="sb-folder-btn" title="Choose project folder">Browse…</button>
-                  </div>
-                  <div class="sb-folder-hint">(optional — defaults to the bundled demo)</div>
-                </div>
                 <label class="sb-check-row" data-tip-now title="Helps tools without memory files, e.g. Aider">
                   <input type="checkbox" id="sb-auto" checked/>
                   <span class="sb-switch"><span class="sb-switch-knob"><span class="sb-switch-led"></span></span></span>

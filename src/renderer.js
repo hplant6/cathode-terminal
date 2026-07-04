@@ -7342,12 +7342,18 @@ async function buildStorybook({ figma = '', framework = '' } = {}) {
   if (dir) ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });   // run the agent in the chosen folder
   let installed = false;
   try { installed = (await ipcRenderer.invoke(IPC.STORYBOOK_DETECT, { dir })).installed; } catch (_) {}
+  const isHtml = /html|static/i.test(framework);
+  const init = isHtml
+    ? 'run `npx storybook@latest init --type html` (this is a plain static HTML/CSS/JS site — e.g. a WordPress export)'
+    : 'run `npx storybook@latest init`';
   const base = installed
     ? 'Storybook is already set up in this project'
-    : 'Set up Storybook in this project: run `npx storybook@latest init` if it isn’t already initialized';
+    : `Set up Storybook in this project: ${init} if it isn’t already initialized`;
+  const targets = isHtml ? 'the site’s reusable UI blocks / sections / partials' : 'the project’s existing components';
+  const fwNote = (framework && !isHtml) ? ` (this is a ${framework} project)` : '';
   const prompt = figma
     ? `${base}. Then, using the Figma MCP (Framelink figma-developer-mcp), call get_figma_data on ${figma} and download any assets with download_images, and build components plus matching Storybook stories that faithfully reproduce the design’s layout, spacing, colors, typography, and assets. Organize stories under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`
-    : `${base}, then generate stories for the project’s existing components${framework ? ` (this is a ${framework} project)` : ''} organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;
+    : `${base}, then generate Storybook stories for ${targets}${fwNote} organized under a "Design System" hierarchy. When done, Storybook should run on http://localhost:6006.`;
   const ok = routeToActiveSession(prompt);
   if (sbStatusEl) {
     sbStatusEl.hidden = false;
