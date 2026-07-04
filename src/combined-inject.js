@@ -4,6 +4,25 @@
 // page. It must stay fully self-contained: no closure references; everything
 // it needs arrives through OPTS. getCombinedScript() below builds the string.
 const { Z } = require('./ui-constants');
+const fs = require('fs');
+const path = require('path');
+
+// Vendored iro.js color-picker source, inlined into the injected script. It was
+// previously pulled from a CDN <script> inside the browsed page — which fails on
+// any CSP-protected site (GitHub, most SaaS) or offline, silently killing the
+// picker. Reading the dist here (require-time, Node side) lets us embed it so
+// window.iro is always defined in-page with no network. The wrapper shadows
+// define/module/exports and pins `this` to window so the UMD takes its global
+// branch ((t=t||self).iro=n()) even on pages that ship AMD/CommonJS shims. An
+// empty IRO_SRC (read failed) degrades to loadIro()'s existing CDN fallback.
+let IRO_SRC = '';
+try {
+  const iroDist = path.join(path.dirname(require.resolve('@jaames/iro/package.json')), 'dist', 'iro.min.js');
+  IRO_SRC = fs.readFileSync(iroDist, 'utf8');
+} catch (e) {
+  console.error('[combined-inject] could not inline iro.js — falling back to CDN', e);
+}
+const IRO_INLINE = `;(function(){if(window.iro)return;var define,module,exports;${IRO_SRC}\n}).call(window);`;
 
 // Computed-style properties surfaced per element in the popup.
 const CSS_PROPS = [
@@ -571,10 +590,14 @@ function cathodeCombinedPage(OPTS) {
       if (window.iro) { cb(); return; }
       // Reuse an in-flight load, and clean up on failure (CSP-restricted pages
       // block the CDN — without onerror each swatch click appended another tag).
-      var pending = document.getElementById('__cathode_iro__');
+      // NOTE: the loader <script> and the picker mount <div> must NOT share an id.
+      // They used to both be '__cathode_iro__'; getElementById/querySelector then
+      // returned the <script> (first in tree order) and iro mounted its wheel into
+      // a non-rendering <script> tag — a dead picker on every page. Distinct id here.
+      var pending = document.getElementById('__cathode_iro_lib__');
       if (pending) { pending.addEventListener('load', cb); return; }
       const s = document.createElement('script');
-      s.id = '__cathode_iro__';
+      s.id = '__cathode_iro_lib__';
       s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
       s.onload = cb;
       s.onerror = function() { s.remove(); };
@@ -1441,7 +1464,7 @@ function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevM
     CSS_PROPS,
     Z,
   };
-  return `(${cathodeCombinedPage.toString()})(${JSON.stringify(opts)})`;
+  return `${IRO_INLINE}\n(${cathodeCombinedPage.toString()})(${JSON.stringify(opts)})`;
 }
 
 module.exports = { getCombinedScript };

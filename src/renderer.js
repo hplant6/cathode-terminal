@@ -2168,11 +2168,26 @@ document.querySelectorAll('.tp-resize').forEach(handle => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const panel = document.querySelector('.tool-panel:not([hidden])');
-  if (!panel) return;
+  if (panel && cancelToolPanel(panel)) e.preventDefault();
+});
+
+// Dismiss a single tool-panel by clicking its footer Cancel (the Send's ghost
+// sibling), which runs that panel's own close()/cleanup. Falls back to hiding it
+// outright. Returns true if a panel was actually dismissed.
+function cancelToolPanel(panel) {
+  if (!panel || panel.hidden) return false;
   const send = panel.querySelector('.pp-btn-primary');
   const cancel = send && send.parentElement.querySelector('.pp-btn-ghost');
-  if (cancel) { e.preventDefault(); cancel.click(); }
-});
+  if (cancel) cancel.click();
+  else panel.hidden = true;
+  return true;
+}
+
+// Dismiss every open tool result panel — the properties belong to a page we've
+// navigated away from and no longer mean anything.
+function dismissOpenToolPanels() {
+  document.querySelectorAll('.tool-panel:not([hidden])').forEach(cancelToolPanel);
+}
 
 // ── ACP chat helpers ──────────────────────────────────────────────
 function stripAnsi(str) {
@@ -4240,6 +4255,13 @@ function clearPickMode() {
 ipcRenderer.on(IPC.PICK_CANCELLED, () => clearPickMode());
 ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
 
+// Full page navigation → cancel any armed pick and dismiss stale result panels.
+ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
+  if (pickMode) ipcRenderer.send(IPC.PICK_CANCEL);
+  clearPickMode();
+  dismissOpenToolPanels();
+});
+
 // ── Box/Lasso element panel (overtakes the chat column) ──────────
 // Faithful port of the in-page popup drawers: filter chips, per-element CSS
 // drawers (expand/search/checkbox), inline value editing + color picker that
@@ -5668,7 +5690,9 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     return new Promise(res => {
       if (window.monaco) return res(window.monaco);
       if (!window.__amdRequire) return res(null);
-      window.__amdRequire(['vs/editor/editor.main'], () => res(window.monaco));
+      // Third arg = onError: without it a failed 'vs/' asset load never settles
+      // this Promise, hanging every `await ensureEditor()` forever. Callers handle null.
+      window.__amdRequire(['vs/editor/editor.main'], () => res(window.monaco), () => res(null));
     });
   }
   async function ensureEditor() {
@@ -6996,6 +7020,7 @@ async function detectStorybook() {
   let r;
   try { r = await ipcRenderer.invoke(IPC.STORYBOOK_DETECT, { dir: document.getElementById('sb-folder').value.trim() }); }
   catch (_) { det.hidden = true; return; }
+  if (!r) { det.hidden = true; return; }   // main resolved nothing → nothing to show
   det.dataset.state = r.installed ? 'ok' : 'missing';
   det.textContent = r.installed
     ? (r.isDemo ? 'Bundled demo Storybook ready — click Start.' : 'Storybook detected in this folder — click Start.')
@@ -7046,16 +7071,18 @@ document.getElementById('sb-connect')?.addEventListener('click', async () => {
   localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
   // Point future sessions at the project dir, then write the memory files there
   ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
-  await ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
-  const m = /:(\d+)/.exec(url);
-  if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] });   // adopt into the registry → bar/view
+  try {
+    await ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
+    const m = /:(\d+)/.exec(url);
+    if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] });   // adopt into the registry → bar/view
+  } catch (_) { /* memory/adopt are best-effort — the UI must still reflect the connection */ }
   sbSetupOpen = false; renderSbTab();
   updateComponentPickerBtn?.();
 });
 
 document.getElementById('sb-disconnect')?.addEventListener('click', async () => {
-  if (sbConfig?.managed) ipcRenderer.invoke(IPC.STORYBOOK_SERVER_STOP);   // kill the managed dev server
-  await ipcRenderer.invoke(IPC.STORYBOOK_CLEAR_MEMORY);   // remove the managed block first
+  if (sbConfig?.managed) ipcRenderer.invoke(IPC.STORYBOOK_SERVER_STOP).catch(() => {});   // kill the managed dev server
+  try { await ipcRenderer.invoke(IPC.STORYBOOK_CLEAR_MEMORY); } catch (_) {}   // remove the managed block first (best-effort)
   sbConfig = null;
   localStorage.removeItem(LS.storybook);
   document.getElementById('sb-url').value = '';
@@ -7079,7 +7106,7 @@ document.getElementById('sb-url')?.addEventListener('keydown', e => {
 const sbStartBtn = document.getElementById('sb-start');
 const sbStatusEl = document.getElementById('sb-status');
 sbStartBtn?.addEventListener('click', () => {
-  ipcRenderer.invoke(IPC.STORYBOOK_SERVER_START, { dir: document.getElementById('sb-folder').value.trim() });
+  ipcRenderer.invoke(IPC.STORYBOOK_SERVER_START, { dir: document.getElementById('sb-folder').value.trim() }).catch(() => {});
 });
 ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {}) => {
   if (log && (state === 'error' || (state === 'stopped'))) console.warn('[storybook server]', message || '', '\n' + log);
@@ -7097,7 +7124,7 @@ ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {
     sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: true };
     localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
-    ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
+    ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url }).catch(() => {});
     renderSbConnected();
     updateComponentPickerBtn?.();
   }
@@ -7714,7 +7741,9 @@ let openOnboarding = null;
     return new Promise(resolve => {
       if (monaco) return resolve(monaco);
       if (!window.__amdRequire) return resolve(null);
-      window.__amdRequire(['vs/editor/editor.main'], () => { monaco = window.monaco; resolve(monaco); });
+      // onError (3rd arg): a failed 'vs/' asset load must resolve(null) rather than
+      // hang the Promise forever — Code Viewer callers already handle a null editor.
+      window.__amdRequire(['vs/editor/editor.main'], () => { monaco = window.monaco; resolve(monaco); }, () => resolve(null));
     });
   }
   async function ensureEditor() {
@@ -7753,7 +7782,7 @@ let openOnboarding = null;
     markActive(el);
     openRel = rel; openName = name; openMtime = 0;
     pathEl.textContent = rel;
-    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel }).catch(() => null);
     if (!res || res.error)  { openRel = null; return showMessage(rel, res?.error || 'Could not open file'); }
     if (res.tooLarge)       { openRel = null; return showMessage(rel, 'File too large to preview (over 2 MB)'); }
     if (res.binary)         { openRel = null; return showMessage(rel, 'Binary file — preview unavailable'); }
@@ -7775,7 +7804,7 @@ let openOnboarding = null;
   async function reloadOpenFile() {
     if (!openRel || !editor || !monaco) return;
     const rel = openRel;
-    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_READ, { rel }).catch(() => null);
     if (rel !== openRel) return;   // user switched files mid-read
     if (!res || res.error) { showMessage(rel, res?.error || 'File no longer available'); openRel = null; return; }
     if (res.binary || res.tooLarge) return;
@@ -7791,7 +7820,7 @@ let openOnboarding = null;
   }
 
   async function buildLevel(parentEl, rel, depth) {
-    const res = await ipcRenderer.invoke(IPC.CODE_LIST, { rel });
+    const res = await ipcRenderer.invoke(IPC.CODE_LIST, { rel }).catch(() => null);
     const entries = (res && res.entries) || [];
     for (const entry of entries) {
       const childRel = rel ? rel + '/' + entry.name : entry.name;
@@ -7873,7 +7902,7 @@ let openOnboarding = null;
   function stopPoll()  { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
   async function refresh() {
-    projectDir = (await ipcRenderer.invoke(IPC.GET_PROJECT_DIR)) || '';
+    projectDir = (await ipcRenderer.invoke(IPC.GET_PROJECT_DIR).catch(() => null)) || '';
     if (!projectDir) {
       const saved = localStorage.getItem(LS.projectDir);
       if (saved) { ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: saved }); projectDir = saved; }
@@ -7891,7 +7920,7 @@ let openOnboarding = null;
   }
 
   async function pickFolder() {
-    const dir = await ipcRenderer.invoke(IPC.PICK_PROJECT_DIR);
+    const dir = await ipcRenderer.invoke(IPC.PICK_PROJECT_DIR).catch(() => null);
     if (dir) { localStorage.setItem(LS.projectDir, dir); await refresh(); }
   }
 

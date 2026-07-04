@@ -72,13 +72,19 @@ function getEyedropperScript(snapshotDataUrl) {
     lcanvas.style.cssText = 'display:block;width:150px;height:150px;';
     lmag.appendChild(lcanvas);
     var lcross = document.createElement('div');
-    lcross.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:38px;opacity:.5;pointer-events:none;';
-    lcross.innerHTML = '<svg width="40" height="38" viewBox="0 0 50 48" fill="#fff" xmlns="http://www.w3.org/2000/svg">'
-      + '<path d="M38.6655 23.8288C38.6655 16.1581 32.4476 9.93936 24.7768 9.9392C17.1059 9.9392 10.8872 16.158 10.8872 23.8288C10.8873 31.4996 17.106 37.7175 24.7768 37.7175V38.7175L24.3921 38.7126C16.4742 38.5119 10.0925 32.1305 9.89206 24.2126L9.88718 23.8288C9.88718 15.6057 16.5537 8.9392 24.7768 8.9392L25.1606 8.94408C33.2063 9.1478 39.6655 15.7341 39.6655 23.8288L39.6606 24.2126C39.4569 32.2582 32.8714 38.7174 24.7768 38.7175V37.7175C32.4475 37.7174 38.6653 31.4995 38.6655 23.8288Z"/>'
-      + '<path d="M23.7765 4.37114e-08L24.7765 0V9.88672H23.7765V4.37114e-08Z"/>'
-      + '<path d="M23.7765 38.0011H24.7765V47.8878H23.7765V38.0011Z"/>'
-      + '<path d="M49.5526 22.8286V23.8286L39.6655 23.8288L39.6659 22.8286H49.5526Z"/>'
-      + '<path d="M9.88672 22.8286L9.88718 23.8288L0 23.8286V22.8286H9.88672Z"/></svg>';
+    // Reticle color is forced with !important inline styles: design-heavy pages
+    // often set global svg/path fill rules that would otherwise repaint the
+    // crosshair to their brand color (a fill="#fff" attribute loses to any page
+    // CSS), making it vanish on a dark loupe. The stroke thickens the lines and
+    // the drop-shadow keeps it legible on ANY magnified background, light or dark.
+    var CROSS_CSS = 'fill:#fff!important;stroke:#fff!important;stroke-width:1.5!important';
+    lcross.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:44px;height:42px;opacity:.9;pointer-events:none;filter:drop-shadow(0 0 1.5px rgba(0,0,0,.85));';
+    lcross.innerHTML = '<svg width="44" height="42" viewBox="0 0 50 48" style="overflow:visible!important" xmlns="http://www.w3.org/2000/svg">'
+      + '<path style="' + CROSS_CSS + '" d="M38.6655 23.8288C38.6655 16.1581 32.4476 9.93936 24.7768 9.9392C17.1059 9.9392 10.8872 16.158 10.8872 23.8288C10.8873 31.4996 17.106 37.7175 24.7768 37.7175V38.7175L24.3921 38.7126C16.4742 38.5119 10.0925 32.1305 9.89206 24.2126L9.88718 23.8288C9.88718 15.6057 16.5537 8.9392 24.7768 8.9392L25.1606 8.94408C33.2063 9.1478 39.6655 15.7341 39.6655 23.8288L39.6606 24.2126C39.4569 32.2582 32.8714 38.7174 24.7768 38.7175V37.7175C32.4475 37.7174 38.6653 31.4995 38.6655 23.8288Z"/>'
+      + '<path style="' + CROSS_CSS + '" d="M23.7765 4.37114e-08L24.7765 0V9.88672H23.7765V4.37114e-08Z"/>'
+      + '<path style="' + CROSS_CSS + '" d="M23.7765 38.0011H24.7765V47.8878H23.7765V38.0011Z"/>'
+      + '<path style="' + CROSS_CSS + '" d="M49.5526 22.8286V23.8286L39.6655 23.8288L39.6659 22.8286H49.5526Z"/>'
+      + '<path style="' + CROSS_CSS + '" d="M9.88672 22.8286L9.88718 23.8288L0 23.8286V22.8286H9.88672Z"/></svg>';
     lmag.appendChild(lcross);
     loupe.appendChild(lmag);
     var lval = document.createElement('span');

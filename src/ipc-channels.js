@@ -31,6 +31,7 @@ const IPC = Object.freeze({
   APP_CHECK_UPDATES: 'app-check-updates',
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
+  BROWSER_DID_NAVIGATE: 'browser-did-navigate',
   BROWSER_NAVIGATE: 'browser-navigate',
   BROWSER_RELOAD: 'browser-reload',
   BROWSER_TOGGLE_DEVTOOLS: 'browser-toggle-devtools',

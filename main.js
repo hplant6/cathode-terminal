@@ -35,6 +35,13 @@ const { execFile, spawn } = require('child_process');
 // run agents/tools natively). See src/platform/index.js.
 const platform = require('./src/platform');
 
+// Last-resort crash backstops. The renderer drives the main process through
+// dozens of sync ipcMain.on handlers; a single malformed payload throwing would
+// otherwise tear down the whole process and kill every PTY/ACP session at once.
+// Log and survive — individual handlers still guard their own inputs below.
+process.on('uncaughtException', (err) => { console.error('[uncaughtException]', err); });
+process.on('unhandledRejection', (reason) => { console.error('[unhandledRejection]', reason); });
+
 // Async *nix exec helpers — sync variants freeze the main thread (and every
 // native-view repaint) for seconds; anything UI-adjacent must use these.
 // (Thin wrappers over the platform adapter so existing call sites are unchanged.)
@@ -415,6 +422,10 @@ function createWindow() {
     resetCDP();
     saveLastURL(url);
     uiSend(IPC.BROWSER_URL_CHANGED, url);   // uiSend guards a destroyed window
+    // Full navigation destroys the page context — any open tool result panel now
+    // describes the OLD page. Tell the renderer to reset tools. (Not fired for
+    // did-navigate-in-page: SPA/hash changes keep the same document.)
+    uiSend(IPC.BROWSER_DID_NAVIGATE);
     // Reconnect embedded DevTools after full navigation (WebSocket target URL may change)
     if (devToolsView) {
       browserView.webContents.once('did-finish-load', () => reconnectDevTools());
@@ -1221,6 +1232,7 @@ ipcMain.on(IPC.MODAL_OVERLAY, (_, { open } = {}) => {
 });
 
 ipcMain.on(IPC.RIGHT_PANEL_MODE, (_, mode) => {
+  if (typeof mode !== 'string') return;   // don't poison rightPanelMode with a bad payload
   rightPanelMode = mode;
   if (mode === 'figma' && !figmaView) createFigmaView();
   if (mode.startsWith('url:')) ensureCustomView(mode.slice(4));
@@ -1321,6 +1333,11 @@ function queuePtyOut(id, data) {
 }
 
 async function spawnPty(id, command = 'claude') {
+  // Kill-before-spawn: a stray double PTY_SPAWN for a live id (no kill first)
+  // would orphan the previous ConPTY — its onData/onExit ownership guards then
+  // make it un-killable until app quit. PTY_RESTART already kills first; this
+  // makes spawnPty itself idempotent for the same id.
+  if (ptyProcesses[id]) { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; }
   ptyCommands[id] = command;
   try {
     const pty  = require('node-pty');
@@ -1366,15 +1383,15 @@ async function spawnPty(id, command = 'claude') {
 }
 
 // ── IPC: terminal ─────────────────────────────────────────────────
-ipcMain.on(IPC.PTY_INPUT,   (_, { id, data })       => { const p = ptyProcesses[id]; if (p) { try { p.write(data); } catch (_) {} } });
+ipcMain.on(IPC.PTY_INPUT,   (_, { id, data } = {})  => { const p = ptyProcesses[id]; if (p) { try { p.write(data); } catch (_) {} } });
 // node-pty throws synchronously if the pty has already exited (e.g. a refit fires
 // after the process ended) — swallow it so it doesn't crash the main process.
-ipcMain.on(IPC.PTY_RESIZE,  (_, { id, cols, rows })  => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
-ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command })     => spawnPty(id, command));
-ipcMain.on(IPC.PTY_KILL,    (_, { id })              => {
+ipcMain.on(IPC.PTY_RESIZE,  (_, { id, cols, rows } = {}) => { const p = ptyProcesses[id]; if (p) { try { p.resize(cols, rows); } catch (_) {} } });
+ipcMain.on(IPC.PTY_SPAWN,   (_, { id, command } = {}) => spawnPty(id, command));
+ipcMain.on(IPC.PTY_KILL,    (_, { id } = {})         => {
   killPty(id);
 });
-ipcMain.on(IPC.PTY_RESTART, (_, { id, command })     => {
+ipcMain.on(IPC.PTY_RESTART, (_, { id, command } = {}) => {
   killPty(id);
   spawnPty(id, command || ptyCommands[id] || 'claude');
 });
@@ -2674,7 +2691,8 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { type: 'separator' },
     { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
   ]);
-  menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
+  const p = pos || {};   // a missing pos → popup at the default (cursor) position
+  menu.popup({ window: mainWindow, x: p.x, y: p.y });
 });
 
 ipcMain.on(IPC.SHOW_SB_BAR_MENU, (_, { x, y } = {}) => {
@@ -2743,7 +2761,8 @@ ipcMain.on(IPC.SHOW_TABS_CONTEXT_MENU, (_, pos) => {
   const menu = Menu.buildFromTemplate([
     { label: 'Edit Tabs', click: () => mainWindow.webContents.send(IPC.SETTINGS_ACTION, 'edit-tabs') },
   ]);
-  menu.popup({ window: mainWindow, x: pos.x, y: pos.y });
+  const p = pos || {};   // a missing pos → popup at the default (cursor) position
+  menu.popup({ window: mainWindow, x: p.x, y: p.y });
 });
 
 // ── Custom window controls (frameless titlebar) ──────────────────
@@ -3121,6 +3140,7 @@ ipcMain.on(IPC.PICK_CANCEL, () => {
 });
 
 ipcMain.on(IPC.DRAW_COMPOSITE_DONE, (_, { compositeDataUrl, instructions } = {}) => {
+  if (typeof compositeDataUrl !== 'string') return;   // composite failed / bad payload
   const buf  = Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
   const dir  = require('path').join(require('electron').app.getPath('userData'), 'screenshots');
   require('fs').mkdirSync(dir, { recursive: true });
