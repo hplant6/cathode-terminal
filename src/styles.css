@@ -2835,9 +2835,18 @@ html, body {
 /* Resize body = a single always-open, full-height drawer (element name as title) */
 #resize-panel-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0; }
 
-/* Animation tool panel (Phase 1 — placeholder body until the controls land) */
-#animation-panel-body { flex: 1; min-height: 0; padding: 14px 16px; overflow-y: auto; }
-.anim-coming { color: var(--spec-structural); font-size: 12px; line-height: 1.6; }
+/* Animation tool panel controls */
+#animation-panel-body { flex: 1; min-height: 0; padding: 12px 16px; overflow-y: auto; }
+.anim-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.anim-label { flex: 0 0 82px; font-size: 11px; color: var(--spec-text-dim); }
+.anim-row .ct-select { flex: 1; min-width: 0; }
+.anim-ctrl { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.anim-slider { flex: 1; min-width: 0; }
+.anim-num { width: 58px; flex: 0 0 auto; box-sizing: border-box; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 4px; color: var(--spec-text); font-size: 11px; font-family: var(--font-mono); padding: 4px 6px; outline: none; }
+.anim-num-wide { width: 76px; }
+.anim-num:focus { border-color: var(--spec-text-dim); }
+.anim-color { width: 44px; height: 26px; padding: 0; border: 1px solid var(--spec-structural); border-radius: 4px; background: none; cursor: pointer; }
+#anim-replay { margin-top: 10px; }
 .rz-drawer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rz-drawer-head {
   display: flex; align-items: center; gap: 10px; height: 55px; padding: 0 12px; flex-shrink: 0;
@@ -4440,7 +4449,7 @@ button:active { background: var(--btn-active); }
 :root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 24 24, crosshair !important; }
 :root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 24 24, crosshair !important; }
 :root[data-pick="draw"]       { cursor: url('./icons/marker-cursor.svg') 2 16, crosshair !important; }
-:root[data-pick="animate"]    { cursor: url('./icons/animation-cursor.svg') 12 12, crosshair !important; }
+:root[data-pick="animate"]    { cursor: url('./icons/animation-cursor.svg') 24 24, crosshair !important; }
 
 /* ════════════════════════════════════════════════════════════════
    ONBOARDING

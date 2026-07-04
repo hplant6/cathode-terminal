@@ -3,9 +3,10 @@ const path = require('path');
 const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
 const SHARED = require('./inject-shared');
 const { iconB64 } = require('./read-icon');
+const { KEYFRAMES_FN_SRC } = require('./animation-spec');
 
 const ANIM_B64 = iconB64(path.join(__dirname, 'icons', 'animation-cursor.svg'));
-const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 12 12, crosshair`;
+const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 24 24, crosshair`;
 
 // Phase 1: hover + click to target an element; the script resolves with its
 // selector/label. Animation controls, live preview, and the composed request live
@@ -14,15 +15,18 @@ const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 12 12, crossha
 function getAnimationScript() {
   return `(function() {
   ${MARCH_KEYFRAMES_JS}
+  var __animKeyframes = ${KEYFRAMES_FN_SRC};   // inlined spec→WAAPI generator (shared with the panel)
   ['__ca_ov','__ca_hv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
   if (window.__cathodeAnim) { try { window.__cathodeAnim.clear(); } catch(e){} }
 
   return new Promise(function(resolve) {
     var phase = 'hover';
     var selEl = null;
+    var curAnim = null;
     var resolved = false;
     function resolveOnce(val){ if (resolved) return; resolved = true; resolve(val); }
     function teardown() {
+      try { if (curAnim) curAnim.cancel(); } catch(e){}
       document.removeEventListener('keydown', onKey, true);
       ['__ca_ov','__ca_hv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
       window.__cathodeAnim = null;
@@ -76,6 +80,13 @@ function getAnimationScript() {
         result: function() {
           var snip = selEl.outerHTML.replace(/\\n/g,' ').replace(/\\s{2,}/g,' ').slice(0,160);
           return { selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl), snippet: snip };
+        },
+        preview: function(spec) {
+          try { if (curAnim) curAnim.cancel(); } catch(e){}
+          try {
+            var r = __animKeyframes(spec), o = r.options;
+            curAnim = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
+          } catch(e) { curAnim = null; }
         },
         clear: function(){ teardown(); },
       };

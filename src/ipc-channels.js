@@ -28,6 +28,7 @@ const IPC = Object.freeze({
   AGENT_MD_READ: 'agent-md-read',
   ANIM_PANEL_CANCEL: 'anim-panel-cancel',
   ANIM_PANEL_OPEN: 'anim-panel-open',
+  ANIM_PANEL_PREVIEW: 'anim-panel-preview',
   ANIM_PANEL_SEND: 'anim-panel-send',
   AGENT_MD_WRITE: 'agent-md-write',
   APP_CHECK_UPDATES: 'app-check-updates',

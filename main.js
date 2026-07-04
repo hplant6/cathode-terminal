@@ -21,6 +21,7 @@ const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
 const { getResizeScript }         = require('./src/resize-inject');
 const { getAnimationScript }      = require('./src/animation-inject');
+const { cssSnippet: animCss, jsSnippet: animJs, summaryFor: animSummary } = require('./src/animation-spec');
 const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
@@ -3265,21 +3266,30 @@ ipcMain.on(IPC.PICK_ANIMATE, async () => {
     uiSend(IPC.PICK_CANCELLED);
   }
 });
-ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { instruction = '' } = {}) => {
+ipcMain.on(IPC.ANIM_PANEL_PREVIEW, async (_, { spec = {} } = {}) => {
+  const p = pendingAnim;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodeAnim && window.__cathodeAnim.preview(${JSON.stringify(spec)})`); } catch (_) {}
+});
+ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '' } = {}) => {
   const p = pendingAnim;
   pendingAnim = null;
   if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   let res = null;
   try { res = await p.view.webContents.executeJavaScript('window.__cathodeAnim && window.__cathodeAnim.result()'); } catch (_) {}
-  await clearAnim(p.view);
+  await clearAnim(p.view);   // revert the preview — the animation is a request, not a permanent page change
   uiSend(IPC.PICK_CANCELLED);
   if (!res) return;
+  const selector = res.selector;
   const instr = (instruction || '').trim();
   const anUrl = activePageUrl();
-  const lines = ['───── Animation Request ─────', res.snippet, '', 'Selector: ' + res.selector];
-  const detail = (anUrl ? `From ${pageSource()} — ${anUrl}\n\n` : '') + lines.join('\n');
+  const detailLines = ['───── Animation Request ─────', res.snippet, '', 'Selector: ' + selector, 'Animation: ' + animSummary(spec)];
+  const detail = (anUrl ? `From ${pageSource()} — ${anUrl}\n\n` : '') + detailLines.join('\n');
+  let css = '', js = '';
+  try { css = animCss(spec, selector); js = animJs(spec, selector); } catch (_) {}
   const body = (instr ? instr + '\n\n' : '')
-    + 'Add an animation to this element. (The animation controls — type, easing, timing, live preview — arrive in the next build; for now, describe the animation above.)';
+    + "Add this animation to the element. Starter code below — adapt to the project's stack (vanilla / React / Tailwind / framer-motion / GSAP):\n\n"
+    + '/* CSS */\n' + css + '\n\n// JS (Web Animations API)\n' + js;
   uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Animation request' });
 });
 ipcMain.on(IPC.ANIM_PANEL_CANCEL, async () => {

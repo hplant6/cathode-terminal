@@ -293,7 +293,17 @@
           <button id="animation-panel-new" class="pp-new-sel">New Selection</button>
         </div>
         <div id="animation-panel-body">
-          <p class="anim-coming">Animation controls — type, easing, timing, and live preview — arrive in the next build. For now, target an element and describe the animation below.</p>
+          <div class="anim-row"><label class="anim-label">Animate</label><select id="anim-type" class="anim-select pp-ct"></select></div>
+          <div class="anim-row"><label class="anim-label">Easing</label><select id="anim-easing" class="anim-select pp-ct"></select></div>
+          <div class="anim-row anim-row-slider"><label class="anim-label">Duration</label><div class="anim-ctrl"><input id="anim-duration-slider" class="rz-slider anim-slider" type="range" min="0" max="3000" step="50" value="1000" /><input id="anim-duration" class="anim-num" type="number" min="0" max="20000" value="1000" /></div></div>
+          <div class="anim-row"><label class="anim-label">Delay</label><input id="anim-delay" class="anim-num anim-num-wide" type="number" min="0" max="20000" value="0" /></div>
+          <div class="anim-row" id="anim-row-direction" hidden><label class="anim-label">Direction</label><select id="anim-direction" class="anim-select pp-ct"></select></div>
+          <div class="anim-row anim-row-slider" id="anim-row-distance" hidden><label class="anim-label">Distance</label><div class="anim-ctrl"><input id="anim-distance-slider" class="rz-slider anim-slider" type="range" min="0" max="800" step="10" value="40" /><input id="anim-distance" class="anim-num" type="number" value="40" /></div></div>
+          <div class="anim-row anim-row-slider" id="anim-row-amount" hidden><label class="anim-label" id="anim-amount-label">Amount</label><div class="anim-ctrl"><input id="anim-amount-slider" class="rz-slider anim-slider" type="range" value="1" /><input id="anim-amount" class="anim-num" type="number" value="1" /></div></div>
+          <div class="anim-row" id="anim-row-color" hidden><label class="anim-label">Target color</label><input id="anim-color" class="anim-color" type="color" value="#ff5720" /></div>
+          <div class="anim-row"><label class="anim-label">Repeat</label><select id="anim-repeat" class="anim-select pp-ct"></select></div>
+          <div class="anim-row"><label class="anim-label">Trigger</label><select id="anim-trigger" class="anim-select pp-ct"></select></div>
+          <button id="anim-replay" class="rz-reset-btn">▶ Replay preview</button>
         </div>
         <div id="animation-panel-foot" class="tp-foot">
           <textarea id="animation-textarea" class="tp-textarea" placeholder="Describe the animation — e.g. fade in over 400ms on scroll…" spellcheck="true"></textarea>

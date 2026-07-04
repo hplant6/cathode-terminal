@@ -4863,23 +4863,79 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   ipcRenderer.on(IPC.RESIZE_PANEL_DIMS, (_, d) => { if (!panel.hidden) setDims(d); });
 })();
 
-// ── Animation tool panel (Phase 1: element info + instructions → Send) ──
+// ── Animation tool panel (Phase 2: controls + WAAPI live preview) ──
 (function initAnimationPanel() {
-  const panel     = document.getElementById('animation-panel');
+  const panel = document.getElementById('animation-panel');
   if (!panel) return;
-  const subEl     = document.getElementById('animation-panel-sub');
-  const textarea  = document.getElementById('animation-textarea');
-  const cancelBtn = document.getElementById('animation-cancel');
-  const sendBtn   = document.getElementById('animation-send');
+  const ANIM = require('./animation-spec');
+  const $ = (id) => document.getElementById(id);
+  const subEl = $('animation-panel-sub'), textarea = $('animation-textarea');
+  const cancelBtn = $('animation-cancel'), sendBtn = $('animation-send');
+  const typeSel = $('anim-type'), easingSel = $('anim-easing'), dirSel = $('anim-direction');
+  const repeatSel = $('anim-repeat'), triggerSel = $('anim-trigger');
+  const durSlider = $('anim-duration-slider'), durNum = $('anim-duration'), delayNum = $('anim-delay');
+  const distSlider = $('anim-distance-slider'), distNum = $('anim-distance');
+  const amtSlider = $('anim-amount-slider'), amtNum = $('anim-amount'), amtLabel = $('anim-amount-label');
+  const colorInput = $('anim-color'), replayBtn = $('anim-replay');
+  const rowDir = $('anim-row-direction'), rowDist = $('anim-row-distance'), rowAmt = $('anim-row-amount'), rowColor = $('anim-row-color');
+
+  const opts = (entries) => entries.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  typeSel.innerHTML = ANIM.ANIM_TYPES.map(g => `<optgroup label="${g.group}">${opts(g.items)}</optgroup>`).join('');
+  easingSel.innerHTML = opts(ANIM.EASINGS);
+  dirSel.innerHTML = opts(ANIM.DIRECTIONS);
+  repeatSel.innerHTML = opts([['1', 'Once'], ['2', '2×'], ['3', '3×'], ['5', '5×'], ['infinite', 'Loop']]);
+  triggerSel.innerHTML = opts(ANIM.TRIGGERS);
+  [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(enhanceSelect);
+
+  function currentSpec() {
+    const type = typeSel.value, f = ANIM.fieldsFor(type);
+    const spec = { type, easing: easingSel.value, duration: +durNum.value || 0, delay: +delayNum.value || 0, repeat: repeatSel.value, trigger: triggerSel.value };
+    if (f.direction) spec.direction = dirSel.value;
+    if (f.distance) spec.distance = +distNum.value || 0;
+    if (f.amount) spec.amount = +amtNum.value;
+    if (f.color) spec.targetColor = colorInput.value;
+    return spec;
+  }
+
+  let previewTimer = null;
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => { if (!panel.hidden) ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: currentSpec() }); }, 130);
+  }
+  function syncFields(resetAmount) {
+    const type = typeSel.value, f = ANIM.fieldsFor(type);
+    rowDir.hidden = !f.direction; rowDist.hidden = !f.distance; rowAmt.hidden = !f.amount; rowColor.hidden = !f.color;
+    if (f.amount) {
+      const m = ANIM.amountMeta(type);
+      amtLabel.textContent = m.label;
+      amtSlider.min = m.min; amtSlider.max = m.max; amtSlider.step = m.step;
+      if (resetAmount) { amtSlider.value = m.def; amtNum.value = m.def; }
+    }
+  }
+  function wirePair(slider, num) {
+    slider.addEventListener('input', () => { num.value = slider.value; schedulePreview(); });
+    num.addEventListener('input', () => { slider.value = num.value; schedulePreview(); });
+  }
+  wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
+  delayNum.addEventListener('input', schedulePreview);
+  colorInput.addEventListener('input', schedulePreview);
+  [easingSel, dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
+  typeSel.addEventListener('change', () => { syncFields(true); schedulePreview(); });
+  replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: currentSpec() }));
 
   function open({ label } = {}) {
     clearPickMode();
-    if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Describe the animation to build.';
+    if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
+    typeSel.value = 'fade-in'; easingSel.value = 'ease';
+    durSlider.value = durNum.value = 1000; delayNum.value = 0;
+    repeatSel.value = '1'; triggerSel.value = 'load'; colorInput.value = '#ff5720';
+    syncFields(true);
     textarea.value = '';
     panel.hidden = false;
+    schedulePreview();
   }
-  function close()  { panel.hidden = true; textarea.value = ''; }
-  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { instruction: textarea.value.trim() }); close(); }
+  function close()  { panel.hidden = true; textarea.value = ''; clearTimeout(previewTimer); }
+  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: textarea.value.trim() }); close(); }
   function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
 
   sendBtn?.addEventListener('click', send);
