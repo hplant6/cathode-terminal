@@ -595,6 +595,7 @@ function closeSession(id) {
     const idx = ids.indexOf(id);
     switchSession(ids[idx + 1] ?? ids[idx - 1]);
   }
+  if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; }   // else the duration:0 spinner toast outlives the tab
   if (s.type === 'acp') {
     ipcRenderer.send(IPC.ACP_KILL, { id });
     if (s._ptySpawned) ipcRenderer.send(IPC.PTY_KILL, { id });
@@ -709,7 +710,12 @@ function selectModel(modelId) {
     ipcRenderer.send(IPC.ACP_SPAWN, { id: activeId, model: modelId, agent: s.agent });
   } else {
     s.term.clear();
-    ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: commandWithModel(s.command, key, modelId) });
+    // Bake the model into s.command (from the pristine base, so flags don't stack
+    // across switches) — restart + session-restore then keep the chosen model.
+    s._baseCommand = s._baseCommand || s.command;
+    s.command = commandWithModel(s._baseCommand, key, modelId);
+    ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
+    saveOpenSessions();
     // PTY has no clean "ready" signal — confirm shortly after relaunch.
     setTimeout(() => finishModelSwitch(s), PTY_MODEL_SWITCH_SETTLE_MS);
   }
@@ -741,6 +747,7 @@ const usageViewMini = document.getElementById('usage-view-mini');
 let usageOpen = false;
 let usageMini = localStorage.getItem(LS.usageMini) === '1';
 let _lastUsage = null;
+let _usageSeq  = 0;   // discard out-of-order refreshUsage() resolutions
 
 function fmtTokens(n) {
   n = n || 0;
@@ -910,12 +917,14 @@ async function refreshUsage() {
   const s = sessions.get(activeId);
   const isClaude  = !!(s && s.type === 'acp' && (s.agent || 'claude') === 'claude');
   const acpOther  = !!(s && s.type === 'acp' && !isClaude);   // hermes/gemini/codex — not Claude's meters
+  const seq = ++_usageSeq;   // a slower earlier fetch must not overwrite a newer session's meters
   try {
     const [ctx, lim] = await Promise.all([
       isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '' }) : Promise.resolve(null),
       // Claude's 5h/weekly limits are Anthropic-account numbers — meaningless under another agent.
       acpOther ? Promise.resolve(null) : ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
     ]);
+    if (seq !== _usageSeq) return;   // superseded by a newer refresh (e.g. session switch)
     _lastUsage = {
       ctx, lim, isClaude,
       agentCtx:    acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
@@ -3075,6 +3084,11 @@ function persistApiKeys(keys) {
   if (active) {
     secureSet(LS.apiKey, active.key);
     ipcRenderer.send(IPC.SET_API_KEY, active.key);
+  } else {
+    // No active key left (last one deleted) — clear the legacy secret + main's
+    // copy too, or the "deleted" key silently keeps being used.
+    secureSet(LS.apiKey, '');
+    ipcRenderer.send(IPC.SET_API_KEY, '');
   }
 }
 
@@ -3111,8 +3125,8 @@ function renderApiKeysList() {
     });
     item.querySelector('.api-key-del').addEventListener('click', () => {
       let all = loadApiKeys().filter(x => x.id !== k.id);
-      if (k.active && all.length) { all[0].active = true; persistApiKeys(all); }
-      else secureSet(API_KEYS_STORE, JSON.stringify(all));
+      if (k.active && all.length) all[0].active = true;
+      persistApiKeys(all);   // also clears the legacy secret when nothing is active
       renderApiKeysList();
     });
     listEl.appendChild(item);
@@ -3220,7 +3234,9 @@ async function openMemoryModal(agent = 'claude') {
   claudeMdTextarea.value = '';
   claudeMdTextarea.placeholder = 'Loading…';
   claudeMdModalCtl.open();
-  const content = await ipcRenderer.invoke(IPC.AGENT_MD_READ, { agent });
+  let content = '';
+  try { content = (await ipcRenderer.invoke(IPC.AGENT_MD_READ, { agent })) || ''; }
+  catch (_) {}   // read failure → empty editor, not a stuck "Loading…"
   if (memoryAgent !== agent) return;   // a newer open superseded this
   claudeMdTextarea.value = content;
   claudeMdTextarea.placeholder = `# Agent Instructions\n\nWrite instructions for ${label} here…`;
@@ -3234,7 +3250,9 @@ document.getElementById('claude-md-save')?.addEventListener('click', async () =>
   const btn = document.getElementById('claude-md-save');
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  const ok = await ipcRenderer.invoke(IPC.AGENT_MD_WRITE, { agent: memoryAgent, content: claudeMdTextarea.value });
+  let ok = false;
+  try { ok = await ipcRenderer.invoke(IPC.AGENT_MD_WRITE, { agent: memoryAgent, content: claudeMdTextarea.value }); }
+  catch (_) {}   // a failed write must not leave the button stuck on "Saving…"
   btn.disabled = false;
   btn.textContent = 'Save';
   if (ok) claudeMdModalCtl.close();
@@ -5398,7 +5416,10 @@ function routeToActiveSession(text, display = text, images = [], chips = null) {
     ipcRenderer.send(IPC.ACP_PROMPT, { id: activeId, text });
   } else {
     s.term.paste(text);
-    setTimeout(() => ipcRenderer.send(IPC.PTY_INPUT, { id: activeId, data: '\r' }), PTY_SEND_DELAY);
+    // Capture the target id — activeId can change (tab switch) inside the delay,
+    // which would fire Enter into a different session's prompt.
+    const targetId = activeId;
+    setTimeout(() => ipcRenderer.send(IPC.PTY_INPUT, { id: targetId, data: '\r' }), PTY_SEND_DELAY);
   }
   return true;
 }
@@ -5486,6 +5507,9 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       if (matches(e)) {
         const atBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 40;
         listEl.insertAdjacentHTML('beforeend', rowHtml(e));
+        // Mirror the entries cap in the DOM — the incremental path otherwise
+        // grows unbounded on a chatty page (memory + dead "send" buttons).
+        while (listEl.children.length > MAX) listEl.firstElementChild.remove();
         emptyEl.style.display = 'none';
         if (atBottom) listEl.scrollTop = listEl.scrollHeight;
       }
@@ -6158,8 +6182,8 @@ function buildAuditMenu() {
       `;
       row.querySelector('.tabs-modal-remove').addEventListener('click', async () => {
         row.querySelector('.tabs-modal-remove').textContent = '…';
-        await ipcRenderer.invoke(IPC.MCP_DISCONNECT, { serverName: srv.name });
-        await loadAndRender();
+        try { await ipcRenderer.invoke(IPC.MCP_DISCONNECT, { serverName: srv.name }); } catch (_) {}
+        await loadAndRender();   // re-render restores the ✕ either way
       });
       listEl.appendChild(row);
     });
@@ -6207,13 +6231,18 @@ function buildAuditMenu() {
     connectMsg.className = 'mcp-connect-msg';
     connectMsg.textContent = `Adding to ${agentList.map(a => a.label).join(', ') || 'agents'}…`;
 
-    const result = await ipcRenderer.invoke(IPC.MCP_CONNECT, {
-      catalogKey: svc,
-      token,
-      custom: svc === 'custom'
-        ? { name: nameIn.value.trim(), npxPackage: pkgIn.value.trim(), envVar: envVarIn.value.trim() }
-        : undefined,
-    });
+    let result = null;
+    try {
+      result = await ipcRenderer.invoke(IPC.MCP_CONNECT, {
+        catalogKey: svc,
+        token,
+        custom: svc === 'custom'
+          ? { name: nameIn.value.trim(), npxPackage: pkgIn.value.trim(), envVar: envVarIn.value.trim() }
+          : undefined,
+      });
+    } catch (e) {
+      result = { error: (e && e.message) || 'Connection failed.' };   // don't leave the button stuck on "Connecting…"
+    }
 
     addBtn.textContent = 'Connect';
 
@@ -6244,7 +6273,10 @@ function buildAuditMenu() {
 
   async function loadAndRender() {
     listEl.innerHTML = '<div class="mcp-status">Checking agents…</div>';
-    const status = await ipcRenderer.invoke(IPC.MCP_STATUS);
+    let status = null;
+    try { status = await ipcRenderer.invoke(IPC.MCP_STATUS); }
+    catch (_) {}   // a failed check must not leave "Checking agents…" forever
+    if (!status) { listEl.innerHTML = '<div class="mcp-status">Could not check agents — close and retry.</div>'; return; }
     agentList = status.agents || [];
     servers   = status.servers || [];
     renderRows();

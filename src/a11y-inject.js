@@ -184,6 +184,9 @@ ${SHARED.selectorHelper('__a11y')}
         window.__cathodeA11y = null;
       },
     };
+    // Handoff to the panel — mark resolved so the still-armed Escape handler
+    // can't silently wipe the markers while the panel lists them.
+    resolved = true;
     resolve({ url: location.href, total: issues.length, issues: serial });
   });
 })()`;

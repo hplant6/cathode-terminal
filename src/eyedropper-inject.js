@@ -20,7 +20,8 @@ const ED_CURSOR = `url("data:image/svg+xml;base64,${ED_CURSOR_B64}") 2 20, cross
 function getEyedropperScript(snapshotDataUrl) {
   return `(function() {
   ${MARCH_KEYFRAMES_JS}
-  ['__ed_ov','__ed_loupe','__ed_pop','__ed_hl__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+  if (window.__cathodeEyedropper) { try { window.__cathodeEyedropper.clear(); } catch(e){} }   // disarm the previous run's key handler first (like resize-inject)
+  ['__ed_ov','__ed_loupe','__ed_pop','__ed_hl__','__ed_cp__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
 
   return new Promise(function(resolve) {
     var resolved = false;

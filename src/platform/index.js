@@ -92,6 +92,9 @@ function nixExecInput(wslArgs, input, timeout = 5000) {
       const p = spawn(file, args);
       p.on('close', code => finish(code === 0));
       p.on('error', () => finish(false));
+      // The stream 'error' event is async — without a listener an EPIPE (child
+      // died before consuming stdin) is an uncaughtException in main.
+      p.stdin.on('error', () => finish(false));
       setTimeout(() => { try { p.kill(); } catch (_) {} finish(false); }, timeout);
       p.stdin.write(input);
       p.stdin.end();

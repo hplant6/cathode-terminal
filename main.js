@@ -1014,9 +1014,28 @@ ipcMain.handle(IPC.STORYBOOK_DETECT, (_, { dir } = {}) => {
   return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === SB_DEMO_DIR };
 });
 
+const sbStartingDirs = new Set();   // dirs with a start in flight (pre-registry await window)
 ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   const projectDir = sbResolveDir(dir);
-  for (const s of sbServers.values()) { if (s.dir === projectDir) { setActiveStorybook(s.id); return { ok: true, url: s.url, already: true }; } }   // already running this dir
+  for (const s of sbServers.values()) {
+    if (s.dir !== projectDir) continue;
+    // Only a READY instance is "already running" — activating a starting one
+    // loads a not-yet-listening URL (connection refused) into the view.
+    if (s.status === 'ready') setActiveStorybook(s.id);
+    return { ok: true, url: s.url, already: true };
+  }
+  // findFreePort awaits before the registry entry exists — a concurrent start for
+  // the same dir would double-spawn (possibly on the same port).
+  if (sbStartingDirs.has(projectDir)) return { ok: true, already: true, starting: true };
+  sbStartingDirs.add(projectDir);
+  try {
+    return await sbStartServer(projectDir, port);
+  } finally {
+    sbStartingDirs.delete(projectDir);
+  }
+});
+
+async function sbStartServer(projectDir, port) {
   if (!sbHasStorybook(projectDir)) {
     sbStatus('error', { message: 'No Storybook found in ' + projectDir + ' — build one with your agent first.' });
     return { ok: false, error: 'no-storybook', dir: projectDir };
@@ -1058,7 +1077,7 @@ ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   setActiveStorybook(id);                                            // auto-connect the live view
   sbStatus('ready', { url, dir: projectDir });
   return { ok: true, url };
-});
+}
 
 ipcMain.handle(IPC.STORYBOOK_SERVER_STOP, (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
 ipcMain.handle(IPC.STORYBOOK_LIST,          () => ({ instances: sbSerialize(), activeId: activeSbId }));
@@ -1302,7 +1321,9 @@ async function spawnPty(id, command = 'claude') {
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
       });
     }
-    proc.onData(data => { queuePtyOut(id, data); });
+    // Ownership guard (like onExit): a restart replaces ptyProcesses[id] before the
+    // old proc's dying output stops arriving — it must not leak into the new term.
+    proc.onData(data => { if (ptyProcesses[id] === proc) queuePtyOut(id, data); });
     proc.onExit(() => {
       // Guard: a restart may have already replaced this id with a new proc —
       // a stale exit must not clobber the new entry (or print into its term).
@@ -1450,6 +1471,7 @@ function acpAdapterInstalledVersion() {
 
 const acpSessions      = new Map(); // id → { proc, conn, sessionId }
 const acpTermResolvers = new Map(); // termId  → resolve
+let acpTermSeq = 0;                 // unique terminal ids (Date.now() collides within a ms)
 
 // ── Per-agent ACP launch ──────────────────────────────────────────
 // The ACP client/protocol below is agent-agnostic; only *launching* the agent
@@ -1605,7 +1627,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       send('acp-update', { id, update: params.update });
     },
     async createTerminal(params) {
-      const termId = `t${Date.now()}`;
+      const termId = `t${++acpTermSeq}`;   // Date.now() collides for same-ms creates, clobbering resolvers
       send('acp-term-create', { id, termId, title: params.title });
       return { terminalId: termId };
     },
@@ -1696,8 +1718,12 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   } catch (err) {
     clearTimeout(connectTimer);
     console.error('[acp] init error:', err);
-    errorSent = true;
-    send('acp-error', { id, message: err.message });
+    // The connect timeout already reported + killed the proc — killing makes
+    // initialize reject, which lands here; don't send a second acp-error.
+    if (!errorSent) {
+      errorSent = true;
+      send('acp-error', { id, message: err.message });
+    }
     safeKill(proc);
   }
 }
@@ -1741,7 +1767,13 @@ let _claudeConfigDirPromise = null;   // cached async resolution (was sync — b
 function claudeConfigDir() {
   if (!_claudeConfigDirPromise) {
     _claudeConfigDirPromise = wslExecFile(platform.claudeConfigDirArgs(), 5000)
-      .then(out => (out || '').trim() || null);
+      .then(out => {
+        const dir = (out || '').trim() || null;
+        // Only cache success — a null (e.g. WSL still cold-booting at first poll)
+        // must retry next call, not latch "no config dir" for the app's lifetime.
+        if (!dir) _claudeConfigDirPromise = null;
+        return dir;
+      });
   }
   return _claudeConfigDirPromise;
 }
