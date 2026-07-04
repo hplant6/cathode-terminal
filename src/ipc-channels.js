@@ -133,7 +133,6 @@ const IPC = Object.freeze({
   SCREENSHOT_PANEL_SEND: 'screenshot-panel-send',
   SECRET_OPEN: 'secret-open',
   SECRET_SEAL: 'secret-seal',
-  SET_ACTIVE_PTY: 'set-active-pty',
   SET_API_KEY: 'set-api-key',
   SET_BROWSER_EMPTY: 'set-browser-empty',
   SET_DEVICE: 'set-device',

@@ -569,9 +569,15 @@ function cathodeCombinedPage(OPTS) {
 
     function loadIro(cb) {
       if (window.iro) { cb(); return; }
+      // Reuse an in-flight load, and clean up on failure (CSP-restricted pages
+      // block the CDN — without onerror each swatch click appended another tag).
+      var pending = document.getElementById('__cathode_iro__');
+      if (pending) { pending.addEventListener('load', cb); return; }
       const s = document.createElement('script');
+      s.id = '__cathode_iro__';
       s.src = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
       s.onload = cb;
+      s.onerror = function() { s.remove(); };
       document.head.appendChild(s);
     }
 

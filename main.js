@@ -104,7 +104,6 @@ let browserEmpty   = false;   // project URL is blank → show HTML empty state
 let deviceEmulation = null;   // { name, fit, width, height } → size the view to a device viewport
 let resizingDevice  = false;  // true while the user is ghost-dragging a resize handle
 const DEVICE_HANDLE = 14;     // backdrop reserved on the view's right+bottom for resize handles
-let activePtyId    = null;
 let rightPanelMode = 'project';
 const customViews  = new Map(); // url → WebContentsView
 
@@ -1082,7 +1081,7 @@ async function sbStartServer(projectDir, port) {
 ipcMain.handle(IPC.STORYBOOK_SERVER_STOP, (_, { id } = {}) => { stopInstance(id || activeSbId); return { ok: true }; });
 ipcMain.handle(IPC.STORYBOOK_LIST,          () => ({ instances: sbSerialize(), activeId: activeSbId }));
 ipcMain.handle(IPC.STORYBOOK_RELOAD,        () => { if (storybookView && !storybookView.webContents.isDestroyed()) storybookView.webContents.reload(); return { ok: true }; });
-ipcMain.handle(IPC.STORYBOOK_OPEN_EXTERNAL, (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url); return { ok: true }; });
+ipcMain.handle(IPC.STORYBOOK_OPEN_EXTERNAL, (_, { id } = {}) => { const inst = sbServers.get(id || activeSbId); if (inst) shell.openExternal(inst.url).catch(() => {}); return { ok: true }; });
 
 // Detect Storybooks the app didn't start (scan common ports), then adopt one.
 function scanPorts(known) {
@@ -1353,7 +1352,6 @@ ipcMain.on(IPC.PTY_RESTART, (_, { id, command })     => {
   killPty(id);
   spawnPty(id, command || ptyCommands[id] || 'claude');
 });
-ipcMain.on(IPC.SET_ACTIVE_PTY, (_, { id } = {}) => { activePtyId = id; });
 
 ipcMain.handle(IPC.CHECK_MODEL, (_, { command } = {}) => {
   return new Promise(resolve => {
@@ -1361,6 +1359,7 @@ ipcMain.handle(IPC.CHECK_MODEL, (_, { command } = {}) => {
       // Detect on the base binary: launch commands may carry a subcommand
       // (e.g. 'hermes chat'), but `command -v` needs just the executable name.
       const safe = String(command || '').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9\-_.]/g, '');
+      if (!safe) { resolve(false); return; }   // `command -v` with no operand exits 0 → false "installed"
       const p = platform.nixSpawn(['bash', '-lic', `command -v ${safe} >/dev/null 2>&1`]);
       p.on('close', code => resolve(code === 0));
       p.on('error', () => resolve(false));
@@ -2351,7 +2350,14 @@ ipcMain.handle(IPC.DIFF_STATUS, async () => {
   const num = await gitExec(['diff', 'HEAD', '--numstat']);
   if (!num.failed) num.stdout.split('\n').forEach(l => {
     const m = l.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
-    if (m) stats[m[3]] = { added: m[1] === '-' ? null : +m[1], deleted: m[2] === '-' ? null : +m[2] };
+    if (!m) return;
+    // Renames emit "old => new" (or "dir/{old => new}/f") — key by the NEW path
+    // like the status loop does, or renamed files always miss their counts.
+    let p = m[3];
+    const r = p.match(/^(.*)\{(.*) => (.*)\}(.*)$/);
+    if (r) p = (r[1] + r[3] + r[4]).replace(/\/\//g, '/');
+    else if (p.includes(' => ')) p = p.split(' => ').pop();
+    stats[p] = { added: m[1] === '-' ? null : +m[1], deleted: m[2] === '-' ? null : +m[2] };
   });
 
   const files = [];
@@ -2611,8 +2617,12 @@ ipcMain.on(IPC.SHOW_SB_BAR_MENU, (_, { x, y } = {}) => {
 });
 
 ipcMain.handle(IPC.AUTH_STATUS_READ, async () => {
-  const raw = await wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/.credentials.json 2>/dev/null'], 5000);
-  try { return JSON.parse(raw); } catch (_) { return null; }
+  try {
+    // wslExecFile inside the try too — a WSL failure must resolve null, not
+    // reject the invoke (the auth modal showed "Checking…" forever).
+    const raw = await wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/.credentials.json 2>/dev/null'], 5000);
+    return JSON.parse(raw);
+  } catch (_) { return null; }
 });
 
 // ── Per-agent memory file ─────────────────────────────────────────
@@ -2765,10 +2775,14 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
     if (!instruction && items.length === 0 && extracts.length === 0 && !media) return;
 
     // Phase 3: CSS source refs via CDP (project view only — source maps only meaningful for local dev)
+    // Best-effort: a failed CDP attach (debugger contention) must not discard the
+    // user's completed selection — just proceed without cssRefs.
     let cssRefs = [];
     if (view === browserView) {
-      await ensureCDP();
-      cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
+      try {
+        await ensureCDP();
+        cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
+      } catch (_) {}
     }
 
     // Phase 3b: media download (folder dialog + write), if requested
@@ -3608,6 +3622,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   Object.values(ptyProcesses).forEach(p => { safeKill(p); });
+  for (const s of acpSessions.values()) safeKill(s.proc);   // adapters outlived the app otherwise
   platform.stopGpuSampler();
   if (process.platform !== 'darwin') app.quit();
 });

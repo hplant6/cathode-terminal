@@ -1,6 +1,5 @@
 'use strict';
 
-const fs   = require('fs');
 const { Z } = require('./ui-constants');
 const path = require('path');
 const { iconB64 } = require('./read-icon');

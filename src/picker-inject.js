@@ -1,4 +1,3 @@
-const fs   = require('fs');
 const path = require('path');
 const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
 const { Z } = require('./ui-constants');
@@ -48,6 +47,9 @@ function getPickerScript(mode) {
       }
       overlay.remove();
       hl.remove();
+      // Cancel path (Escape) opens no popup, so nothing else would ever remove
+      // the hover label — don't leave it orphaned on the page.
+      if (!result) label.remove();
       document.removeEventListener('keydown', onKeyDown);
       resolve(result);
     }

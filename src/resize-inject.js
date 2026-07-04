@@ -1,4 +1,3 @@
-const fs     = require('fs');
 const { Z } = require('./ui-constants');
 const path   = require('path');
 const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');

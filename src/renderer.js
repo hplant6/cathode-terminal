@@ -400,6 +400,7 @@ function deleteSavedTheme(i) {
 
 function openThemeModal() { renderThemeModal(); themeModalEl?.classList.add('open'); }
 function closeThemeModal() { themeModalEl?.classList.remove('open'); }
+_modalClosers.add(closeThemeModal);   // shared Escape handler — this modal predates wireModal
 document.getElementById('theme-modal-close')?.addEventListener('click', closeThemeModal);
 
 // Generic modal close: any .mcp-modal-close button closes its parent modal.
@@ -716,8 +717,11 @@ function selectModel(modelId) {
     s.command = commandWithModel(s._baseCommand, key, modelId);
     ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
     saveOpenSessions();
-    // PTY has no clean "ready" signal — confirm shortly after relaunch.
-    setTimeout(() => finishModelSwitch(s), PTY_MODEL_SWITCH_SETTLE_MS);
+    // PTY has no clean "ready" signal — confirm shortly after relaunch. Capture
+    // the toast: a second switch (or tab close) inside the window replaces it,
+    // and the stale timer must not dismiss the newer one / confirm a dead session.
+    const myToast = s._modelToast;
+    setTimeout(() => { if (s._modelToast === myToast) finishModelSwitch(s); }, PTY_MODEL_SWITCH_SETTLE_MS);
   }
   ensureSessionModel();
 }
@@ -772,7 +776,7 @@ function fmtReset(iso) {
 function usageSegments(pct, n) {
   const GLOW = 11, TRAIL = 0.55;        // glow spans the last ~11 (dense) segments at the tip
   let litCount = 0;
-  for (let i = 0; i < n; i++) if ((i / (n - 1)) * 100 <= pct) litCount++;
+  for (let i = 0; i < n; i++) if (pct > 0 && (i / (n - 1)) * 100 <= pct) litCount++;   // pct 0 → nothing lit (0/(n-1) <= 0 lit one tick)
   const tip = litCount - 1;
   let out = '';
   for (let i = 0; i < n; i++) {
@@ -816,7 +820,7 @@ function gaugeSvg(pct) {
   pct = Math.max(0, Math.min(100, pct || 0));
   const N = 34, cx = 40, cy = 44, rIn = 25, rOut = 34;
   let litCount = 0;
-  for (let i = 0; i < N; i++) if ((i / (N - 1)) * 100 <= pct) litCount++;
+  for (let i = 0; i < N; i++) if (pct > 0 && (i / (N - 1)) * 100 <= pct) litCount++;   // pct 0 → nothing lit
   const tip = litCount - 1;            // index of the leading (brightest) tick
 
   let ticks = '';
@@ -1465,7 +1469,6 @@ function switchSession(id) {
   const s = sessions.get(id);
   if (!s) return;
   s.el.classList.add('active');
-  ipcRenderer.send(IPC.SET_ACTIVE_PTY, { id });
   refitSession(id);
   syncSvt(s);
   ensureSessionModel();
@@ -1820,7 +1823,8 @@ function renderInstallModels() {
     const btn        = card.querySelector('.im-btn');
     const progressEl = card.querySelector('.im-progress');
 
-    ipcRenderer.invoke(IPC.CHECK_MODEL, { command: model.command }).then(installed => {
+    ipcRenderer.invoke(IPC.CHECK_MODEL, { command: model.command }).catch(() => null).then(installed => {
+      if (installed === null) { badge.textContent = 'Check failed'; badge.className = 'im-badge not-installed'; return; }
       badge.textContent = installed ? 'Installed' : 'Not installed';
       badge.className   = `im-badge ${installed ? 'installed' : 'not-installed'}`;
       if (alreadyAdded) return;
@@ -2422,7 +2426,9 @@ function acpFinalizeStream(s) {
     if (text) {
       addReplyMeta(s, bubble, text);
       const isLimit = /\blimit (reached|exceeded|hit)\b|\b(usage|rate|session|message|weekly|hourly) limit\b|reached your .{0,25}\blimit\b/i.test(text);
-      Notif.play(isLimit ? 'limit' : 'message');
+      // Defer to turn end (ACP_DONE) — finalize also fires mid-turn on tool-call
+      // boundaries, which played several "done" chimes per turn.
+      s._pendingNotif = isLimit ? 'limit' : 'message';
     }
     s.streamEl = null; s.streamTextEl = null;
     s.streamMsgId = null;
@@ -2720,6 +2726,7 @@ ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') {
     acpFinalizeStream(s); acpSetStatus(s, 'ready');
+    if (s._pendingNotif) { Notif.play(s._pendingNotif); s._pendingNotif = null; }   // one chime per turn
     // Total session tokens across turns (agents like Hermes report per-turn usage).
     const t = usage && typeof usage.totalTokens === 'number' ? usage.totalTokens
       : usage ? (usage.inputTokens || 0) + (usage.outputTokens || 0) : 0;
@@ -2943,6 +2950,8 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
   ipcRenderer.on(IPC.DEVTOOLS_OPENED, () => setOn('devtools', true));
   ipcRenderer.on(IPC.DEVTOOLS_CLOSED, () => setOn('devtools', false));
   toggles.terminal && toggles.terminal.addEventListener('click', () => {
+    const s = sessions.get(activeId);
+    if (!s || s.type !== 'acp') return;   // PTY sessions are terminal-only — toggling the LED would just desync it
     const wantTerm = !isOn('terminal');
     const tab = document.querySelector('#session-view-toggle .svt-tab[data-view="' + (wantTerm ? 'term' : 'chat') + '"]');
     if (tab) tab.click();
@@ -3139,7 +3148,7 @@ const apiKeyNewForm = document.getElementById('api-key-new-form');
 async function renderAuthAccountSection() {
   const el = document.getElementById('auth-account-status');
   el.innerHTML = '<span class="auth-loading">Checking…</span>';
-  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ);
+  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);   // never leave "Checking…" stuck
   const oauth        = creds?.claudeAiOauth ?? creds;
   const hasToken     = !!(oauth?.accessToken);
   const expiresAt    = oauth?.expiresAt;
@@ -3946,8 +3955,11 @@ let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('mouseup', onUp, true);
     document.body.style.cursor = '';
-    const w = Math.round(drag.cw ?? drag.w), h = Math.round(drag.ch ?? drag.h);
     ghost.style.display = 'none';
+    // No actual drag (mousedown+up in place) → keep the named preset; committing
+    // here silently converted e.g. "iPhone 12 Pro" into anonymous dimensions.
+    if (drag.cw == null && drag.ch == null) { drag = null; return; }
+    const w = Math.round(drag.cw ?? drag.w), h = Math.round(drag.ch ?? drag.h);
     ipcRenderer.send(IPC.DEVICE_RESIZE_END, { width: w, height: h });
     active = { name: '', width: w, height: h, fit: false };
     persist(); setLabel();
@@ -4693,7 +4705,9 @@ ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   });
-  addPanelEscClose(panel, cancel, el => el === textarea);
+  // Filter input counts as "typing" too — Escape there must not cancel the panel
+  // and discard staged CSS edits (siblings whitelist their search inputs).
+  addPanelEscClose(panel, cancel, el => el === textarea || el === filterInput);
 
   ipcRenderer.on(IPC.PICK_PANEL_OPEN, (_, { items, tool }) => open(items || [], tool));
 })();
@@ -5440,10 +5454,12 @@ ipcRenderer.on(IPC.PICK_SEND_TO_SESSION, (_, message) => {
 ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   const gear = document.getElementById('btn-settings');
   if (gear) gear.classList.add('has-update');
-  const behind = info && info.behind;
+  const behind = (info && info.behind) || 0;
   const msg = info && info.version
     ? `↑ Update ${info.version} ready — click to install`
-    : `↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`;
+    : (behind
+      ? `↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`
+      : '↑ Update available — click to update');
   const t = showToast(msg, { duration: 9000 });
   if (t && t.el) {
     t.el.style.cursor = 'pointer';
@@ -5736,21 +5752,27 @@ let openDrawPanel = null;
 })();
 
 ipcRenderer.on(IPC.DRAW_COMPOSITE, async (_, { pageB64, canvasDataUrl, instructions = '' }) => {
-  const offscreen = document.createElement('canvas');
-  const img1 = new Image(), img2 = new Image();
-  img1.src = 'data:image/png;base64,' + pageB64;
-  img2.src = canvasDataUrl;
-  await Promise.all([
-    new Promise(r => { img1.onload = r; img1.onerror = r; }),
-    new Promise(r => { img2.onload = r; img2.onerror = r; }),
-  ]);
-  offscreen.width  = img1.naturalWidth  || img2.naturalWidth;
-  offscreen.height = img1.naturalHeight || img2.naturalHeight;
-  const ctx = offscreen.getContext('2d');
-  ctx.drawImage(img1, 0, 0);
-  ctx.drawImage(img2, 0, 0);
-  // Brush controls + instruction live in the panel; composite + send straight through.
-  ipcRenderer.send(IPC.DRAW_COMPOSITE_DONE, { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
+  // Always answer DRAW_COMPOSITE_DONE — a decode failure (drawImage throws on a
+  // broken image, 0×0 canvas) must not hang main's draw-send flow.
+  try {
+    const offscreen = document.createElement('canvas');
+    const img1 = new Image(), img2 = new Image();
+    img1.src = 'data:image/png;base64,' + pageB64;
+    img2.src = canvasDataUrl;
+    await Promise.all([
+      new Promise(r => { img1.onload = r; img1.onerror = r; }),
+      new Promise(r => { img2.onload = r; img2.onerror = r; }),
+    ]);
+    offscreen.width  = img1.naturalWidth  || img2.naturalWidth;
+    offscreen.height = img1.naturalHeight || img2.naturalHeight;
+    const ctx = offscreen.getContext('2d');
+    if (img1.naturalWidth) ctx.drawImage(img1, 0, 0);
+    if (img2.naturalWidth) ctx.drawImage(img2, 0, 0);
+    // Brush controls + instruction live in the panel; composite + send straight through.
+    ipcRenderer.send(IPC.DRAW_COMPOSITE_DONE, { compositeDataUrl: offscreen.toDataURL('image/png'), instructions });
+  } catch (_) {
+    ipcRenderer.send(IPC.DRAW_COMPOSITE_DONE, { compositeDataUrl: '', instructions });
+  }
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────────
@@ -6578,9 +6600,11 @@ function activateSPFocused() {
   if (spSubFocus === 'delete') {
     savedPrompts = savedPrompts.filter(sp => sp.id !== p.id);
     savePromptsToStorage();
-    spFocusIdx = Math.min(spFocusIdx, savedPrompts.length - 1);
-    if (spFocusIdx < 0 && savedPrompts.length) spFocusIdx = 0;
+    // showSavedPromptsView resets spFocusIdx to 0 — restore the adjusted focus
+    // after the re-render so keyboard-deleting row 5 doesn't snap back to row 1.
+    const keep = Math.max(0, Math.min(spFocusIdx, savedPrompts.length - 1));
     showSavedPromptsView();
+    if (savedPrompts.length) { spFocusIdx = keep; updateSPFocusViz(); }
   }
 }
 
@@ -6977,12 +7001,9 @@ document.getElementById('sb-disconnect')?.addEventListener('click', async () => 
   updateComponentPickerBtn?.();
 });
 
-document.getElementById('sb-auto-conn')?.addEventListener('change', e => {
-  if (!sbConfig) return;
-  sbConfig.autoInject = e.target.checked;
-  localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
-  document.getElementById('sb-preview').style.display = e.target.checked ? '' : 'none';
-});
+// (The post-connect #sb-connected panel is retired — the instance bar replaced
+// it — so its #sb-auto-conn toggle listener was unreachable and has been removed.
+// autoInject is set at connect time via the setup checkbox #sb-auto.)
 
 document.getElementById('sb-url')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sb-connect').click(); }
@@ -7127,10 +7148,13 @@ let openComponentPanel = null;
 
   let sbUrl = '', allStories = [], target = null, selected = null, view = 'row', io = null;
 
-  function nodeGet(url) {
+  function nodeGet(url, timeoutMs = 10000) {
     return new Promise((resolve, reject) => {
       const mod = url.startsWith('https') ? require('https') : require('http');
-      mod.get(url, res => { let raw = ''; res.on('data', c => raw += c); res.on('end', () => { try { resolve(JSON.parse(raw)); } catch (e) { reject(e); } }); }).on('error', reject);
+      const req = mod.get(url, res => { let raw = ''; res.on('data', c => raw += c); res.on('end', () => { try { resolve(JSON.parse(raw)); } catch (e) { reject(e); } }); });
+      req.on('error', reject);
+      // A wedged server (accepts, never responds) otherwise hangs "Loading…" forever.
+      req.setTimeout(timeoutMs, () => { req.destroy(new Error('timeout')); });
     });
   }
   function targetSig(t) { return '<' + t.tag + (t.id ? '#' + t.id : '') + ((t.classes && t.classes[0]) ? '.' + t.classes[0] : '') + '>'; }
