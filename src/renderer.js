@@ -2737,7 +2737,37 @@ ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
 
 ipcRenderer.on(IPC.ACP_CLOSED, (_, { id }) => {
   const s = sessions.get(id);
-  if (s?.type === 'acp') { acpFinalizeStream(s); acpSetStatus(s, 'closed'); }
+  if (s?.type === 'acp') {
+    acpFinalizeStream(s); acpSetStatus(s, 'closed');
+    s.msgsEl.querySelectorAll('.acp-permission').forEach(c => c.remove());   // drop any dangling approval prompts
+  }
+});
+
+// Risky tool (execute/edit/delete/…) needs the user's OK before the agent runs it.
+ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlways }) => {
+  const s = acpSession(id);
+  if (!s) { ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision: 'deny' }); return; }
+  acpFinalizeStream(s);
+  const verb = { execute: 'run a command', edit: 'edit a file', delete: 'delete files', move: 'move / rename files', fetch: 'fetch a URL' }[kind] || `use the ${kind} tool`;
+  const card = document.createElement('div');
+  card.className = 'acp-permission';
+  card.innerHTML =
+    `<div class="acp-perm-head">Allow the agent to <b></b>?</div>` +
+    (title ? `<div class="acp-perm-title"></div>` : '') +
+    `<div class="acp-perm-btns">` +
+      `<button class="acp-perm-deny" type="button">Deny</button>` +
+      (canAlways ? `<button class="acp-perm-always" type="button">Always</button>` : '') +
+      `<button class="acp-perm-allow" type="button">Allow</button>` +
+    `</div>`;
+  card.querySelector('.acp-perm-head b').textContent = verb;   // textContent → no XSS from kind/title
+  if (title) card.querySelector('.acp-perm-title').textContent = title;
+  const decide = (decision) => { ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision }); card.remove(); };
+  card.querySelector('.acp-perm-deny').addEventListener('click', () => decide('deny'));
+  card.querySelector('.acp-perm-allow').addEventListener('click', () => decide('approve'));
+  card.querySelector('.acp-perm-always')?.addEventListener('click', () => decide('always'));
+  s.msgsEl.appendChild(card);
+  acpScrollEnd(s);
+  Notif.play('message');   // audible cue — the agent is paused waiting on you
 });
 
 ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message, setupCmd, setupLabel }) => {

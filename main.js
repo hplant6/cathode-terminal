@@ -1485,6 +1485,17 @@ function acpAdapterInstalledVersion() {
 const acpSessions      = new Map(); // id → { proc, conn, sessionId }
 const acpTermResolvers = new Map(); // termId  → resolve
 let acpTermSeq = 0;                 // unique terminal ids (Date.now() collides within a ms)
+const acpPermResolvers = new Map(); // reqId   → { resolve, id } for pending tool-permission prompts
+let acpPermSeq = 0;
+// Resolve any pending permission prompts for a dying session as "deny", so the
+// adapter's requestPermission promise never hangs after kill/close.
+function denyPendingPerms(id) {
+  for (const [reqId, r] of acpPermResolvers) if (r.id === id) { acpPermResolvers.delete(reqId); r.resolve('deny'); }
+}
+ipcMain.on(IPC.ACP_PERMISSION_RESPONSE, (_, { reqId, decision } = {}) => {
+  const r = acpPermResolvers.get(reqId);
+  if (r) { acpPermResolvers.delete(reqId); r.resolve(decision || 'deny'); }
+});
 
 // ── Per-agent ACP launch ──────────────────────────────────────────
 // The ACP client/protocol below is agent-agnostic; only *launching* the agent
@@ -1628,13 +1639,28 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
 
   const client = {
     async requestPermission(params) {
-      // Auto-approve: inform the renderer for display only, then immediately allow
-      const allow = params.options?.find(o => o.kind === 'allow_once') || params.options?.[0];
-      send('acp-tool-approved', { id, toolCall: params.toolCall });
-      return { outcome: allow
-        ? { outcome: 'selected', optionId: allow.optionId }
-        : { outcome: 'cancelled' }
-      };
+      const kind    = params.toolCall?.kind || 'other';
+      const options = params.options || [];
+      const pick = (...ks) => { for (const k of ks) { const o = options.find(x => x.kind === k); if (o) return o; } return null; };
+      const allowOnce   = pick('allow_once', 'allow_always') || options[0];
+      const allowAlways = pick('allow_always');
+      const rejectOpt   = pick('reject_once', 'reject_always');
+      const sel = o => ({ outcome: o ? { outcome: 'selected', optionId: o.optionId } : { outcome: 'cancelled' } });
+      const approve = o => { send('acp-tool-approved', { id, toolCall: params.toolCall }); return sel(o); };
+
+      // Read-only tools auto-approve; risky ones (execute / edit / delete / move /
+      // fetch / …) require user confirmation — the guard against a prompt-injected
+      // page steering the agent into destructive tool calls.
+      const SAFE = new Set(['read', 'search', 'think', 'switch_mode']);
+      if (SAFE.has(kind) || !allowOnce) return approve(allowOnce);
+
+      const reqId = `perm${++acpPermSeq}`;
+      send('acp-permission-request', { id, reqId, kind, title: params.toolCall?.title || '', canAlways: !!allowAlways });
+      const decision = await new Promise(resolve => acpPermResolvers.set(reqId, { resolve, id }));
+      acpPermResolvers.delete(reqId);
+      if (decision === 'always' && allowAlways) return approve(allowAlways);
+      if (decision === 'approve') return approve(allowOnce);
+      return sel(rejectOpt);   // deny (or session gone)
     },
     async sessionUpdate(params) {
       send('acp-update', { id, update: params.update });
@@ -1726,6 +1752,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       // killed session must not delete the replacement (or report it closed).
       if (acpSessions.get(id) !== entry) return;
       acpSessions.delete(id);
+      denyPendingPerms(id);
       send('acp-closed', { id });
     });
   } catch (err) {
@@ -1773,6 +1800,7 @@ ipcMain.on(IPC.ACP_KILL, (_, { id } = {}) => {
   if (!s) return;
   safeKill(s.proc);
   acpSessions.delete(id);
+  denyPendingPerms(id);
 });
 
 // ── IPC: usage (parsed from Claude local transcripts) ─────────────

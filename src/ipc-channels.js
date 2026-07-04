@@ -16,6 +16,8 @@ const IPC = Object.freeze({
   ACP_INSTALL_PROGRESS: 'acp-install-progress',
   ACP_INSTALLING: 'acp-installing',
   ACP_KILL: 'acp-kill',
+  ACP_PERMISSION_REQUEST: 'acp-permission-request',
+  ACP_PERMISSION_RESPONSE: 'acp-permission-response',
   ACP_PROMPT: 'acp-prompt',
   ACP_READY: 'acp-ready',
   ACP_SPAWN: 'acp-spawn',

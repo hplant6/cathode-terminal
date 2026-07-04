@@ -1550,6 +1550,32 @@ html, body {
   padding: 2px 0;
   opacity: 0.7;
 }
+/* Risky-tool approval prompt (execute/edit/delete/…) */
+.acp-permission {
+  align-self: stretch;
+  margin: 6px 0;
+  padding: 12px 14px;
+  background: var(--spec-input-bg);
+  border: 1px solid var(--spec-accent);
+  border-radius: var(--radius-md);
+}
+.acp-perm-head { font-size: 12.5px; color: var(--spec-text); margin-bottom: 4px; }
+.acp-perm-head b { color: var(--spec-accent); font-weight: 600; }
+.acp-perm-title {
+  font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim);
+  margin: 6px 0 10px; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto;
+}
+.acp-perm-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.acp-perm-btns button {
+  min-width: 0; height: 28px; padding: 0 14px; border: none; border-radius: var(--radius-sm); cursor: pointer;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.acp-perm-deny   { background: var(--spec-toolbar-bg); color: var(--spec-text-dim); }
+.acp-perm-deny:hover   { background: var(--spec-toolbar-bg); color: var(--spec-text); }
+.acp-perm-always { background: var(--spec-header-bg); color: var(--spec-text); }
+.acp-perm-always:hover { background: var(--spec-header-bg); filter: brightness(1.15); }
+.acp-perm-allow  { background: var(--spec-accent); color: #fff; }
+.acp-perm-allow:hover  { background: var(--spec-accent); filter: brightness(1.1); }
 /* Status bar */
 .acp-status {
   position: relative;
