@@ -3164,8 +3164,8 @@ async function renderAuthAccountSection() {
     <div class="auth-account-row${loggedIn ? ' active' : ''}">
       <div class="auth-dot${loggedIn ? ' on' : ''}"></div>
       <div class="auth-account-info">
-        <span class="auth-account-name">${loggedIn ? displayName : 'Not logged in'}</span>
-        ${loggedIn && subLine ? `<span class="auth-account-sub">${subLine}</span>` : ''}
+        <span class="auth-account-name">${loggedIn ? escHtml(displayName) : 'Not logged in'}</span>
+        ${loggedIn && subLine ? `<span class="auth-account-sub">${escHtml(subLine)}</span>` : ''}
         ${expired  ? `<span class="auth-account-sub warn">Session expired — re-authenticate</span>` : ''}
         ${!hasToken ? `<span class="auth-account-sub">Run claude auth login to connect your account</span>` : ''}
       </div>
@@ -5451,6 +5451,11 @@ ipcRenderer.on(IPC.PICK_SEND_TO_SESSION, (_, message) => {
 
 // Passive update indicator: a dismissible toast (click → run the update flow)
 // plus a persistent dot on the settings gear.
+// Generic main→renderer toast (e.g. the plaintext-secrets security warning).
+ipcRenderer.on(IPC.APP_TOAST, (_, { message, duration = 8000 } = {}) => {
+  if (message) showToast(message, { duration });
+});
+
 ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   const gear = document.getElementById('btn-settings');
   if (gear) gear.classList.add('has-update');

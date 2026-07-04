@@ -139,6 +139,11 @@ function checkNixEnv(timeout = 6000) {
 // on Windows and the native login shell on POSIX.
 const _agentEnvCache = new Map();
 function resolveAgentEnv(bin) {
+  // bin is interpolated into a `command -v ${bin}` shell string below — strip it
+  // to a bare executable name so a caller passing an unsanitized value (config,
+  // parsed URL, …) can't inject shell metacharacters.
+  bin = String(bin || '').trim().replace(/[^A-Za-z0-9._-]/g, '');
+  if (!bin) return Promise.resolve(null);
   if (_agentEnvCache.has(bin)) return Promise.resolve(_agentEnvCache.get(bin));
   const cache = env => { _agentEnvCache.set(bin, env); return env; };
   if (!IS_WIN) {

@@ -900,9 +900,12 @@ function clearSbManifest(dir) {
 // The Storybook URL for a project dir: its own running instance first, else the
 // active instance. Injected as STORYBOOK_URL when agent sessions spawn.
 function storybookUrlFor(dir) {
-  for (const s of sbServers.values()) if (dir && s.dir === dir && s.status === 'ready') return s.url;
-  const act = sbServers.get(activeSbId);
-  return act && act.status === 'ready' ? act.url : '';
+  let url = '';
+  for (const s of sbServers.values()) if (dir && s.dir === dir && s.status === 'ready') { url = s.url; break; }
+  if (!url) { const act = sbServers.get(activeSbId); url = act && act.status === 'ready' ? act.url : ''; }
+  // This value is interpolated into a `bash -lic` string at agent spawn — only a
+  // plain http(s)://host:port URL may pass, never anything with shell metachars.
+  return /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?\/?$/.test(url) ? url : '';
 }
 function tailLines(s, n) { return (s || '').split('\n').filter(Boolean).slice(-n).join('\n'); }
 
@@ -1040,7 +1043,9 @@ async function sbStartServer(projectDir, port) {
     return { ok: false, error: 'no-storybook', dir: projectDir };
   }
   ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
-  const usePort = port || await findFreePort(6006);   // step 6: don't get blocked by a busy 6006
+  // Reject a bad caller-supplied port (it ends up in sbUrl → a shell string).
+  if (port != null && safePort(port) === null) return { ok: false, error: 'invalid-port' };
+  const usePort = safePort(port) || await findFreePort(6006);   // step 6: don't get blocked by a busy 6006
   const url = `http://localhost:${usePort}`;
   const id  = 'sb' + (++sbSeq);
   const inst = { id, proc: null, port: usePort, url, dir: projectDir, label: sbLabel(projectDir), status: 'starting', log: '', managed: true };
@@ -1092,7 +1097,16 @@ function scanPorts(known) {
     req.setTimeout(800, () => { req.destroy(); res(null); });
   }))).then(rs => rs.filter(Boolean));
 }
+// A valid TCP port (1-65535) or null. sbUrl derived from this is interpolated
+// into a `bash -lic` string at agent spawn, so a non-numeric port would be a
+// command-injection sink — coerce + range-check before it's ever used.
+function safePort(port) {
+  const n = Number(port);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
+}
 function adoptPort(port) {
+  port = safePort(port);
+  if (port === null) return null;
   for (const s of sbServers.values()) if (s.port === port) { setActiveStorybook(s.id); return s; }
   const id = 'sb' + (++sbSeq);
   const inst = { id, proc: null, port, url: `http://localhost:${port}`, dir: '', label: 'Port ' + port, status: 'ready', log: '', managed: false };
@@ -1101,7 +1115,7 @@ function adoptPort(port) {
   return inst;
 }
 ipcMain.handle(IPC.STORYBOOK_SCAN,  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
-ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port } = {}) => { const i = adoptPort(port); return { ok: true, id: i.id, url: i.url }; });
+ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port } = {}) => { const i = adoptPort(port); return i ? { ok: true, id: i.id, url: i.url } : { ok: false, error: 'invalid-port' }; });
 
 // Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
 ipcMain.handle(IPC.STORYBOOK_OPEN_SWITCHER, async () => {
@@ -2411,8 +2425,20 @@ function getApiKeyFile() { return path.join(app.getPath('userData'), '.api-key')
 // Secrets at rest: encrypt with the OS keychain (safeStorage) when available,
 // and always write 0600. Falls back to plaintext only where the OS can't
 // encrypt (e.g. headless Linux with no keyring) so the app still works.
+// Warn once (log + UI) when the OS keyring is missing and we're about to store a
+// secret in plaintext — the downgrade must not be silent.
+let _warnedPlaintextSecrets = false;
+function warnPlaintextSecrets() {
+  if (_warnedPlaintextSecrets) return;
+  _warnedPlaintextSecrets = true;
+  console.warn('[secrets] OS encryption (safeStorage) unavailable — API keys are being stored UNENCRYPTED on disk. Enable a system keyring to secure them.');
+  uiSend(IPC.APP_TOAST, { kind: 'warn', duration: 14000, message: 'No OS keyring available — your API keys are stored unencrypted on disk.' });
+}
+
 function encryptToFile(file, plaintext) {
-  const data = safeStorage.isEncryptionAvailable()
+  const encAvail = safeStorage.isEncryptionAvailable();
+  if (!encAvail && String(plaintext)) warnPlaintextSecrets();
+  const data = encAvail
     ? safeStorage.encryptString(String(plaintext))
     : Buffer.from(String(plaintext), 'utf8');
   fs.writeFileSync(file, data, { mode: 0o600 });
@@ -2444,9 +2470,12 @@ ipcMain.on(IPC.SET_API_KEY, (_, key) => {
 // re-sealed on the next write.
 ipcMain.on(IPC.SECRET_SEAL, (e, plaintext) => {
   try {
-    e.returnValue = safeStorage.isEncryptionAvailable()
-      ? 'v1:' + safeStorage.encryptString(String(plaintext)).toString('base64')
-      : String(plaintext);
+    if (safeStorage.isEncryptionAvailable()) {
+      e.returnValue = 'v1:' + safeStorage.encryptString(String(plaintext)).toString('base64');
+    } else {
+      if (String(plaintext)) warnPlaintextSecrets();
+      e.returnValue = String(plaintext);
+    }
   } catch (_) { e.returnValue = String(plaintext); }
 });
 ipcMain.on(IPC.SECRET_OPEN, (e, sealed) => {
