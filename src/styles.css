@@ -2918,6 +2918,35 @@ html, body {
 }
 #ui-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 */
 
+/* ── Clearable inputs ──────────────────────────────────────────────
+   An X inside the chat composer and other substantial text inputs, to clear
+   them. The X is transparent and only changes COLOR on hover (→ white) — never
+   the background, unlike the default button:hover. */
+.clearable { position: relative; display: block; width: 100%; }
+.clearable--flex { flex: 1; min-width: 60px; }   /* e.g. the address bar, a flex-row input */
+.clearable > input, .clearable > textarea { width: 100%; box-sizing: border-box; }
+/* NOTE: right padding (to keep text clear of the X) is set inline in JS so it
+   beats id-level padding rules like #address-bar's. */
+
+.input-clear {
+  position: absolute;
+  top: 50%; right: 8px; transform: translateY(-50%);
+  min-width: 0; width: 20px; height: 20px; padding: 0;   /* override the 28px bare-button floor */
+  border: none; background: none;                         /* no fill — and no hover fill (below) */
+  color: var(--spec-structural);                          /* shade 3 — matches the placeholders */
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.1s;
+}
+.input-clear:hover  { background: none; color: var(--spec-text); }   /* white on hover, background unchanged */
+.input-clear:active { background: none; }
+.input-clear svg { width: 13px; height: 13px; display: block; pointer-events: none; }
+
+/* Multi-line textareas (composer + wrapped textareas like the audit prompt) →
+   pin the X to the top-right rather than vertically centering it. */
+#ui-editor-wrap > .input-clear,
+.clearable--textarea > .input-clear { top: 8px; right: 10px; transform: none; }
+
 #ui-footer {
   position: relative;
   display: flex;

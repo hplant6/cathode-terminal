@@ -5906,6 +5906,57 @@ ipcRenderer.on(IPC.SHORTCUT_ACTION, (_, action) => {
   }
 });
 
+// ── Clearable inputs: an X to clear the chat composer and longer text inputs ──
+// The X shows only when the field has content; clicking it clears and re-focuses
+// the field (dispatching 'input' so char-counts/listeners update). Tiny CSS-value
+// fields (hex/rgb/hsl, W/H) and the tool-panel textareas (their top-right corner
+// is taken by the resize handle) are intentionally excluded.
+const CLEAR_X_SVG = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 5l8 8M13 5l-8 8"/></svg>';
+function attachClearButton(input) {
+  if (!input || input.dataset.clearWired) return;
+  input.dataset.clearWired = '1';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'input-clear';
+  btn.tabIndex = -1;
+  btn.title = 'Clear';
+  btn.setAttribute('aria-label', 'Clear input');
+  btn.innerHTML = CLEAR_X_SVG;
+  const sync = () => { btn.style.display = input.value ? 'flex' : 'none'; };
+  input.addEventListener('input', sync);
+  btn.addEventListener('mousedown', e => e.preventDefault());   // clicking the X must not blur the field
+  btn.addEventListener('click', () => {
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    sync();
+  });
+  const editorWrap = input.closest('#ui-editor-wrap');
+  if (editorWrap) {
+    editorWrap.appendChild(btn);   // composer: reuse the existing position:relative wrap (keeps its 38px right pad)
+  } else {
+    const wrap = document.createElement('span');
+    wrap.className = 'clearable'
+      + (input.id === 'address-bar' ? ' clearable--flex' : '')
+      + (input.tagName === 'TEXTAREA' ? ' clearable--textarea' : '');
+    input.replaceWith(wrap);
+    wrap.appendChild(input);
+    wrap.appendChild(btn);
+    input.style.paddingRight = '30px';   // inline → beats id-level padding (e.g. #address-bar)
+  }
+  sync();
+}
+(function wireClearableInputs() {
+  document.querySelectorAll('#ui-textarea, #address-bar, #sb-url, .modal-input').forEach(el => {
+    if (el.readOnly || el.type === 'number' || el.classList.contains('dev-num')) return;
+    // Skip fields that share their row with other inputs (compact forms like the
+    // device add W/H/name row) — wrapping one would disrupt the flex layout.
+    if (el.id !== 'ui-textarea' && el.parentElement &&
+        el.parentElement.querySelectorAll('input, textarea').length > 1) return;
+    attachClearButton(el);
+  });
+})();
+
 // ── Left-panel mode: Terminal ↔ UI ────────────────────────────────
 const uiTextarea  = document.getElementById('ui-textarea');
 const uiCharCount = document.getElementById('ui-char-count');
@@ -6016,6 +6067,8 @@ function buildAuditMenu() {
     };
     syncName();
     labelIn.addEventListener('input', syncName);
+    attachClearButton(labelIn);
+    attachClearButton(card.querySelector('.ap-prompt'));
 
     card.querySelector('.ap-card-row').addEventListener('click', (e) => {
       if (e.target.closest('.ap-delete')) return;
