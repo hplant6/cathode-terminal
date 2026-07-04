@@ -283,8 +283,6 @@ function getEyedropperScript(snapshotDataUrl) {
       });
     }
 
-    function applyColor(hex) { if (active) active.apply(hex); }
-    function revert() { if (active) active.restore(); }
 
 
 

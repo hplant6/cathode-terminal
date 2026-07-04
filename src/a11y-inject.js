@@ -4,7 +4,7 @@
 // results panel. Resolves with { issues, url, total } on "Send" or null.
 const SHARED = require('./inject-shared');
 const { Z } = require('./ui-constants');
-const { ACCENT, ACCENT_RGB } = require('./inject-styles');
+const { ACCENT } = require('./inject-styles');
 
 function getA11yScript() {
   return `(function() {

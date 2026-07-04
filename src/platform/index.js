@@ -64,14 +64,6 @@ function cmdFileArgs(cmdArgs) {
   return { file: cmdArgs[0], args: cmdArgs.slice(1) };
 }
 
-// Convert a Windows path (C:\Users\… or a temp file) into a path the *nix
-// environment can read. On Windows: WSL's /mnt/<drive>/… mapping. On POSIX the
-// path is already native — identity.
-function toNixPath(winPath) {
-  if (!IS_WIN) return winPath;
-  return winPath.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => `/mnt/${d.toLowerCase()}`);
-}
-
 // The WSL arg-vector that resolves the Claude config dir as a path the Windows
 // (or native) side can read. Windows: wslpath -w ~/.claude (WSL home → UNC/Win
 // path for the Windows-side adapter). POSIX: the native ~/.claude.
@@ -345,7 +337,7 @@ function readRealScale() {
 
 module.exports = {
   homeDir,
-  nixFileArgs, cmdFileArgs, toNixPath, claudeConfigDirArgs,
+  nixFileArgs, cmdFileArgs, claudeConfigDirArgs,
   nixExecFile, nixExecInput, nixSpawn, cmdSpawn,
   checkNixEnv, resolveAgentEnv, agentVersion, agentCwd,
   gitBase,

@@ -19,7 +19,6 @@ const { getPickerScript }        = require('./src/picker-inject');
 const { Z }                       = require('./src/ui-constants');
 const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
-const { getScreenshotPopupScript } = require('./src/screenshot-popup-inject');
 const { getResizeScript }         = require('./src/resize-inject');
 const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
@@ -528,7 +527,6 @@ function getPopupBounds() {
   return { x: popX, y: popY, width: popW, height: popH };
 }
 
-// Return the registrable domain (e.g. "kindo.ai" from "app.kindo.ai")
 // Registrable domain for the auth-popup "returned home" heuristic. Keeps three
 // labels for common two-level public suffixes (co.uk, com.au…) so unrelated
 // *.co.uk sites aren't collapsed to the same root. Not PSL-complete — an unknown
@@ -583,7 +581,6 @@ function openInlinePopup(url) {
   popupContentView.setBounds({ x: b.x, y: b.y + POPUP_BAR_HEIGHT, width: b.width, height: b.height - POPUP_BAR_HEIGHT });
   popupContentView.webContents.loadURL(url).catch(() => {});
   popupContentView.webContents.on('did-navigate', (_, u) => {
-    // Update header URL
     if (popupBarView && !popupBarView.webContents.isDestroyed()) {
       popupBarView.webContents.send(IPC.POPUP_URL, u);
     }
@@ -3159,10 +3156,10 @@ ipcMain.on(IPC.PICK_CANCEL, () => {
 ipcMain.on(IPC.DRAW_COMPOSITE_DONE, (_, { compositeDataUrl, instructions } = {}) => {
   if (typeof compositeDataUrl !== 'string') return;   // composite failed / bad payload
   const buf  = Buffer.from(compositeDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
-  const dir  = require('path').join(require('electron').app.getPath('userData'), 'screenshots');
-  require('fs').mkdirSync(dir, { recursive: true });
-  const file = require('path').join(dir, 'draw-' + Date.now() + '.png');
-  require('fs').writeFileSync(file, buf);
+  const dir  = path.join(app.getPath('userData'), 'screenshots');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'draw-' + Date.now() + '.png');
+  fs.writeFileSync(file, buf);
   const dwUrl = activePageUrl();
   const drawRef = (dwUrl ? `From ${pageSource()} — ${dwUrl}\n` : '') + '[Drawing: ' + file + ']';
   const drawInstr = (instructions || '').trim();

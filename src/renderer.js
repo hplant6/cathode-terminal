@@ -1510,24 +1510,6 @@ function renderPtyTabs() {
   }
 }
 
-function startRename(nameEl, id) {
-  const s = sessions.get(id);
-  if (!s) return;
-  const input = document.createElement('input');
-  input.className = 'pty-tab-rename';
-  input.value = s.name;
-  nameEl.replaceWith(input);
-  input.focus();
-  input.select();
-  const commit = () => { const v = input.value.trim(); if (v) s.name = v; renderPtyTabs(); };
-  input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') { input.value = s.name; input.blur(); }
-    e.stopPropagation();
-  });
-}
-
 ipcRenderer.on(IPC.PTY_OUTPUT, (_, { id, data }) => {
   const s = sessions.get(id);
   if (s) s.term.write(data);
@@ -7077,11 +7059,6 @@ async function detectStorybook() {
     ? (r.isDemo ? 'Bundled demo Storybook ready — click Start.' : 'Storybook detected in this folder — click Start.')
     : 'No Storybook here yet — build one with your agent below.';
   det.hidden = false;
-}
-
-function sbNotifyMain() {
-  if (sbConfig) ipcRenderer.send(IPC.STORYBOOK_LOAD_URL, sbConfig.value);
-  else          ipcRenderer.send(IPC.STORYBOOK_DISCONNECT);
 }
 
 // Init — re-adopt the remembered Storybook only if it's actually still running.
