@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-07-04
+
+### Added
+- **Scaffold a Storybook for a static HTML site** — the Storybook setup's "Use a framework" tab now has an **HTML / static site** option, so a plain HTML/CSS/JS project (e.g. a WordPress export) can be set up: the agent runs `storybook init --type html` and writes stories for the site's reusable UI blocks/sections.
+
+### Changed
+- The **Project folder** picker moved out of the Settings drawer to a persistent field under the Storybook setup tabs, so generating a Storybook from a folder is discoverable (still shared by the Run and Figma flows).
+
 ## [1.0.6] - 2026-07-04
 
 Feature release: the Animation tool.
@@ -104,7 +112,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.7...HEAD
+[1.0.7]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.7
 [1.0.6]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.6
 [1.0.5]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.5
 [1.0.4]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.4
