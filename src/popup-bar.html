@@ -62,13 +62,16 @@
   <button class="close" id="close" title="Close">✕</button>
   <script>
     const { ipcRenderer } = require('electron');
-    ipcRenderer.on('popup-url', (_, url) => {
+    // Route channels through the shared registry (same dir, nodeIntegration is on)
+    // so a rename can't silently desync this view from main.
+    const { IPC } = require('./ipc-channels');
+    ipcRenderer.on(IPC.POPUP_URL, (_, url) => {
       const el = document.getElementById('url');
       el.textContent = url;
       el.title = url;
     });
     document.getElementById('close').addEventListener('click', () => {
-      ipcRenderer.send('close-inline-popup');
+      ipcRenderer.send(IPC.CLOSE_INLINE_POPUP);
     });
   </script>
 </body>

@@ -1879,9 +1879,9 @@ function renderInstallModels() {
           };
 
           function cleanup() {
-            ipcRenderer.off('profile-install-progress', onProgress);
-            ipcRenderer.off('profile-install-done',     onDone);
-            ipcRenderer.off('profile-install-error',    onError);
+            ipcRenderer.off(IPC.PROFILE_INSTALL_PROGRESS, onProgress);
+            ipcRenderer.off(IPC.PROFILE_INSTALL_DONE,     onDone);
+            ipcRenderer.off(IPC.PROFILE_INSTALL_ERROR,    onError);
             _installListeners.delete(installId);
           }
 
@@ -3138,10 +3138,10 @@ const API_KEYS_STORE = LS.apiKeys;
 function secureGet(k) {
   const raw = localStorage.getItem(k);
   if (!raw) return '';
-  try { return ipcRenderer.sendSync('secret-open', raw); } catch (_) { return raw; }
+  try { return ipcRenderer.sendSync(IPC.SECRET_OPEN, raw); } catch (_) { return raw; }
 }
 function secureSet(k, v) {
-  try { localStorage.setItem(k, ipcRenderer.sendSync('secret-seal', String(v))); }
+  try { localStorage.setItem(k, ipcRenderer.sendSync(IPC.SECRET_SEAL, String(v))); }
   catch (_) { localStorage.setItem(k, String(v)); }
 }
 

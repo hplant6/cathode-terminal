@@ -781,7 +781,7 @@ function animateDevTools(open) {
         freeView(devToolsView);
         devToolsView = null;
       }
-      mainWindow.webContents.send(open ? 'devtools-opened' : 'devtools-closed');
+      mainWindow.webContents.send(open ? IPC.DEVTOOLS_OPENED : IPC.DEVTOOLS_CLOSED);
     }
   }, 16);
 }
@@ -811,7 +811,7 @@ async function openDevToolsPanel(inspectX, inspectY) {
       devToolsOpening = false;
       repositionAll();
       broadcastLayout();
-      uiSend('devtools-closed');
+      uiSend(IPC.DEVTOOLS_CLOSED);
     });
     devToolsView.webContents.once('did-finish-load', () => {
       // Hide the device toolbar toggle button and close it if currently active
