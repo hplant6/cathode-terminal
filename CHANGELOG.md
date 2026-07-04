@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-04
+
+Reliability & polish release: a full reliability audit, a clear-input control, a new app icon, dependency hardening, and a dead-code sweep.
+
+### Added
+- **Clear (X) button inside inputs** — the chat composer, address bar, Storybook URL, modal text fields, and the audit-prompt Label/Prompt now show an X to clear them (white on hover, no background change).
+- Global crash backstops (`uncaughtException` / `unhandledRejection`) so one malformed IPC payload can't tear down the main process and kill every open session.
+
+### Changed
+- **New app icon** across Windows, macOS, and Linux (and the README).
+- Dependencies: Electron 41.7.1 → 41.9.2 (Chromium security patch), the `undici` advisory cleared (`npm audit` → 0 vulnerabilities), and the unused `@xterm/addon-canvas` removed.
+- The in-page color picker is now **inlined** into the injected script instead of loaded from a CDN, so it works on CSP-locked and offline pages.
+- Agent detection on macOS probes through the **login shell agents actually run under**, so Homebrew/nvm-installed agents aren't falsely reported "not installed."
+- Remaining raw-string IPC channels routed through the shared registry.
+
+### Fixed
+- **Reliability audit**: guarded sync IPC handlers against malformed payloads; kill-before-spawn so a double PTY spawn can't orphan a process; Monaco loaders no longer hang forever if their assets fail to load; wrapped Storybook/Code-Viewer IPC calls so a rejected handler can't leave the UI stuck; ACP early-failure no longer double-reports (a spawn error / early exit now clears the connect timeout); the `topProcs` buffer was raised so a large process table can't blank the CPU/RAM widget; inject overlays guard `document.body` for frameset / pre-body pages.
+- The **eyedropper reticle** no longer vanishes on dark sites — page CSS was overriding its fill; it's now forced white with a thicker stroke and a drop-shadow so it reads on any background.
+- **Tools reset on full page navigation** — a stale result panel from the previous page is now dismissed.
+- Storybook demo detection tolerates a Unix-only `storybook` bin (node_modules installed from WSL).
+
+### Removed
+- ~470 lines of dead code — two abandoned inject files (standalone popup, screenshot popup), unused functions/exports/imports, and redundant boilerplate.
+
 ## [1.0.4] - 2026-07-03
 
 Hardening release: four full audits (correctness, security, performance, maintainability) plus a new agent-safety gate.
@@ -65,7 +89,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.5
 [1.0.4]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.4
 [1.0.3]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.3
 [1.0.2]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.2
