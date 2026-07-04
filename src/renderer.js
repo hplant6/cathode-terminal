@@ -4195,6 +4195,22 @@ document.getElementById('btn-pick-a11y')?.addEventListener('click', () => {
   ipcRenderer.send(IPC.PICK_A11Y);
 });
 
+document.getElementById('btn-pick-animate')?.addEventListener('click', () => {
+  if (pickMode === 'animate') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
+  clearPickMode();
+  pickMode = 'animate';
+  applyPickCursor('animate');
+  document.getElementById('btn-pick-animate')?.classList.add('active');
+  ipcRenderer.send(IPC.PICK_ANIMATE);
+});
+// Animation panel's "New Selection" → re-arm the tool to pick a new element.
+document.getElementById('animation-panel-new')?.addEventListener('click', () => {
+  clearPickMode();
+  pickMode = 'animate';
+  applyPickCursor('animate');
+  ipcRenderer.send(IPC.PICK_ANIMATE);
+});
+
 function clearPickMode() {
   pickMode = null;
   applyPickCursor(null);
@@ -4845,6 +4861,36 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   ipcRenderer.on(IPC.RESIZE_PANEL_OPEN, (_, data) => open(data || {}));
   ipcRenderer.on(IPC.RESIZE_PANEL_DIMS, (_, d) => { if (!panel.hidden) setDims(d); });
+})();
+
+// ── Animation tool panel (Phase 1: element info + instructions → Send) ──
+(function initAnimationPanel() {
+  const panel     = document.getElementById('animation-panel');
+  if (!panel) return;
+  const subEl     = document.getElementById('animation-panel-sub');
+  const textarea  = document.getElementById('animation-textarea');
+  const cancelBtn = document.getElementById('animation-cancel');
+  const sendBtn   = document.getElementById('animation-send');
+
+  function open({ label } = {}) {
+    clearPickMode();
+    if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Describe the animation to build.';
+    textarea.value = '';
+    panel.hidden = false;
+  }
+  function close()  { panel.hidden = true; textarea.value = ''; }
+  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { instruction: textarea.value.trim() }); close(); }
+  function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
+
+  sendBtn?.addEventListener('click', send);
+  cancelBtn?.addEventListener('click', cancel);
+  textarea?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+  addPanelEscClose(panel, cancel, el => el === textarea);
+
+  ipcRenderer.on(IPC.ANIM_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── Extract tool panel (overtakes the chat column) ───────────────

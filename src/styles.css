@@ -2834,6 +2834,10 @@ html, body {
 /* Resize panel content */
 /* Resize body = a single always-open, full-height drawer (element name as title) */
 #resize-panel-body { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0; }
+
+/* Animation tool panel (Phase 1 — placeholder body until the controls land) */
+#animation-panel-body { flex: 1; min-height: 0; padding: 14px 16px; overflow-y: auto; }
+.anim-coming { color: var(--spec-structural); font-size: 12px; line-height: 1.6; }
 .rz-drawer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rz-drawer-head {
   display: flex; align-items: center; gap: 10px; height: 55px; padding: 0 12px; flex-shrink: 0;
@@ -4436,6 +4440,7 @@ button:active { background: var(--btn-active); }
 :root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 24 24, crosshair !important; }
 :root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 24 24, crosshair !important; }
 :root[data-pick="draw"]       { cursor: url('./icons/marker-cursor.svg') 2 16, crosshair !important; }
+:root[data-pick="animate"]    { cursor: url('./icons/animation-cursor.svg') 12 12, crosshair !important; }
 
 /* ════════════════════════════════════════════════════════════════
    ONBOARDING

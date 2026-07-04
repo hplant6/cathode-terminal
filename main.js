@@ -20,6 +20,7 @@ const { Z }                       = require('./src/ui-constants');
 const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
 const { getResizeScript }         = require('./src/resize-inject');
+const { getAnimationScript }      = require('./src/animation-inject');
 const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
@@ -3241,6 +3242,50 @@ ipcMain.on(IPC.RESIZE_PANEL_CANCEL, async () => {
   const p = pendingResize;
   pendingResize = null; stopResizePoll();
   if (p) await clearResize(p.view, true);   // revert the on-page resize
+  uiSend(IPC.PICK_CANCELLED);
+});
+
+// ── Animation tool (Phase 1: target an element → panel → compose request) ──
+let pendingAnim = null;
+async function clearAnim(view) {
+  const wc = (view || (pendingAnim && pendingAnim.view) || {}).webContents;
+  if (!wc || wc.isDestroyed()) return;
+  try { await wc.executeJavaScript('window.__cathodeAnim && window.__cathodeAnim.clear()'); } catch (_) {}
+}
+ipcMain.on(IPC.PICK_ANIMATE, async () => {
+  const view = getActivePickView();
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
+  try {
+    const sel = await view.webContents.executeJavaScript(getAnimationScript());
+    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled before selecting
+    pendingAnim = { view };
+    uiSend(IPC.ANIM_PANEL_OPEN, { label: sel.label, selector: sel.selector });
+  } catch (err) {
+    console.error('Animation error:', err);
+    uiSend(IPC.PICK_CANCELLED);
+  }
+});
+ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { instruction = '' } = {}) => {
+  const p = pendingAnim;
+  pendingAnim = null;
+  if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
+  let res = null;
+  try { res = await p.view.webContents.executeJavaScript('window.__cathodeAnim && window.__cathodeAnim.result()'); } catch (_) {}
+  await clearAnim(p.view);
+  uiSend(IPC.PICK_CANCELLED);
+  if (!res) return;
+  const instr = (instruction || '').trim();
+  const anUrl = activePageUrl();
+  const lines = ['───── Animation Request ─────', res.snippet, '', 'Selector: ' + res.selector];
+  const detail = (anUrl ? `From ${pageSource()} — ${anUrl}\n\n` : '') + lines.join('\n');
+  const body = (instr ? instr + '\n\n' : '')
+    + 'Add an animation to this element. (The animation controls — type, easing, timing, live preview — arrive in the next build; for now, describe the animation above.)';
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Animation request' });
+});
+ipcMain.on(IPC.ANIM_PANEL_CANCEL, async () => {
+  const p = pendingAnim;
+  pendingAnim = null;
+  if (p) await clearAnim(p.view);
   uiSend(IPC.PICK_CANCELLED);
 });
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 79.7 80">
+  <defs>
+    <style>.st0 { fill: none; stroke: #fff; stroke-miterlimit: 10; }</style>
+  </defs>
+  <g>
+    <g>
+      <line class="st0" x1="39.8" y1="8.7" x2="39.8" y2="29.5"/>
+      <line class="st0" x1="39.8" y1="50.5" x2="39.8" y2="71.3"/>
+    </g>
+    <g>
+      <line class="st0" x1="71.2" y1="40" x2="50.4" y2="40"/>
+      <line class="st0" x1="29.3" y1="40" x2="8.5" y2="40"/>
+    </g>
+  </g>
+  <path class="st0" d="M39.8,29.1c-6,0-10.9,4.9-10.9,10.9h0c0,6,4.9,10.9,10.9,10.9s10.9-4.9,10.9-10.9h0c0-6-4.9-10.9-10.9-10.9Z"/>
+</svg>
