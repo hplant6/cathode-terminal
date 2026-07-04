@@ -2038,6 +2038,28 @@ function wireModal(modal, { backdropClose = true, onClose } = {}) {
 // Replaces each native <select>'s visuals with a styleable widget (so the
 // OPEN list can be padded/spaced) while keeping the <select> for value/events.
 // Programmatic `sel.value = …` stays transparent via a value setter shim.
+// One shared pair of document listeners drives outside-click / Escape close for
+// EVERY custom <select>. Each enhanceSelect used to add its own two document
+// listeners that were never removed — a real leak, since the pick/extract panel
+// rebuilds its select fields on every render. Controls register here; detached
+// ones are pruned lazily on the next interaction.
+const _ctSelects = new Set();   // { wrap, close }
+let _ctSelectDocWired = false;
+function _wireCtSelectDoc() {
+  if (_ctSelectDocWired) return;
+  _ctSelectDocWired = true;
+  document.addEventListener('click', (e) => {
+    for (const c of _ctSelects) {
+      if (!c.wrap.isConnected) { _ctSelects.delete(c); continue; }
+      if (!c.wrap.contains(e.target)) c.close();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    for (const c of _ctSelects) { if (!c.wrap.isConnected) { _ctSelects.delete(c); continue; } c.close(); }
+  });
+}
+
 function enhanceSelect(sel) {
   if (sel._ctEnhanced) return;
   sel._ctEnhanced = true;
@@ -2107,8 +2129,8 @@ function enhanceSelect(sel) {
     e.stopPropagation();
     wrap.classList.contains('open') ? close() : open();
   });
-  document.addEventListener('click', e => { if (!wrap.contains(e.target)) close(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  _wireCtSelectDoc();
+  _ctSelects.add({ wrap, close });
 
   const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
   Object.defineProperty(sel, 'value', {
@@ -2328,6 +2350,14 @@ function acpTrim(s) {
     if (old.dataset.toolKey) s.toolCards.delete(old.dataset.toolKey);
     old.remove();
   }
+}
+
+// Pin a tool-output card to its bottom, coalesced to once per frame — the raw
+// `scrollTop = scrollHeight` write→read forced a layout on every streamed chunk.
+function scrollCardEnd(bodyEl) {
+  if (!bodyEl || bodyEl._scrollScheduled) return;
+  bodyEl._scrollScheduled = true;
+  requestAnimationFrame(() => { bodyEl._scrollScheduled = false; bodyEl.scrollTop = bodyEl.scrollHeight; });
 }
 
 function acpScrollEnd(s) {
@@ -2648,7 +2678,7 @@ function acpUpdateToolCard(s, update) {
   if (update.content?.type === 'text') {
     const text = stripAnsi(update.content.text);
     tc.bodyEl.appendChild(document.createTextNode(text));   // append, don't reassign (O(n²))
-    tc.bodyEl.scrollTop = tc.bodyEl.scrollHeight;
+    scrollCardEnd(tc.bodyEl);
   }
 }
 
@@ -2827,7 +2857,7 @@ ipcRenderer.on(IPC.ACP_TERM_OUTPUT, (_, { id, termId, output }) => {
     }
   }
   const tc = s.toolCards.get(termId);
-  if (tc) { tc.bodyEl.appendChild(document.createTextNode(stripped)); tc.bodyEl.scrollTop = tc.bodyEl.scrollHeight; }
+  if (tc) { tc.bodyEl.appendChild(document.createTextNode(stripped)); scrollCardEnd(tc.bodyEl); }
 });
 
 ipcRenderer.on(IPC.ACP_TERM_RELEASE, (_, { id, termId }) => {
@@ -3650,7 +3680,10 @@ function dodgeToolbar() {
 let _dodgeRaf = null;
 function scheduleDodge() { if (_dodgeRaf) return; _dodgeRaf = requestAnimationFrame(() => { _dodgeRaf = null; dodgeToolbar(); }); }
 window.addEventListener('resize', scheduleDodge);
-document.addEventListener('scroll', scheduleDodge, true);     // any scroll container
+// The dodged chrome only moves horizontally on window/left-panel resize — a
+// capture-phase document scroll listener fired dodgeToolbar (a read→write reflow)
+// on every frame of chat streaming for no benefit. Rely on resize + the observers
+// + the 400ms catch-all instead.
 ['left-panel', 'toolbar'].forEach(id => { const el = document.getElementById(id); if (el) new ResizeObserver(scheduleDodge).observe(el); });
 setInterval(scheduleDodge, 400);                              // catch-all for content-driven layout shifts
 scheduleDodge();
@@ -5372,7 +5405,8 @@ function growPanel(el, open) {
     }
   }
   async function pollProcs() {
-    if (view === 'all' || (panel && panel.style.display === 'none')) return;
+    // Skip while backgrounded — each poll spawns a heavy pwsh on Windows.
+    if (view === 'all' || document.hidden || (panel && panel.style.display === 'none')) return;
     const kind = view;   // 'ram' | 'cpu'
     let res = null;
     try { res = await ipcRenderer.invoke(IPC.TOP_PROCS, kind); } catch (_) {}
@@ -5402,8 +5436,9 @@ function growPanel(el, open) {
     prevIsAll = isAll;
 
     if (timer) { clearInterval(timer); timer = null; }
-    if (!isAll) { pollProcs(); timer = setInterval(pollProcs, 3000); }
+    if (!isAll) { pollProcs(); timer = setInterval(pollProcs, 4000); }
   }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollProcs(); });   // refresh on return
   function set(v) { view = v; localStorage.setItem(LS.sysperfView, v); apply(); }
   allBtn.addEventListener('click', () => set('all'));
   ramBtn.addEventListener('click', () => set('ram'));
@@ -5511,6 +5546,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
 
   const MAX = 800;
   let entries = [];
+  let errCount = 0;   // running count so updateCount isn't O(n) per entry on a chatty page
   let filter = 'all';
   const LC = { error: '#ef4444', warn: '#f59e0b', info: '#4a9eff', debug: '#777', log: '#bbb' };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -5542,8 +5578,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       + '<button class="c-send" title="Send to chat">→</button></div>';
   }
   function updateCount() {
-    const errs = entries.filter(isErr).length;
-    countEl.textContent = entries.length + (errs ? ' · ' + errs + ' err' : '');
+    countEl.textContent = entries.length + (errCount ? ' · ' + errCount + ' err' : '');
   }
   function render() {
     listEl.innerHTML = entries.filter(matches).map(rowHtml).join('');
@@ -5553,7 +5588,8 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   }
   function add(e) {
     entries.push(e);
-    if (entries.length > MAX) entries.shift();
+    if (isErr(e)) errCount++;
+    if (entries.length > MAX) { const rm = entries.shift(); if (isErr(rm)) errCount--; }
     if (consolePanel && consolePanel.style.display !== 'none') {
       if (matches(e)) {
         const atBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 40;
@@ -5585,7 +5621,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   }
 
   ipcRenderer.on(IPC.CONSOLE_ENTRY, (_, e) => add(e));
-  ipcRenderer.invoke(IPC.CONSOLE_GET).then(list => { entries = (list || []).slice(-MAX); render(); }).catch(() => {});
+  ipcRenderer.invoke(IPC.CONSOLE_GET).then(list => { entries = (list || []).slice(-MAX); errCount = entries.filter(isErr).length; render(); }).catch(() => {});
 
   document.querySelectorAll('.console-filter').forEach(b => {
     b.addEventListener('click', () => {
@@ -5595,7 +5631,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     });
   });
   document.getElementById('console-clear').addEventListener('click', () => {
-    entries = []; ipcRenderer.send(IPC.CONSOLE_CLEAR); render();
+    entries = []; errCount = 0; ipcRenderer.send(IPC.CONSOLE_CLEAR); render();
   });
   document.getElementById('console-send-errors').addEventListener('click', () => {
     const errs = entries.filter(isErr);

@@ -341,7 +341,16 @@ ipcMain.on(IPC.SYSPERF_ACTIVE, (_, on) => { on ? startSysPerf() : stopSysPerf();
 // renderer polls only while a process-breakdown view is open).
 //   by='cpu' → instantaneous % from perf counters, normalized by logical cores.
 //   else     → working-set bytes via Get-Process.
-ipcMain.handle(IPC.TOP_PROCS, (_, by) => platform.topProcs(by));
+// Dedupe concurrent top-procs queries per kind — each spawns a heavy pwsh on
+// Windows, so overlapping polls (view switches + the interval) must not stack.
+const _topProcsInflight = new Map();
+ipcMain.handle(IPC.TOP_PROCS, (_, by) => {
+  const key = by === 'cpu' ? 'cpu' : 'ram';
+  if (_topProcsInflight.has(key)) return _topProcsInflight.get(key);
+  const p = Promise.resolve().then(() => platform.topProcs(by)).finally(() => _topProcsInflight.delete(key));
+  _topProcsInflight.set(key, p);
+  return p;
+});
 
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
@@ -1285,7 +1294,7 @@ function winCwd() { return platform.agentCwd(sessionCwd(), homeDir()); }
 
 // ── PTY sessions ──────────────────────────────────────────────────
 function safeKill(proc) { try { proc && proc.kill(); } catch (_) {} }
-function killPty(id)    { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; ptyOutBuf.delete(id); }
+function killPty(id)    { safeKill(ptyProcesses[id]); delete ptyProcesses[id]; delete ptyCommands[id]; ptyOutBuf.delete(id); }
 
 // Coalesce pty output: node-pty emits one chunk per read, so heavy output (large
 // file dumps, verbose builds) otherwise floods the IPC boundary with thousands of
@@ -1346,6 +1355,7 @@ async function spawnPty(id, command = 'claude') {
       if (pending) { uiSend(IPC.PTY_OUTPUT, { id, data: pending }); ptyOutBuf.delete(id); }
       uiSend(IPC.PTY_OUTPUT, { id, data: '\r\n\x1b[33m[Session ended]\x1b[0m\r\n' });
       delete ptyProcesses[id];
+      delete ptyCommands[id];   // was leaking one command string per terminal ever spawned
     });
     ptyProcesses[id] = proc;
   } catch (err) {
@@ -1483,7 +1493,12 @@ function acpAdapterInstalledVersion() {
 }
 
 const acpSessions      = new Map(); // id → { proc, conn, sessionId }
-const acpTermResolvers = new Map(); // termId  → resolve
+const acpTermResolvers = new Map(); // termId  → { resolve, id } (id = owning session)
+// Resolve + drop any terminal-exit waiters for a dying session — they were only
+// deleted on release/kill, so an orphaned wait leaked a resolver closure forever.
+function cleanupSessionTerminals(id) {
+  for (const [termId, r] of acpTermResolvers) if (r.id === id) { acpTermResolvers.delete(termId); try { r.resolve({ exitCode: -1 }); } catch (_) {} }
+}
 let acpTermSeq = 0;                 // unique terminal ids (Date.now() collides within a ms)
 const acpPermResolvers = new Map(); // reqId   → { resolve, id } for pending tool-permission prompts
 let acpPermSeq = 0;
@@ -1674,16 +1689,16 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       send('acp-term-output', { id, termId: params.terminalId, output: params.output });
     },
     async waitForTerminalExit(params) {
-      return new Promise(resolve => acpTermResolvers.set(params.terminalId, resolve));
+      return new Promise(resolve => acpTermResolvers.set(params.terminalId, { resolve, id }));
     },
     async releaseTerminal(params) {
       send('acp-term-release', { id, termId: params.terminalId });
       const r = acpTermResolvers.get(params.terminalId);
-      if (r) { r({ exitCode: 0 }); acpTermResolvers.delete(params.terminalId); }
+      if (r) { r.resolve({ exitCode: 0 }); acpTermResolvers.delete(params.terminalId); }
     },
     async killTerminal(params) {
       const r = acpTermResolvers.get(params.terminalId);
-      if (r) { r({ exitCode: -1 }); acpTermResolvers.delete(params.terminalId); }
+      if (r) { r.resolve({ exitCode: -1 }); acpTermResolvers.delete(params.terminalId); }
     },
     async readTextFile(params) {
       try { return { content: fs.readFileSync(params.path, 'utf8') }; }
@@ -1753,6 +1768,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       if (acpSessions.get(id) !== entry) return;
       acpSessions.delete(id);
       denyPendingPerms(id);
+      cleanupSessionTerminals(id);
       send('acp-closed', { id });
     });
   } catch (err) {
@@ -1801,6 +1817,7 @@ ipcMain.on(IPC.ACP_KILL, (_, { id } = {}) => {
   safeKill(s.proc);
   acpSessions.delete(id);
   denyPendingPerms(id);
+  cleanupSessionTerminals(id);
 });
 
 // ── IPC: usage (parsed from Claude local transcripts) ─────────────
