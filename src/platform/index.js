@@ -12,9 +12,17 @@ const IS_WIN   = PLATFORM === 'win32';
 const IS_MAC   = PLATFORM === 'darwin';
 const IS_LINUX = !IS_WIN && !IS_MAC;
 
-// The login shell used to run agent commands on POSIX. On Windows this is unused
-// (commands go through wsl.exe).
-const LOGIN_SHELL = process.env.SHELL || '/bin/bash';
+// The login shell used to run agent commands on POSIX. Prefer $SHELL, but GUI
+// launches (Finder/Dock on macOS) frequently don't export it — fall back to the
+// account's real shell from the passwd / Directory-Services database (os.userInfo)
+// so a zsh user isn't silently handed /bin/bash, which sources the wrong profile
+// and misses Homebrew/nvm/~/.local/bin PATH entries. Unused on Windows (wsl.exe).
+function resolveLoginShell() {
+  if (process.env.SHELL) return process.env.SHELL;
+  try { const s = require('os').userInfo().shell; if (s) return s; } catch (_) {}
+  return '/bin/bash';
+}
+const LOGIN_SHELL = IS_WIN ? '/bin/bash' : resolveLoginShell();
 
 function homeDir() { return process.env.USERPROFILE || process.env.HOME || process.cwd(); }
 
@@ -148,11 +156,19 @@ function resolveAgentEnv(bin) {
   const cache = env => { _agentEnvCache.set(bin, env); return env; };
   if (!IS_WIN) {
     return new Promise(res => {
+      let done = false;
+      const finish = v => { if (!done) { done = true; res(cache(v)); } };
       try {
-        const p = spawn('sh', ['-c', `command -v ${bin} >/dev/null 2>&1`], { stdio: 'ignore' });
-        p.on('close', c => res(cache(c === 0 ? 'native' : null)));
-        p.on('error', () => res(cache(null)));
-      } catch (_) { res(cache(null)); }
+        // Probe through the SAME login shell the agent is actually run with
+        // (nixFileArgs maps ['bash','-lic',cmd] → LOGIN_SHELL -lic), so PATH set
+        // in the login/interactive profile (Homebrew, nvm, ~/.local/bin) is seen.
+        // A bare `sh -c` inherits the sparse GUI-launch PATH and would report an
+        // installed agent as missing. The timeout guards a profile that blocks.
+        const p = spawn(LOGIN_SHELL, ['-lic', `command -v ${bin} >/dev/null 2>&1`], { stdio: 'ignore' });
+        p.on('close', c => finish(c === 0 ? 'native' : null));
+        p.on('error', () => finish(null));
+        setTimeout(() => { try { p.kill(); } catch (_) {} finish(null); }, 6000);
+      } catch (_) { finish(null); }
     });
   }
   return (async () => {
