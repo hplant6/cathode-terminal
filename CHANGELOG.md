@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-04
+
+Feature release: the Animation tool.
+
+### Added
+- **Animation tool** — target any element on a browsed page and build an animation request for the agent, with a **live preview** on the real element (Web Animations API):
+  - **31 animation types** grouped as Entrance / Exit / Emphasis / Property (Fade, Slide, Zoom, Rotate, Flip, Bounce, Blur, Pulse, Shake, Wobble, Jello, Tada, Color, Size, Skew, and more).
+  - **Easing** presets plus a **draggable cubic-bézier curve editor**; duration, delay, and contextual direction / distance / amount / target-color; repeat; and trigger (on load / scroll into view / hover / click).
+  - **Loop the preview** (design-system checkbox) to tune an animation while it plays, without changing the Repeat value sent to chat.
+  - **Send** drops a summary, the selector, and ready-to-adapt **CSS `@keyframes` and JS (Web Animations API)** starter code into the composer.
+  - Styled to match the element (lasso) panel, with the app's iro color picker for the target color.
+
+### Fixed
+- Custom `<select>` dropdowns: options render readable on the menu surface, `<optgroup>` labels show as group headers, the menu caps to the viewport, and long lists scroll instead of clipping or squishing rows.
+
 ## [1.0.5] - 2026-07-04
 
 Reliability & polish release: a full reliability audit, a clear-input control, a new app icon, dependency hardening, and a dead-code sweep.
@@ -89,7 +104,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.6
 [1.0.5]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.5
 [1.0.4]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.4
 [1.0.3]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.3
