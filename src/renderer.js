@@ -173,6 +173,7 @@ const THEME_GROUPS = [
 
 // Saved custom themes: [{ name, colors }]. draftColors/draftName = working copy while editing.
 let savedThemes = safeParse(localStorage.getItem(LS.themesSaved), []);
+if (!Array.isArray(savedThemes)) savedThemes = [];   // safeParse guards throws, not shape — corrupt non-array JSON must not brick boot
 (() => {   // one-time migration of the legacy single custom theme → savedThemes
   try {
     const old = JSON.parse(localStorage.getItem(LS.themeCustom) || 'null');
@@ -504,7 +505,7 @@ function createSession(name, command, acp, transient) {
   ro.observe(termEl);
 
   ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
-  const sess = { name: sName, command: cmd, term, fitAddon, el, termEl, ro, transient: transient === true };
+  const sess = { id, name: sName, command: cmd, term, fitAddon, el, termEl, ro, transient: transient === true };
   sessions.set(id, sess);
   saveOpenSessions();
   switchSession(id);
@@ -575,7 +576,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   eq.start();   // the session opens in "Connecting…" — animate until ready/error
 
   sessions.set(id, {
-    name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
+    id, name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
     toolCards: new Map(),
@@ -3431,8 +3432,8 @@ let tabsConfig = (() => {
           changed = true;
         }
         if (changed) localStorage.setItem(LS.tabs, JSON.stringify(cfg));
+        return cfg;   // only a validated array — non-array JSON falls through to defaults
       }
-      return cfg;
     }
   } catch (_) {}
   return DEFAULT_TABS_CONFIG.map(t => ({ ...t }));
@@ -5776,6 +5777,7 @@ const uiTextarea  = document.getElementById('ui-textarea');
 const uiCharCount = document.getElementById('ui-char-count');
 let msgHistory = [];
 let historyIdx  = 0;
+let historyDraft = '';   // unsent composer text stashed when arrowing into history
 
 
 
@@ -6043,14 +6045,17 @@ function buildAuditMenu() {
       let url     = addUrlIn.value.trim();
       if (!label || !url) return;
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      if (draft.some(t => t.id === 'url:' + url)) return;   // same URL twice → duplicate tab ids
       draft.push({ id: 'url:' + url, type: 'url', label, url });
       addLabelIn.value = '';
       addUrlIn.value   = '';
     } else {
       const base = BUILTIN_DEFAULTS[type];
-      const count = draft.filter(t => t.type === type).length;
-      const label = count === 0 ? base.label : `${base.label} ${toRoman(count + 1)}`;
-      const id    = count === 0 ? base.id : `${base.id}-${count + 1}`;
+      // Count alone repeats after delete + re-add (console-3 twice) — bump past collisions.
+      let n = draft.filter(t => t.type === type).length + 1;
+      while (draft.some(t => t.id === (n === 1 ? base.id : `${base.id}-${n}`))) n++;
+      const label = n === 1 ? base.label : `${base.label} ${toRoman(n)}`;
+      const id    = n === 1 ? base.id : `${base.id}-${n}`;
       draft.push({ id, type, label });
     }
     renderList();
@@ -6689,15 +6694,18 @@ uiTextarea.addEventListener('keydown', e => {
   // History: arrow up at very start, arrow down at very end
   if (e.key === 'ArrowUp' && uiTextarea.selectionStart === 0 && uiTextarea.selectionEnd === 0 && msgHistory.length) {
     e.preventDefault();
+    // Entering history from a fresh composer — stash the draft so ArrowDown can restore it.
+    if (historyIdx === msgHistory.length) historyDraft = uiTextarea.value;
     historyIdx = Math.max(0, historyIdx - 1);
     uiTextarea.value = msgHistory[historyIdx] || '';
     autoResize(uiTextarea);
     return;
   }
-  if (e.key === 'ArrowDown' && uiTextarea.selectionEnd === uiTextarea.value.length) {
+  // Only while actually browsing history — a plain ArrowDown in a fresh draft must not touch it.
+  if (e.key === 'ArrowDown' && historyIdx < msgHistory.length && uiTextarea.selectionEnd === uiTextarea.value.length) {
     e.preventDefault();
     historyIdx = Math.min(msgHistory.length, historyIdx + 1);
-    uiTextarea.value = historyIdx < msgHistory.length ? msgHistory[historyIdx] : '';
+    uiTextarea.value = historyIdx < msgHistory.length ? msgHistory[historyIdx] : historyDraft;
     autoResize(uiTextarea);
     return;
   }
@@ -6719,6 +6727,7 @@ function sendUiMessage() {
     msgHistory.push(raw);
     if (msgHistory.length > MSG_HISTORY_MAX) msgHistory.shift();
     historyIdx = msgHistory.length;
+    historyDraft = '';
   }
 
   // Compose: Figma action instructions (with their URL) first, then the user's

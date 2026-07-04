@@ -557,7 +557,9 @@ function cathodeCombinedPage(OPTS) {
     if (curY + 520 > window.innerHeight - 10) curY = Math.max(10, curY - 520);
 
     function esc(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      // Must escape `"` too — this feeds attribute values (data-orig="…"), and
+      // computed CSS like font-family: "Segoe UI" would truncate the attribute.
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function hideColorPicker() {

@@ -404,7 +404,7 @@ function createWindow() {
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();
     saveLastURL(url);
-    mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, url);
+    uiSend(IPC.BROWSER_URL_CHANGED, url);   // uiSend guards a destroyed window
     // Reconnect embedded DevTools after full navigation (WebSocket target URL may change)
     if (devToolsView) {
       browserView.webContents.once('did-finish-load', () => reconnectDevTools());
@@ -412,10 +412,10 @@ function createWindow() {
   });
   browserView.webContents.on('did-navigate-in-page', (_, url) => {
     saveLastURL(url);
-    mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, url);
+    uiSend(IPC.BROWSER_URL_CHANGED, url);
   });
   browserView.webContents.on('page-title-updated', (_, title) => {
-    mainWindow.webContents.send(IPC.TAB_TITLE_UPDATED, title);
+    uiSend(IPC.TAB_TITLE_UPDATED, title);
   });
 
   // Intercept window.open() — deny OS window, open inside app as WebContentsViews
@@ -490,6 +490,7 @@ let popupBarView     = null;
 let popupContentView = null;
 
 function getPopupBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) return { x: 0, y: 0, width: 0, height: 0 };
   const [winW, winH] = mainWindow.getContentSize();
   // Subtract the DevTools panel like every other layout fn — previously this
   // ignored it, so popups mis-centered while DevTools was open.
@@ -641,7 +642,7 @@ function destroyCustomView(url) {
 }
 
 function repositionRightPanelView() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   const offscreen = OFFSCREEN_BOUNDS;
   if (modalOpen || singlePane === 'chat') {   // chat fills the main area → hide every right-panel view
     if (figmaView)    figmaView.setBounds(offscreen);
@@ -742,6 +743,8 @@ function animateDevTools(open) {
   const startTime = Date.now();
   const DURATION  = 220;
   devToolsTimer = setInterval(() => {
+    // Window can close mid-animation — a tick against a destroyed window throws.
+    if (!mainWindow || mainWindow.isDestroyed()) { clearInterval(devToolsTimer); devToolsTimer = null; return; }
     const t    = Math.min((Date.now() - startTime) / DURATION, 1);
     const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
     devToolsWidth = Math.round(startW + (targetW - startW) * ease);
@@ -781,6 +784,13 @@ async function openDevToolsPanel(inspectX, inspectY) {
     devToolsView.webContents.once('did-fail-load', () => {
       if (devToolsView) { mainWindow.contentView.removeChildView(devToolsView); freeView(devToolsView); devToolsView = null; }
       devToolsOpen = false;
+      // Give the reserved width back — otherwise a failed load leaves a dead
+      // 420px strip and the toggle state desyncs.
+      devToolsWidth = 0;
+      devToolsOpening = false;
+      repositionAll();
+      broadcastLayout();
+      uiSend('devtools-closed');
     });
     devToolsView.webContents.once('did-finish-load', () => {
       // Hide the device toolbar toggle button and close it if currently active
@@ -1367,7 +1377,9 @@ ipcMain.on(IPC.ONBOARDING_RUN, (_, { id, command } = {}) => {
     proc.stderr.on('data', d => send('onboarding-output', { id, data: d.toString() }));
     proc.on('close', code => {
       if (onboardingProc === proc) onboardingProc = null;
-      send('onboarding-done', { id, code: code ?? 0 });
+      // A killed proc (cancel / replaced by the next step) closes with code null —
+      // that must read as failure, not `?? 0` success.
+      send('onboarding-done', { id, code: code ?? 1 });
     });
     proc.on('error', e => {
       if (onboardingProc === proc) onboardingProc = null;
