@@ -26,7 +26,6 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
     "@jaames/iro": "^5.5.2",
-    "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "electron-updater": "^6.8.9",
@@ -37,7 +36,7 @@
   },
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
-    "electron": "^41.7.1",
+    "electron": "^41.9.2",
     "electron-builder": "^26.15.3"
   },
   "build": {

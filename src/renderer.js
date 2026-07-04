@@ -10,18 +10,10 @@ const { gsap }        = require('gsap');
 // existing picker code.
 try { window.iro = require('@jaames/iro'); } catch (_) {}
 
-// Canvas renderer: xterm 5's default DOM renderer mutates dozens of row
-// elements per frame during heavy output. Canvas keeps that off the DOM
-// entirely. Optional — falls back to the DOM renderer if it can't load.
-let CanvasAddon = null;
-// DISABLED: the deprecated canvas renderer can silently fail its text layer
-// (cursor draws, text never does — blank terminals). xterm's DOM renderer is
-// plenty fast for these sessions. Re-enable deliberately if ever needed.
-// try { ({ CanvasAddon } = require('@xterm/addon-canvas')); } catch (_) {}
-function attachCanvasRenderer(term) {
-  if (!CanvasAddon) return;
-  try { term.loadAddon(new CanvasAddon()); } catch (_) {}
-}
+// Terminals use xterm's DOM renderer. The deprecated canvas renderer was
+// removed: it could silently fail its text layer (cursor draws, text never
+// does — blank terminals) and the DOM renderer is plenty fast for these
+// sessions.
 const { trashIcon, eyeIcon } = require('./icons');
 
 // macOS uses native traffic lights instead of the custom window controls — flag for CSS.
@@ -500,7 +492,6 @@ function createSession(name, command, acp, transient) {
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.open(termEl);
-  attachCanvasRenderer(term);
   term.onData(data => ipcRenderer.send(IPC.PTY_INPUT, { id, data }));
 
   const ro = new ResizeObserver(() => {
@@ -545,7 +536,6 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
   const acpFit  = new FitAddon();
   acpTerm.loadAddon(acpFit);
   acpTerm.open(termEl);
-  attachCanvasRenderer(acpTerm);
   acpTerm.onData(data => ipcRenderer.send(IPC.PTY_INPUT, { id, data }));
 
   const acpRo = new ResizeObserver(() => {
