@@ -1586,6 +1586,7 @@ const AVAILABLE_MODELS = [
 const MODEL_CATALOG = {
   claude: { flag: '--model', models: [
     { id: '',       label: 'Default' },
+    { id: 'fable',  label: 'Fable' },
     { id: 'opus',   label: 'Opus' },
     { id: 'sonnet', label: 'Sonnet' },
     { id: 'haiku',  label: 'Haiku' },
