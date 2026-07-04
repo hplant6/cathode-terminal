@@ -42,13 +42,13 @@ function getResizeScript() {
     var ov = document.createElement('div');
     ov.id = '__cr_ov';
     ov.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${RESIZE_CURSOR}';
-    document.body.appendChild(ov);
+    (document.body || document.documentElement).appendChild(ov);
 
     var hv = document.createElement('div');
     hv.id = '__cr_hv';
     hv.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_MID};box-sizing:border-box;display:none;' +
       'transition:left 40ms,top 40ms,width 40ms,height 40ms;${MARCH_OUTLINE_CSS}';
-    document.body.appendChild(hv);
+    (document.body || document.documentElement).appendChild(hv);
 
     var lastHover = null;
     ov.addEventListener('mousemove', function(e) {
@@ -138,7 +138,7 @@ function getResizeScript() {
       hr = document.createElement('div');
       hr.id = '__cr_hr';
       hr.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:${Z.OVERLAY_TOP};overflow:visible;';
-      document.body.appendChild(hr);
+      (document.body || document.documentElement).appendChild(hr);
 
       box = document.createElement('div');
       box.id = '__cr_box';

@@ -3336,7 +3336,6 @@ document.getElementById('claude-md-save')?.addEventListener('click', async () =>
   if (ok) claudeMdModalCtl.close();
 });
 
-ipcRenderer.on(IPC.EDIT_AGENT_MEMORY, (_, agent) => openMemoryModal(agent || 'claude'));
 
 // Session-tab kebab → styled HTML dropdown (replaces the native menu; the tabs
 // live in the left panel, so an HTML overlay isn't fighting any native view).
@@ -4253,7 +4252,6 @@ function clearPickMode() {
 })();
 
 ipcRenderer.on(IPC.PICK_CANCELLED, () => clearPickMode());
-ipcRenderer.on(IPC.PICK_COMPLETE,  () => clearPickMode());
 
 // Full page navigation → cancel any armed pick and dismiss stale result panels.
 ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
@@ -5093,8 +5091,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
 // ── Accessibility checker panel (overtakes the chat column) ──────
 // Page markers stay live; this panel renders the results (grouped, checkbox to
-// include, expandable drawers). Contrast issues get live color editors that
-// edit the page element (a11y-set-color) and recompute the WCAG ratio locally.
+// include, expandable drawers). Each contrast issue shows its WCAG ratio and a
+// suggested color fix, sent to the agent with the audit.
 (function initA11yPanel() {
   const panel     = document.getElementById('a11y-panel');
   if (!panel) return;

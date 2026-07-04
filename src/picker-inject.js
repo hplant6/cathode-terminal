@@ -43,7 +43,7 @@ function getPickerScript(mode) {
         sel.id = '__cathode_selection__';
         sel.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:${Z.SELECTION};overflow:visible;';
         sel.appendChild(shape.cloneNode(true));
-        document.body.appendChild(sel);
+        (document.body || document.documentElement).appendChild(sel);
       }
       overlay.remove();
       hl.remove();
@@ -62,7 +62,7 @@ function getPickerScript(mode) {
       'box-sizing:border-box', 'transition:left 40ms,top 40ms,width 40ms,height 40ms',
       '${MARCH_OUTLINE_CSS}',
     ].join(';');
-    document.body.appendChild(hl);
+    (document.body || document.documentElement).appendChild(hl);
 
     // Label that follows the highlight
     const label = document.createElement('div');
@@ -71,13 +71,13 @@ function getPickerScript(mode) {
       'background:${ACCENT}', 'color:#fff', 'font:bold 11px/18px monospace',
       'padding:1px 6px', 'border-radius:2px', 'white-space:nowrap',
     ].join(';');
-    document.body.appendChild(label);
+    (document.body || document.documentElement).appendChild(label);
 
     // Full-page capture overlay
     const overlay = document.createElement('div');
     overlay.id = '__cathode_picker__';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:${Z.OVERLAY};cursor:${cursorCss}';
-    document.body.appendChild(overlay);
+    (document.body || document.documentElement).appendChild(overlay);
 
     // SVG canvas for drawing shapes
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

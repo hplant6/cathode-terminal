@@ -257,7 +257,7 @@ function topProcsMac(by) {
   const cpu = by === 'cpu';
   const field = cpu ? '%cpu' : 'rss';
   return new Promise(resolve => {
-    execFile('ps', ['-axo', `${field}=,comm=`], { encoding: 'utf8', maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
+    execFile('ps', ['-axo', `${field}=,comm=`], { encoding: 'utf8', maxBuffer: 8 << 20, timeout: 8000 }, (err, stdout) => {
       if (err || !stdout) { resolve({ ok: false }); return; }
       const sums = new Map();
       for (const line of stdout.split('\n')) {
@@ -280,7 +280,7 @@ function topProcsLinux(by) {
   const cpu = by === 'cpu';
   const field = cpu ? '%cpu' : 'rss';
   return new Promise(resolve => {
-    execFile('ps', ['-eo', `${field}=,comm=`], { encoding: 'utf8', maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
+    execFile('ps', ['-eo', `${field}=,comm=`], { encoding: 'utf8', maxBuffer: 8 << 20, timeout: 8000 }, (err, stdout) => {
       if (err || !stdout) { resolve({ ok: false }); return; }
       const sums = new Map();
       for (const line of stdout.split('\n')) {
@@ -314,7 +314,7 @@ function topProcs(by) {
       "Sort-Object v -Descending | Select-Object -First 6 | ConvertTo-Json -Compress";
   return new Promise((resolve) => {
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd],
-      { windowsHide: true, maxBuffer: 1 << 20, timeout: 8000 }, (err, stdout) => {
+      { windowsHide: true, maxBuffer: 8 << 20, timeout: 8000 }, (err, stdout) => {
         if (err || !stdout) { resolve({ ok: false }); return; }
         try {
           let data = JSON.parse(stdout.trim());

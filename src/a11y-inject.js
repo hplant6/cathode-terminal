@@ -119,7 +119,7 @@ ${SHARED.selectorHelper('__a11y')}
     var layer = document.createElement('div');
     layer.id = '__a11y_layer__';
     layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:${Z.OVERLAY_MID};';
-    document.body.appendChild(layer);
+    (document.body || document.documentElement).appendChild(layer);
 
     issues.forEach(function(iss, i){
       var b = document.createElement('div');

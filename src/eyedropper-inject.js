@@ -54,7 +54,7 @@ function getEyedropperScript(snapshotDataUrl) {
     var ov = document.createElement('div');
     ov.id = '__ed_ov';
     ov.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${ED_CURSOR};';
-    document.body.appendChild(ov);
+    (document.body || document.documentElement).appendChild(ov);
     ov.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive: false });
 
     // ── Loupe ─────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ function getEyedropperScript(snapshotDataUrl) {
     var lval = document.createElement('span');
     lval.style.cssText = "font-family:Consolas,'Courier New',monospace;font-size:14px;font-weight:700;color:#fff;letter-spacing:.06em;";
     loupe.appendChild(lval);
-    document.body.appendChild(loupe);
+    (document.body || document.documentElement).appendChild(loupe);
     var lctx = lcanvas.getContext('2d');
 
     // ── Snapshot ──────────────────────────────────────────────────────

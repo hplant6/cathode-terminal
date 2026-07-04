@@ -22,14 +22,14 @@ function getDrawScript() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas.style.cssText = 'position:fixed;top:0;left:0;z-index:${Z.OVERLAY_MID};pointer-events:none;';
-    document.body.appendChild(canvas);
+    (document.body || document.documentElement).appendChild(canvas);
     var ctx = canvas.getContext('2d');
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     var overlay = document.createElement('div');
     overlay.id = '__cathode_draw_overlay__';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:${Z.OVERLAY_BASE};cursor:${MARKER_CURSOR}';
-    document.body.appendChild(overlay);
+    (document.body || document.documentElement).appendChild(overlay);
 
     function drawDot(x, y) { ctx.beginPath(); ctx.arc(x, y, lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); }
     function onDown(e) { drawing = true; lastX = e.clientX; lastY = e.clientY; drawDot(lastX, lastY); }

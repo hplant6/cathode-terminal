@@ -1000,7 +1000,14 @@ function stopAllStorybook() {
 
 // Resolve the working dir (empty → bundled demo) + detect an installed Storybook.
 function sbResolveDir(dir) { return (dir && fs.existsSync(dir)) ? dir : SB_DEMO_DIR; }
-function sbBin(dir) { return path.join(dir, 'node_modules', '.bin', 'storybook' + (process.platform === 'win32' ? '.cmd' : '')); }
+function sbBin(dir) {
+  // Prefer the Windows launcher (.cmd), but tolerate a Unix-only bin (e.g. a
+  // storybook-demo whose node_modules were installed from WSL, so only the
+  // extensionless script exists) so detection/spawn resolve to whichever is there.
+  const base = path.join(dir, 'node_modules', '.bin', 'storybook');
+  if (process.platform === 'win32') return fs.existsSync(base + '.cmd') ? base + '.cmd' : base;
+  return base;
+}
 function sbHasStorybook(dir) { return fs.existsSync(path.join(dir, '.storybook')) && fs.existsSync(sbBin(dir)); }
 
 // App-owned preview styling — written into the project's OWN .storybook/preview-head.html,
@@ -1657,16 +1664,26 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
 
   let connected = false;
   let errorSent = false;   // an error path already told the renderer — don't double-report
+  // Report an early failure once, and stop the connect-timeout from re-reporting
+  // (previously a spawn error / early exit still left the 120s connectTimer armed,
+  // so it fired a second ACP_ERROR and killed an already-dead proc). connectTimer
+  // is declared below; these handlers only fire asynchronously, so it's assigned.
+  const failEarly = message => {
+    if (connected || errorSent) return;
+    errorSent = true;
+    clearTimeout(connectTimer);
+    uiSend(IPC.ACP_ERROR, { id, message });
+  };
   proc.on('exit', (code, signal) => {
     if (connected || errorSent) return; // normal exit after use — already handled via conn.closed
     const detail = stderrBuf.trim().split('\n').slice(-3).join(' | ') || `exit ${code ?? signal}`;
     console.error('[acp] early exit:', detail);
-    uiSend(IPC.ACP_ERROR, { id, message: `Adapter exited before connecting: ${detail}` });
+    failEarly(`Adapter exited before connecting: ${detail}`);
   });
 
   proc.on('error', err => {
     console.error('[acp] proc error:', err);
-    uiSend(IPC.ACP_ERROR, { id, message: err.message });
+    failEarly(err.message);
   });
 
   const send = uiSend;
@@ -3311,9 +3328,6 @@ ipcMain.on(IPC.PICK_A11Y, async () => {
     console.error('A11y check error:', err);
     uiSend(IPC.PICK_CANCELLED);
   }
-});
-ipcMain.on(IPC.A11Y_SET_COLOR, (_, { idx, which, hex } = {}) => {
-  a11yExec(`window.__cathodeA11y && window.__cathodeA11y.setColor(${Number(idx)}, ${JSON.stringify(String(which))}, ${JSON.stringify(String(hex))})`);
 });
 ipcMain.on(IPC.A11Y_FLASH, (_, { idx } = {}) => {
   a11yExec(`window.__cathodeA11y && window.__cathodeA11y.flash(${Number(idx)})`);
