@@ -118,7 +118,7 @@ function cathodeCombinedPage(OPTS) {
     items = [];
     for (const _el of document.querySelectorAll('*')) {
       if (items.length >= 24) break;
-      if (_el.id && _el.id.startsWith('__cathode')) continue;
+      if (_el.id && /^__(cathode|cr|ed|a11y)/.test(_el.id)) continue;   // skip ALL our tool overlays, not just __cathode (resize/eyedropper/a11y use other prefixes)
       const _r = _el.getBoundingClientRect();
       if (_r.width < 2 || _r.height < 2) continue;
       if (_r.width > window.innerWidth * 0.95 && _r.height > window.innerHeight * 0.95) continue;

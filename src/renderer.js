@@ -37,7 +37,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') _modalCloser
 // quotes too, so it is safe in attribute values). The ONLY escaping helper —
 // don't add per-module copies.
 function escHtml(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── localStorage keys ─────────────────────────────────────────────
@@ -60,6 +60,10 @@ const LS = {
   sysperfView:  'cathode-sysperf-view',    // perf graph view: bars | procs
   themeCustom:  'cathode-theme-custom',     // legacy single custom theme (migrated → themesSaved)
   themesSaved:  'cathode-themes-saved',     // array of saved custom themes [{name,colors}]
+  notif:          'cathode-notif',                  // notification sounds on/off
+  hermesSetup:    'cathode-hermes-setup-dismissed', // Hermes setup card dismissed
+  profilesAcpV2:  'cathode-profiles-acpv2',         // one-time profile→ACP migration flag
+  codeTabRetired: 'cathode-code-tab-retired',       // one-time code-tab retirement flag
 };
 
 // ── Theme engine ──────────────────────────────────────────────────
@@ -512,7 +516,7 @@ function createSession(name, command, acp, transient) {
   switchSession(id);
   // Hermes' TUI opens but can't chat until a model is connected — surface the
   // one-time setup card (dismiss hides it for good).
-  if (/^\s*hermes(\s|$)/.test(cmd) && !localStorage.getItem('cathode-hermes-setup-dismissed')) showHermesSetup(sess);
+  if (/^\s*hermes(\s|$)/.test(cmd) && !localStorage.getItem(LS.hermesSetup)) showHermesSetup(sess);
   return id;
 }
 
@@ -1561,7 +1565,7 @@ function showHermesSetup(s) {
   });
   card.querySelector('.hermes-setup-close').addEventListener('click', () => {
     card.remove(); s._setupCard = null;
-    localStorage.setItem('cathode-hermes-setup-dismissed', '1');
+    localStorage.setItem(LS.hermesSetup, '1');
   });
   s.el.appendChild(card);
   s._setupCard = card;
@@ -1660,12 +1664,12 @@ let sessionProfiles = (() => {
         : { ...p, acp: p.acp === true });
       // One-time v2 upgrade: ACP-capable agents (Gemini/Codex) now default to
       // the chat front-end. Terminal stays one click away via the toggle.
-      if (!localStorage.getItem('cathode-profiles-acpv2')) {
+      if (!localStorage.getItem(LS.profilesAcpV2)) {
         parsed = parsed.map(p => {
           const base = (p.command || '').trim().split(/\s+/)[0];
           return (base === 'gemini' || base === 'codex') ? { ...p, acp: true } : p;
         });
-        localStorage.setItem('cathode-profiles-acpv2', '1');
+        localStorage.setItem(LS.profilesAcpV2, '1');
         localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
       }
       // Dedup by name, keeping the most recent — changing an agent's launch
@@ -2247,7 +2251,7 @@ const ALERT_OFF_ICON = `<svg viewBox="0 0 18 18" width="16" height="16" fill="cu
 
 // Distinct synthesized cue per event type, gated by a persisted master toggle.
 const Notif = (() => {
-  let on = localStorage.getItem('cathode-notif') === '1';
+  let on = localStorage.getItem(LS.notif) === '1';
   let ctx = null;
   const ac = () => ctx || (ctx = new (window.AudioContext || window.webkitAudioContext)());
   function blip(freq, start, dur, gain = 0.16, type = 'sine') {
@@ -2283,7 +2287,7 @@ const Notif = (() => {
     error:   () => playFile('sounds/error.wav'),                          // Slava Pogorelsky error tone
     limit:   () => playFile('sounds/error.wav'),                          // same as error, per request
   };
-  function setOn(v) { on = !!v; localStorage.setItem('cathode-notif', on ? '1' : '0'); syncNotifToggles(); }
+  function setOn(v) { on = !!v; localStorage.setItem(LS.notif, on ? '1' : '0'); syncNotifToggles(); }
   return {
     play(type) { if (!on) return; try { (sounds[type] || sounds.done)(); } catch (_) {} },
     isOn: () => on,
@@ -3499,10 +3503,10 @@ let tabsConfig = (() => {
         let changed = false;
         // Code Viewer is no longer a default tab — retire the auto-added default
         // once. Renamed/custom code tabs are left alone, and it can be re-added.
-        if (!localStorage.getItem('cathode-code-tab-retired')) {
+        if (!localStorage.getItem(LS.codeTabRetired)) {
           const ci = cfg.findIndex(t => t.type === 'code' && (t.label === 'Code' || t.label === 'Code Viewer'));
           if (ci !== -1) { cfg.splice(ci, 1); changed = true; }
-          localStorage.setItem('cathode-code-tab-retired', '1');
+          localStorage.setItem(LS.codeTabRetired, '1');
         }
         // Rename the Working File tab → Browser (one-time for saved configs).
         const _proj = cfg.find(t => t.type === 'project' && t.label === 'Working File');
@@ -5549,7 +5553,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   let errCount = 0;   // running count so updateCount isn't O(n) per entry on a chatty page
   let filter = 'all';
   const LC = { error: '#ef4444', warn: '#f59e0b', info: '#4a9eff', debug: '#777', log: '#bbb' };
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = escHtml;   // canonical helper (was a byte-identical local copy)
   const shortSrc = (s) => { try { const u = new URL(s); return (u.pathname.split('/').pop() || u.hostname); } catch (_) { return String(s).split('/').pop() || s; } };
 
   function matches(e) {
@@ -5668,7 +5672,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   let files = [], selected = null;
   let reqToken = 0;   // guards against out-of-order diff-file responses
 
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = escHtml;   // canonical helper (was a byte-identical local copy)
   const base = baseName;   // shared module-level helper (was a local duplicate)
   function loadMonaco() {
     return new Promise(res => {

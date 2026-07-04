@@ -155,6 +155,8 @@ let splitFraction = 0.4;
 // the main area beside the left strip; 'chat' = chat fills it, browser hidden.
 let singlePane = null;
 const STRIP_W = 50;   // single-pane left strip width (must match the CSS divider width)
+const DIVIDER_GUTTER = 11;   // px between the split boundary and the right column's left edge
+                             // (was open-coded as 11 in the two views but 10 in popups → 1px drift)
 // ── Shortcut handler ─────────────────────────────────────────────
 // Attach before-input-event to any WebContentsView webContents so
 // shortcuts work no matter which panel currently holds keyboard focus.
@@ -503,7 +505,7 @@ function getPopupBounds() {
   // Subtract the DevTools panel like every other layout fn — previously this
   // ignored it, so popups mis-centered while DevTools was open.
   const availW    = winW - devToolsWidth;
-  const rightX    = Math.round(availW * splitFraction) + 10;
+  const rightX    = Math.round(availW * splitFraction) + DIVIDER_GUTTER;
   const rightW    = availW - rightX;
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
   const availH    = winH - topOffset;
@@ -661,7 +663,7 @@ function repositionRightPanelView() {
   const [winW, winH] = mainWindow.getContentSize();
   const availW = winW - devToolsWidth;
   // collapsed (single-pane) → the active view fills from the left strip; otherwise the split position
-  const rightX = singlePane === 'browser' ? (STRIP_W + 1) : (Math.round(availW * splitFraction) + 11);
+  const rightX = singlePane === 'browser' ? (STRIP_W + 1) : (Math.round(availW * splitFraction) + DIVIDER_GUTTER);
   const PAD = 8;   // rounded-container inset (top/right/bottom; left flush) — matches the browser view
   const onBounds = { x: rightX, y: TOOLBAR_HEIGHT + PAD, width: (availW - rightX) - PAD, height: (winH - TOOLBAR_HEIGHT) - PAD * 2 };
   if (figmaView)     figmaView.setBounds(rightPanelMode === 'figma'         ? onBounds : offscreen);
@@ -1248,8 +1250,8 @@ function repositionBrowserView(overrideFraction) {
   const topOffset = TOOLBAR_HEIGHT + TABBAR_HEIGHT;
   const PAD     = 8;   // rounded-container inset (top/right/bottom; left flush)
   // single-pane browser → the browser sits right of the fixed left strip;
-  // otherwise it follows the split (left-panel width + 10px divider).
-  const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + 11);   // +1 = right-column left inset (matches #right-panel padding-left)
+  // otherwise it follows the split (left-panel width + the divider gutter).
+  const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + DIVIDER_GUTTER);   // +1 = right-column left inset (matches #right-panel padding-left)
   const panelY = topOffset;   // flush with the browser chrome — no top gap
   const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD;
 
@@ -1410,29 +1412,29 @@ ipcMain.handle(IPC.CHECK_CLAUDE_AUTH, () => new Promise(resolve => {
 let onboardingProc = null;
 ipcMain.on(IPC.ONBOARDING_RUN, (_, { id, command } = {}) => {
   const send = uiSend;
-  if (!validRunCommand(command)) { send('onboarding-done', { id, code: 1 }); return; }
+  if (!validRunCommand(command)) { send(IPC.ONBOARDING_DONE, { id, code: 1 }); return; }
   safeKill(onboardingProc);
   try {
     // Keep a local ref: the killed proc's async 'close' must not null out a
     // replacement that was assigned in the meantime (orphaning its kill handle).
     const proc = platform.nixSpawn(['bash', '-lic', command]);
     onboardingProc = proc;
-    proc.stdout.on('data', d => send('onboarding-output', { id, data: d.toString() }));
-    proc.stderr.on('data', d => send('onboarding-output', { id, data: d.toString() }));
+    proc.stdout.on('data', d => send(IPC.ONBOARDING_OUTPUT, { id, data: d.toString() }));
+    proc.stderr.on('data', d => send(IPC.ONBOARDING_OUTPUT, { id, data: d.toString() }));
     proc.on('close', code => {
       if (onboardingProc === proc) onboardingProc = null;
       // A killed proc (cancel / replaced by the next step) closes with code null —
       // that must read as failure, not `?? 0` success.
-      send('onboarding-done', { id, code: code ?? 1 });
+      send(IPC.ONBOARDING_DONE, { id, code: code ?? 1 });
     });
     proc.on('error', e => {
       if (onboardingProc === proc) onboardingProc = null;
-      send('onboarding-output', { id, data: `\n[error] ${e.message}\n` });
-      send('onboarding-done', { id, code: 1 });
+      send(IPC.ONBOARDING_OUTPUT, { id, data: `\n[error] ${e.message}\n` });
+      send(IPC.ONBOARDING_DONE, { id, code: 1 });
     });
   } catch (e) {
-    send('onboarding-output', { id, data: `\n[error] ${e.message}\n` });
-    send('onboarding-done', { id, code: 1 });
+    send(IPC.ONBOARDING_OUTPUT, { id, data: `\n[error] ${e.message}\n` });
+    send(IPC.ONBOARDING_DONE, { id, code: 1 });
   }
 });
 ipcMain.on(IPC.ONBOARDING_CANCEL, () => { safeKill(onboardingProc); onboardingProc = null; });
@@ -1440,20 +1442,20 @@ ipcMain.on(IPC.ONBOARDING_CANCEL, () => { safeKill(onboardingProc); onboardingPr
 // ── Profile installer (streams output back to the modal) ──────────
 ipcMain.on(IPC.PROFILE_INSTALL, (_, { installId, command } = {}) => {
   const send = uiSend;
-  if (!validRunCommand(command)) { send('profile-install-error', { installId, message: 'Invalid install command.' }); return; }
+  if (!validRunCommand(command)) { send(IPC.PROFILE_INSTALL_ERROR, { installId, message: 'Invalid install command.' }); return; }
   try {
     const proc = platform.nixSpawn(['bash', '-lc', command], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    proc.stdout.on('data', d => send('profile-install-progress', { installId, text: d.toString() }));
-    proc.stderr.on('data', d => send('profile-install-progress', { installId, text: d.toString() }));
+    proc.stdout.on('data', d => send(IPC.PROFILE_INSTALL_PROGRESS, { installId, text: d.toString() }));
+    proc.stderr.on('data', d => send(IPC.PROFILE_INSTALL_PROGRESS, { installId, text: d.toString() }));
     proc.on('close', code => {
-      if (code === 0) send('profile-install-done',  { installId });
-      else            send('profile-install-error', { installId, code });
+      if (code === 0) send(IPC.PROFILE_INSTALL_DONE,  { installId });
+      else            send(IPC.PROFILE_INSTALL_ERROR, { installId, code });
     });
-    proc.on('error', err => send('profile-install-error', { installId, message: err.message }));
+    proc.on('error', err => send(IPC.PROFILE_INSTALL_ERROR, { installId, message: err.message }));
   } catch (err) {
-    send('profile-install-error', { installId, message: err.message });
+    send(IPC.PROFILE_INSTALL_ERROR, { installId, message: err.message });
   }
 });
 
@@ -1661,7 +1663,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       const allowAlways = pick('allow_always');
       const rejectOpt   = pick('reject_once', 'reject_always');
       const sel = o => ({ outcome: o ? { outcome: 'selected', optionId: o.optionId } : { outcome: 'cancelled' } });
-      const approve = o => { send('acp-tool-approved', { id, toolCall: params.toolCall }); return sel(o); };
+      const approve = o => { send(IPC.ACP_TOOL_APPROVED, { id, toolCall: params.toolCall }); return sel(o); };
 
       // Read-only tools auto-approve; risky ones (execute / edit / delete / move /
       // fetch / …) require user confirmation — the guard against a prompt-injected
@@ -1670,7 +1672,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       if (SAFE.has(kind) || !allowOnce) return approve(allowOnce);
 
       const reqId = `perm${++acpPermSeq}`;
-      send('acp-permission-request', { id, reqId, kind, title: params.toolCall?.title || '', canAlways: !!allowAlways });
+      send(IPC.ACP_PERMISSION_REQUEST, { id, reqId, kind, title: params.toolCall?.title || '', canAlways: !!allowAlways });
       const decision = await new Promise(resolve => acpPermResolvers.set(reqId, { resolve, id }));
       acpPermResolvers.delete(reqId);
       if (decision === 'always' && allowAlways) return approve(allowAlways);
@@ -1678,21 +1680,21 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       return sel(rejectOpt);   // deny (or session gone)
     },
     async sessionUpdate(params) {
-      send('acp-update', { id, update: params.update });
+      send(IPC.ACP_UPDATE, { id, update: params.update });
     },
     async createTerminal(params) {
       const termId = `t${++acpTermSeq}`;   // Date.now() collides for same-ms creates, clobbering resolvers
-      send('acp-term-create', { id, termId, title: params.title });
+      send(IPC.ACP_TERM_CREATE, { id, termId, title: params.title });
       return { terminalId: termId };
     },
     async terminalOutput(params) {
-      send('acp-term-output', { id, termId: params.terminalId, output: params.output });
+      send(IPC.ACP_TERM_OUTPUT, { id, termId: params.terminalId, output: params.output });
     },
     async waitForTerminalExit(params) {
       return new Promise(resolve => acpTermResolvers.set(params.terminalId, { resolve, id }));
     },
     async releaseTerminal(params) {
-      send('acp-term-release', { id, termId: params.terminalId });
+      send(IPC.ACP_TERM_RELEASE, { id, termId: params.terminalId });
       const r = acpTermResolvers.get(params.terminalId);
       if (r) { r.resolve({ exitCode: 0 }); acpTermResolvers.delete(params.terminalId); }
     },
@@ -1720,7 +1722,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   const connectTimer = setTimeout(() => {
     console.error('[acp] connect timeout');
     errorSent = true;
-    send('acp-error', { id, message: timeoutErr.message });
+    send(IPC.ACP_ERROR, { id, message: timeoutErr.message });
     safeKill(proc);
   }, CONNECT_TIMEOUT);
 
@@ -1751,7 +1753,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
         const desc = authMethods[0].description || authMethods[0].name || 'configuration required';
         // setupCmd drives a one-click "Set up …" button in the renderer that opens
         // a terminal running the interactive setup; message is the plain fallback.
-        send('acp-error', { id, message: `${label} needs to be set up first — ${desc}`, setupCmd: cmd || null, setupLabel: label });
+        send(IPC.ACP_ERROR, { id, message: `${label} needs to be set up first — ${desc}`, setupCmd: cmd || null, setupLabel: label });
         safeKill(proc);
         return;
       }
@@ -1761,7 +1763,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     connected = true;
     const entry = { proc, conn, sessionId };
     acpSessions.set(id, entry);
-    send('acp-ready', { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey });
+    send(IPC.ACP_READY, { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey });
     conn.closed.then(() => {
       // Guard: a model-switch respawn reuses the id — a stale close from the
       // killed session must not delete the replacement (or report it closed).
@@ -1769,7 +1771,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
       acpSessions.delete(id);
       denyPendingPerms(id);
       cleanupSessionTerminals(id);
-      send('acp-closed', { id });
+      send(IPC.ACP_CLOSED, { id });
     });
   } catch (err) {
     clearTimeout(connectTimer);
@@ -1778,7 +1780,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     // initialize reject, which lands here; don't send a second acp-error.
     if (!errorSent) {
       errorSent = true;
-      send('acp-error', { id, message: err.message });
+      send(IPC.ACP_ERROR, { id, message: err.message });
     }
     safeKill(proc);
   }
