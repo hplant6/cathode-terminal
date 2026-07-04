@@ -2846,7 +2846,11 @@ html, body {
 .anim-num-wide { width: 76px; }
 .anim-num:focus { border-color: var(--spec-text-dim); }
 .anim-color { width: 44px; height: 26px; padding: 0; border: 1px solid var(--spec-structural); border-radius: 4px; background: none; cursor: pointer; }
+.anim-bezier { width: auto; flex: 1; font-size: 10px; }
 #anim-replay { margin-top: 10px; }
+/* Group headers inside the custom <select> menu (e.g. the animation-type list) */
+.ct-select-group { padding: 7px 12px 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--spec-structural); pointer-events: none; }
+.ct-select-group:first-child { padding-top: 4px; }
 .rz-drawer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .rz-drawer-head {
   display: flex; align-items: center; gap: 10px; height: 55px; padding: 0 12px; flex-shrink: 0;

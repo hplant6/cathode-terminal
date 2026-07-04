@@ -2054,20 +2054,33 @@ function enhanceSelect(sel) {
   wrap.appendChild(btn);
   wrap.appendChild(menu);
 
+  function addOpt(opt) {
+    const item = document.createElement('div');
+    item.className = 'ct-select-opt' + (opt.value === sel.value ? ' selected' : '') + (opt.value === '' ? ' placeholder' : '');
+    item.textContent = opt.textContent;
+    item.addEventListener('click', () => {
+      if (sel.value !== opt.value) {
+        sel.value = opt.value;                         // refresh() via setter shim
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      close();
+    });
+    menu.appendChild(item);
+  }
   function buildMenu() {
     menu.innerHTML = '';
-    Array.from(sel.options).forEach(opt => {
-      const item = document.createElement('div');
-      item.className = 'ct-select-opt' + (opt.value === sel.value ? ' selected' : '') + (opt.value === '' ? ' placeholder' : '');
-      item.textContent = opt.textContent;
-      item.addEventListener('click', () => {
-        if (sel.value !== opt.value) {
-          sel.value = opt.value;                         // refresh() via setter shim
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        close();
-      });
-      menu.appendChild(item);
+    // Walk children so <optgroup> labels render as headers; plain <option> lists
+    // (every other select in the app) still render exactly as before.
+    Array.from(sel.children).forEach(node => {
+      if (node.tagName === 'OPTGROUP') {
+        const hdr = document.createElement('div');
+        hdr.className = 'ct-select-group';
+        hdr.textContent = node.label;
+        menu.appendChild(hdr);
+        Array.from(node.children).forEach(addOpt);
+      } else if (node.tagName === 'OPTION') {
+        addOpt(node);
+      }
     });
   }
   function refresh() {
@@ -4878,18 +4891,24 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const amtSlider = $('anim-amount-slider'), amtNum = $('anim-amount'), amtLabel = $('anim-amount-label');
   const colorInput = $('anim-color'), replayBtn = $('anim-replay');
   const rowDir = $('anim-row-direction'), rowDist = $('anim-row-distance'), rowAmt = $('anim-row-amount'), rowColor = $('anim-row-color');
+  const bezierRow = $('anim-row-bezier'), bezierInput = $('anim-bezier');
 
   const opts = (entries) => entries.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
   typeSel.innerHTML = ANIM.ANIM_TYPES.map(g => `<optgroup label="${g.group}">${opts(g.items)}</optgroup>`).join('');
-  easingSel.innerHTML = opts(ANIM.EASINGS);
+  easingSel.innerHTML = opts(ANIM.EASINGS.concat([['custom', 'Custom cubic-bézier…']]));
   dirSel.innerHTML = opts(ANIM.DIRECTIONS);
   repeatSel.innerHTML = opts([['1', 'Once'], ['2', '2×'], ['3', '3×'], ['5', '5×'], ['infinite', 'Loop']]);
   triggerSel.innerHTML = opts(ANIM.TRIGGERS);
   [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(enhanceSelect);
 
+  function easingValue() {
+    if (easingSel.value !== 'custom') return easingSel.value;
+    const n = (bezierInput.value || '').split(',').map(s => parseFloat(s.trim()));
+    return (n.length === 4 && n.every(Number.isFinite)) ? 'cubic-bezier(' + n.join(',') + ')' : 'ease';
+  }
   function currentSpec() {
     const type = typeSel.value, f = ANIM.fieldsFor(type);
-    const spec = { type, easing: easingSel.value, duration: +durNum.value || 0, delay: +delayNum.value || 0, repeat: repeatSel.value, trigger: triggerSel.value };
+    const spec = { type, easing: easingValue(), duration: +durNum.value || 0, delay: +delayNum.value || 0, repeat: repeatSel.value, trigger: triggerSel.value };
     if (f.direction) spec.direction = dirSel.value;
     if (f.distance) spec.distance = +distNum.value || 0;
     if (f.amount) spec.amount = +amtNum.value;
@@ -4919,14 +4938,16 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
   delayNum.addEventListener('input', schedulePreview);
   colorInput.addEventListener('input', schedulePreview);
-  [easingSel, dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
+  [dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
+  easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; schedulePreview(); });
+  bezierInput.addEventListener('input', schedulePreview);
   typeSel.addEventListener('change', () => { syncFields(true); schedulePreview(); });
   replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: currentSpec() }));
 
   function open({ label } = {}) {
     clearPickMode();
     if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
-    typeSel.value = 'fade-in'; easingSel.value = 'ease';
+    typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true;
     durSlider.value = durNum.value = 1000; delayNum.value = 0;
     repeatSel.value = '1'; triggerSel.value = 'load'; colorInput.value = '#ff5720';
     syncFields(true);

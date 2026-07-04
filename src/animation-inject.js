@@ -85,7 +85,13 @@ function getAnimationScript() {
           try { if (curAnim) curAnim.cancel(); } catch(e){}
           try {
             var r = __animKeyframes(spec), o = r.options;
-            curAnim = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
+            var a = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
+            curAnim = a;
+            // Finite previews revert to the element's natural state when done, so it
+            // never gets stuck faded-out / transformed while the user keeps tweaking.
+            if (o.iterations !== Infinity && a.finished) {
+              a.finished.then(function(){ if (curAnim === a) { try { a.cancel(); } catch(e){} curAnim = null; } }).catch(function(){});
+            }
           } catch(e) { curAnim = null; }
         },
         clear: function(){ teardown(); },
