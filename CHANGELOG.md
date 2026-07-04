@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-03
+
+Hardening release: four full audits (correctness, security, performance, maintainability) plus a new agent-safety gate.
+
+### Added
+- **Fable** in the Claude model menu.
+- **Risky-tool confirmation** — the agent now asks before running shell / edit / delete / write / fetch tools (Allow / Always / Deny), instead of auto-approving everything. Read-only tools still run automatically. This is the safeguard against a prompt-injected page steering the agent into destructive actions.
+
+### Fixed
+- **Correctness** (~45 fixes across three tiers): model-switching via the tab menu (was blanking the pane and not switching), two boot-bricking corrupt-localStorage paths, an ArrowDown that erased an unsent draft, cancelled installs reporting success, a crash when closing the window mid-animation, duplicate tab ids, PTY-Enter racing a tab switch, stuck modal buttons on IPC failure, and more.
+- **Security**: closed an auth-modal XSS→RCE path, validated the Storybook port (command-injection sink) and sanitized the agent-env probe, and made the plaintext-secret fallback warn instead of downgrade silently.
+- **Performance**: fixed a custom-`<select>` document-listener leak plus two smaller resolver/command-map leaks; throttled per-chunk and per-frame reflows in chat streaming and tool output; paused background PowerShell process-polling when unfocused.
+
+### Changed
+- Internal maintainability: routed raw channel + localStorage string literals through their registries, unified the split-divider gutter into one constant (fixes a 1px popup-alignment drift), and corrected the box-select overlay-skip guard.
+
 ## [1.0.3] - 2026-07-03
 
 ### Fixed
@@ -49,7 +65,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.4
 [1.0.3]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.3
 [1.0.2]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.2
 [1.0.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.1
