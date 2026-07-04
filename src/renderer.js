@@ -2109,9 +2109,12 @@ function enhanceSelect(sel) {
     left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
     menu.style.left = left + 'px';
     const below = window.innerHeight - r.bottom - 8;
-    menu.style.top = (mh <= below || r.top < mh + 8)
-      ? (r.bottom + 4) + 'px'
-      : (r.top - 4 - mh) + 'px';
+    const above = r.top - 8;
+    const down = below >= above || mh <= below;
+    // Cap the menu to the room on its side so a tall list (e.g. the 35 animation
+    // types) scrolls inside the viewport instead of running off the bottom edge.
+    menu.style.maxHeight = Math.max(80, Math.min(320, down ? below : above)) + 'px';
+    menu.style.top = (down ? r.bottom + 4 : r.top - 4 - menu.offsetHeight) + 'px';
   }
 
   btn.addEventListener('click', e => {
@@ -4889,9 +4892,42 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const durSlider = $('anim-duration-slider'), durNum = $('anim-duration'), delayNum = $('anim-delay');
   const distSlider = $('anim-distance-slider'), distNum = $('anim-distance');
   const amtSlider = $('anim-amount-slider'), amtNum = $('anim-amount'), amtLabel = $('anim-amount-label');
-  const colorInput = $('anim-color'), replayBtn = $('anim-replay');
+  const colorSwatch = $('anim-color'), replayBtn = $('anim-replay'), loopBtn = $('anim-loop');
+  let targetColor = '#ff5720';
   const rowDir = $('anim-row-direction'), rowDist = $('anim-row-distance'), rowAmt = $('anim-row-amount'), rowColor = $('anim-row-color');
-  const bezierRow = $('anim-row-bezier'), bezierInput = $('anim-bezier');
+  const bezierRow = $('anim-row-bezier');
+  // Cubic-bézier curve editor: two draggable handles. SVG maps time x∈[0,1]→[20,180]
+  // and progress y∈[0,1]→[150,50] (with vertical room for overshoot easings).
+  const bzSvg = $('anim-bezier-svg'), bzReadout = $('anim-bezier-readout');
+  const bzH1 = $('bz-h1'), bzH2 = $('bz-h2'), bzLine1 = $('bz-line1'), bzLine2 = $('bz-line2'), bzCurve = $('bz-curve');
+  const BZ = { x1: 0.4, y1: 0, x2: 0.2, y2: 1 };
+  const bzClamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const bzPx = (x) => 20 + x * 160, bzPy = (y) => 150 - y * 100;
+  function bzRender() {
+    const p1x = bzPx(BZ.x1), p1y = bzPy(BZ.y1), p2x = bzPx(BZ.x2), p2y = bzPy(BZ.y2);
+    bzH1.setAttribute('cx', p1x); bzH1.setAttribute('cy', p1y);
+    bzH2.setAttribute('cx', p2x); bzH2.setAttribute('cy', p2y);
+    bzLine1.setAttribute('x2', p1x); bzLine1.setAttribute('y2', p1y);
+    bzLine2.setAttribute('x2', p2x); bzLine2.setAttribute('y2', p2y);
+    bzCurve.setAttribute('d', 'M 20 150 C ' + p1x + ' ' + p1y + ' ' + p2x + ' ' + p2y + ' 180 50');
+    const r = (n) => Math.round(n * 100) / 100;
+    bzReadout.textContent = 'cubic-bezier(' + r(BZ.x1) + ', ' + r(BZ.y1) + ', ' + r(BZ.x2) + ', ' + r(BZ.y2) + ')';
+  }
+  function bzDrag(handle, cp) {
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const move = (ev) => {
+        const rect = bzSvg.getBoundingClientRect();
+        BZ['x' + cp] = bzClamp(((ev.clientX - rect.left) / rect.width * 200 - 20) / 160, 0, 1);
+        BZ['y' + cp] = bzClamp((150 - (ev.clientY - rect.top) / rect.height * 200) / 100, -0.5, 1.5);
+        bzRender(); schedulePreview();
+      };
+      const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  }
+  bzDrag(bzH1, 1); bzDrag(bzH2, 2);
 
   const opts = (entries) => entries.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
   typeSel.innerHTML = ANIM.ANIM_TYPES.map(g => `<optgroup label="${g.group}">${opts(g.items)}</optgroup>`).join('');
@@ -4899,12 +4935,12 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   dirSel.innerHTML = opts(ANIM.DIRECTIONS);
   repeatSel.innerHTML = opts([['1', 'Once'], ['2', '2×'], ['3', '3×'], ['5', '5×'], ['infinite', 'Loop']]);
   triggerSel.innerHTML = opts(ANIM.TRIGGERS);
-  [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(enhanceSelect);
+  [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(sel => { enhanceSelect(sel); sel.parentNode.classList.add('pp-ct'); });   // pp-ct on the wrap → lasso-panel dropdown styling
 
   function easingValue() {
     if (easingSel.value !== 'custom') return easingSel.value;
-    const n = (bezierInput.value || '').split(',').map(s => parseFloat(s.trim()));
-    return (n.length === 4 && n.every(Number.isFinite)) ? 'cubic-bezier(' + n.join(',') + ')' : 'ease';
+    const r = (v) => Math.round(v * 1000) / 1000;
+    return 'cubic-bezier(' + r(BZ.x1) + ', ' + r(BZ.y1) + ', ' + r(BZ.x2) + ', ' + r(BZ.y2) + ')';
   }
   function currentSpec() {
     const type = typeSel.value, f = ANIM.fieldsFor(type);
@@ -4912,14 +4948,16 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (f.direction) spec.direction = dirSel.value;
     if (f.distance) spec.distance = +distNum.value || 0;
     if (f.amount) spec.amount = +amtNum.value;
-    if (f.color) spec.targetColor = colorInput.value;
+    if (f.color) spec.targetColor = targetColor;
     return spec;
   }
 
+  let loopPreview = false;
+  function previewSpec() { const s = currentSpec(); if (loopPreview) s.repeat = 'infinite'; return s; }   // loop only the preview, not the sent spec
   let previewTimer = null;
   function schedulePreview() {
     clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => { if (!panel.hidden) ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: currentSpec() }); }, 130);
+    previewTimer = setTimeout(() => { if (!panel.hidden) ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: previewSpec() }); }, 130);
   }
   function syncFields(resetAmount) {
     const type = typeSel.value, f = ANIM.fieldsFor(type);
@@ -4928,6 +4966,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const m = ANIM.amountMeta(type);
       amtLabel.textContent = m.label;
       amtSlider.min = m.min; amtSlider.max = m.max; amtSlider.step = m.step;
+      amtNum.min = m.min; amtNum.max = m.max; amtNum.step = m.step;
       if (resetAmount) { amtSlider.value = m.def; amtNum.value = m.def; }
     }
   }
@@ -4936,20 +4975,29 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     num.addEventListener('input', () => { slider.value = num.value; schedulePreview(); });
   }
   wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
+  // Custom number spinner: click the top/bottom half of the icon zone to step.
+  [durNum, distNum, amtNum, delayNum].forEach(num => num.addEventListener('click', (e) => {
+    const rect = num.getBoundingClientRect();
+    if (e.clientX < rect.right - 16) return;   // only the right-edge icon zone steps
+    (e.clientY < rect.top + rect.height / 2) ? num.stepUp() : num.stepDown();
+    num.dispatchEvent(new Event('input', { bubbles: true }));
+  }));
   delayNum.addEventListener('input', schedulePreview);
-  colorInput.addEventListener('input', schedulePreview);
+  colorSwatch.addEventListener('click', () => sharedColorPicker && sharedColorPicker.open(colorSwatch, targetColor, (hex) => { targetColor = hex; schedulePreview(); }));
   [dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
-  easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; schedulePreview(); });
-  bezierInput.addEventListener('input', schedulePreview);
+  easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; if (!bezierRow.hidden) bzRender(); schedulePreview(); });
   typeSel.addEventListener('change', () => { syncFields(true); schedulePreview(); });
-  replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: currentSpec() }));
+  replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: previewSpec() }));
+  loopBtn?.addEventListener('click', () => { loopPreview = !loopPreview; loopBtn.classList.toggle('on', loopPreview); schedulePreview(); });
 
   function open({ label } = {}) {
     clearPickMode();
     if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
     typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true;
+    loopPreview = false; loopBtn?.classList.remove('on');
+    BZ.x1 = 0.4; BZ.y1 = 0; BZ.x2 = 0.2; BZ.y2 = 1; bzRender();
     durSlider.value = durNum.value = 1000; delayNum.value = 0;
-    repeatSel.value = '1'; triggerSel.value = 'load'; colorInput.value = '#ff5720';
+    repeatSel.value = '1'; triggerSel.value = 'load'; targetColor = '#ff5720'; colorSwatch.style.background = targetColor;
     syncFields(true);
     textarea.value = '';
     panel.hidden = false;

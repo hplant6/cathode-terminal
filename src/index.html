@@ -293,18 +293,34 @@
           <button id="animation-panel-new" class="pp-new-sel">New Selection</button>
         </div>
         <div id="animation-panel-body">
-          <div class="anim-row"><label class="anim-label">Animate</label><select id="anim-type" class="anim-select pp-ct"></select></div>
-          <div class="anim-row"><label class="anim-label">Easing</label><select id="anim-easing" class="anim-select pp-ct"></select></div>
-          <div class="anim-row" id="anim-row-bezier" hidden><label class="anim-label">Bézier</label><input id="anim-bezier" class="anim-num anim-bezier" type="text" value="0.4, 0, 0.2, 1" spellcheck="false" /></div>
-          <div class="anim-row anim-row-slider"><label class="anim-label">Duration</label><div class="anim-ctrl"><input id="anim-duration-slider" class="rz-slider anim-slider" type="range" min="0" max="3000" step="50" value="1000" /><input id="anim-duration" class="anim-num" type="number" min="0" max="20000" value="1000" /></div></div>
-          <div class="anim-row"><label class="anim-label">Delay</label><input id="anim-delay" class="anim-num anim-num-wide" type="number" min="0" max="20000" value="0" /></div>
-          <div class="anim-row" id="anim-row-direction" hidden><label class="anim-label">Direction</label><select id="anim-direction" class="anim-select pp-ct"></select></div>
-          <div class="anim-row anim-row-slider" id="anim-row-distance" hidden><label class="anim-label">Distance</label><div class="anim-ctrl"><input id="anim-distance-slider" class="rz-slider anim-slider" type="range" min="0" max="800" step="10" value="40" /><input id="anim-distance" class="anim-num" type="number" value="40" /></div></div>
-          <div class="anim-row anim-row-slider" id="anim-row-amount" hidden><label class="anim-label" id="anim-amount-label">Amount</label><div class="anim-ctrl"><input id="anim-amount-slider" class="rz-slider anim-slider" type="range" value="1" /><input id="anim-amount" class="anim-num" type="number" value="1" /></div></div>
-          <div class="anim-row" id="anim-row-color" hidden><label class="anim-label">Target color</label><input id="anim-color" class="anim-color" type="color" value="#ff5720" /></div>
-          <div class="anim-row"><label class="anim-label">Repeat</label><select id="anim-repeat" class="anim-select pp-ct"></select></div>
-          <div class="anim-row"><label class="anim-label">Trigger</label><select id="anim-trigger" class="anim-select pp-ct"></select></div>
-          <button id="anim-replay" class="rz-reset-btn">▶ Replay preview</button>
+          <div class="pp-field"><span class="pp-field-label">Animate</span><div class="pp-field-ctrl"><select id="anim-type" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Easing</span><div class="pp-field-ctrl"><select id="anim-easing" class="anim-select pp-ct"></select></div></div>
+          <div class="anim-bezier-block" id="anim-row-bezier" hidden>
+            <svg id="anim-bezier-svg" class="anim-bezier-svg" viewBox="0 0 200 200">
+              <rect class="bz-box" x="20" y="50" width="160" height="100" rx="4" />
+              <line class="bz-diag" x1="20" y1="150" x2="180" y2="50" />
+              <line id="bz-line1" class="bz-line" x1="20" y1="150" x2="84" y2="150" />
+              <line id="bz-line2" class="bz-line" x1="180" y1="50" x2="52" y2="50" />
+              <path id="bz-curve" class="bz-curve" d="M 20 150 C 84 150 52 50 180 50" />
+              <circle class="bz-anchor" cx="20" cy="150" r="3.5" />
+              <circle class="bz-anchor" cx="180" cy="50" r="3.5" />
+              <circle id="bz-h1" class="bz-handle" cx="84" cy="150" r="7" />
+              <circle id="bz-h2" class="bz-handle" cx="52" cy="50" r="7" />
+            </svg>
+            <div id="anim-bezier-readout" class="anim-bezier-readout">cubic-bezier(0.4, 0, 0.2, 1)</div>
+          </div>
+          <div class="pp-field"><span class="pp-field-label">Duration</span><div class="pp-field-ctrl"><input id="anim-duration-slider" class="rz-slider" type="range" min="0" max="3000" step="50" value="1000" /><input id="anim-duration" class="pp-ctrl-input anim-num" type="number" min="0" max="20000" step="50" value="1000" /></div></div>
+          <div class="pp-field"><span class="pp-field-label">Delay</span><div class="pp-field-ctrl"><input id="anim-delay" class="pp-ctrl-input anim-num" type="number" min="0" max="20000" step="10" value="0" /></div></div>
+          <div class="pp-field" id="anim-row-direction" hidden><span class="pp-field-label">Direction</span><div class="pp-field-ctrl"><select id="anim-direction" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field" id="anim-row-distance" hidden><span class="pp-field-label">Distance</span><div class="pp-field-ctrl"><input id="anim-distance-slider" class="rz-slider" type="range" min="0" max="800" step="10" value="40" /><input id="anim-distance" class="pp-ctrl-input anim-num" type="number" min="0" step="10" value="40" /></div></div>
+          <div class="pp-field" id="anim-row-amount" hidden><span class="pp-field-label" id="anim-amount-label">Amount</span><div class="pp-field-ctrl"><input id="anim-amount-slider" class="rz-slider" type="range" value="1" /><input id="anim-amount" class="pp-ctrl-input anim-num" type="number" value="1" /></div></div>
+          <div class="pp-field" id="anim-row-color" hidden><span class="pp-field-label">Target color</span><div class="pp-field-ctrl"><button id="anim-color" class="anim-swatch" type="button" title="Pick the target color"></button></div></div>
+          <div class="pp-field"><span class="pp-field-label">Repeat</span><div class="pp-field-ctrl"><select id="anim-repeat" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Trigger</span><div class="pp-field-ctrl"><select id="anim-trigger" class="anim-select pp-ct"></select></div></div>
+          <div class="anim-replay-row">
+            <label id="anim-loop" class="ct-checkbox" title="Loop the preview so you can tune it while it plays (doesn't change the Repeat value sent to chat)"><span class="ct-checkbox-box"><svg class="ct-checkbox-check" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3" /></svg></span>Loop</label>
+            <button id="anim-replay" class="rz-reset-btn">▶ Replay</button>
+          </div>
         </div>
         <div id="animation-panel-foot" class="tp-foot">
           <textarea id="animation-textarea" class="tp-textarea" placeholder="Describe the animation — e.g. fade in over 400ms on scroll…" spellcheck="true"></textarea>
