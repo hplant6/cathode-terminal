@@ -33,6 +33,7 @@ const IPC = Object.freeze({
   AGENT_MD_WRITE: 'agent-md-write',
   APP_CHECK_UPDATES: 'app-check-updates',
   APP_INSTALL_UPDATE: 'app-install-update',
+  APP_VERSION: 'app-version',
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
   BROWSER_DID_NAVIGATE: 'browser-did-navigate',

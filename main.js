@@ -2711,6 +2711,7 @@ ipcMain.on(IPC.APP_INSTALL_UPDATE, () => {
   const up = getAutoUpdater();
   if (up && updateDownloaded) setImmediate(() => up.quitAndInstall());
 });
+ipcMain.handle(IPC.APP_VERSION, () => app.getVersion());
 
 ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
   const act = id => () => uiSend(IPC.SETTINGS_ACTION, id);
@@ -2730,6 +2731,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'New Window',         click: act('new-window') },
     { type: 'separator' },
     { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
+    { label: 'About Cathode',      click: act('about') },
   ]);
   const p = pos || {};   // a missing pos → popup at the default (cursor) position
   menu.popup({ window: mainWindow, x: p.x, y: p.y });

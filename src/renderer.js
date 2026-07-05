@@ -3071,8 +3071,21 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'theme':         openThemeModal?.();    break;
     case 'chat-font':     openChatFontModal?.(); break;
     case 'new-window':    ipcRenderer.send(IPC.NEW_WINDOW); break;
+    case 'about':         openAboutModal();      break;
   }
 });
+
+// ── About modal (Settings → About Cathode) ────────────────────────
+const aboutModalCtl = wireModal(document.getElementById('about-modal'));
+document.getElementById('about-close')?.addEventListener('click', aboutModalCtl.close);
+async function openAboutModal() {
+  try {
+    const v = await ipcRenderer.invoke(IPC.APP_VERSION);
+    const el = document.getElementById('about-version');
+    if (el) el.textContent = 'Version ' + v;
+  } catch (_) {}
+  aboutModalCtl.open();
+}
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
 const closeApiKeyModal = apiKeyModalCtl.close;
