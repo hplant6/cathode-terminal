@@ -3473,26 +3473,28 @@ function equalizeTabWidths() {
   container.style.maxWidth = '';
   tabs.forEach(t => { t.style.width = ''; });
 
-  // Centered tab bar must not overlap the tools on either side.
-  // Left boundary = the settings button; right boundary = the window controls.
-  const center     = appBar.offsetWidth / 2;
-  // #window-controls is display:none on macOS, so its offsetLeft is 0 — which
-  // collapsed the right boundary and squished every tab to 50px (overlapping).
-  // Use the always-visible sysperf toggle as the boundary when controls are hidden.
-  const rightRef   = (rightTools && rightTools.offsetWidth) ? rightTools : sysperfBtn;
-  const rightLimit = (rightRef ? rightRef.offsetLeft : appBar.offsetWidth) - 10;
-  const leftLimit  = settingsBtn.offsetLeft + settingsBtn.offsetWidth + 10;
-  const halfAvail  = Math.min(rightLimit - center, center - leftLimit);
-  const maxWidth   = Math.max(80, 2 * halfAvail);
-
-  const containerPad = 4; // 2px padding each side
-  const available    = maxWidth - containerPad;
   const naturalMax   = Math.max(...tabs.map(t => t.offsetWidth));
-  const perTab = naturalMax * tabs.length <= available
-    ? naturalMax
-    : Math.max(50, Math.floor(available / tabs.length));
+  const naturalTotal = naturalMax * tabs.length;
 
-  container.style.maxWidth = maxWidth + 'px';
+  // Space the centered tab group may occupy without colliding with the left
+  // (logo/settings) or right (sysperf; window-controls are display:none on macOS)
+  // clusters. Measured in viewport coords so nested offsetParents don't skew it.
+  const bar     = appBar.getBoundingClientRect();
+  const center  = bar.left + bar.width / 2;
+  const rightEl = (rightTools && rightTools.offsetWidth) ? rightTools : sysperfBtn;
+  const rightX  = rightEl     ? rightEl.getBoundingClientRect().left      : bar.right;
+  const leftX   = settingsBtn ? settingsBtn.getBoundingClientRect().right : bar.left;
+  const available = 2 * Math.max(0, Math.min(rightX - center, center - leftX) - 12);
+
+  // Use natural width whenever the bar can hold every tab (plus a margin). This is
+  // the common case AND the safety net: if the boundary math ever collapses (as it
+  // did on macOS), we still won't squish tabs into an overlapping sliver — we only
+  // equalize-and-shrink on a genuinely narrow bar.
+  const fitsNaturally = naturalTotal <= available || naturalTotal + 60 <= bar.width;
+  const budget = fitsNaturally ? naturalTotal : Math.max(available, bar.width - 360);
+  const perTab = fitsNaturally ? naturalMax : Math.max(60, Math.floor(budget / tabs.length));
+
+  container.style.maxWidth = budget + 'px';
   tabs.forEach(t => { t.style.width = perTab + 'px'; });
 }
 
