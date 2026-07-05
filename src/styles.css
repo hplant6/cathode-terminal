@@ -179,6 +179,18 @@ html, body {
    the app-bar so the lights don't overlap the logo. */
 .is-mac #window-controls { display: none; }
 .is-mac #app-bar { padding-left: 78px; }
+/* macOS: native traffic lights own the top-left corner, so the logo/settings seat
+   moves to the right, and the decorative armpit/fillet curves (which framed the
+   left seat and the now-hidden window controls) are dropped. */
+.is-mac #app-bar-logo {
+  order: 10;                              /* to the far right, past the sysperf toggle */
+  margin-left: 4px; margin-right: 0;      /* flush to the right corner */
+  border-radius: 0 0 0 var(--r-blob);     /* bottom-LEFT blob — mirror of the left seat */
+}
+.is-mac #app-bar-logo::after,
+.is-mac #app-bar-logo::before,
+.is-mac #app-bar::after,
+.is-mac #app-bar::before { display: none; }
 /* Concave fillets (corner0curve.svg) in the armpits where the structural strip meets
    the logo seat & window controls — so there are no hard inner right angles.
    Masked so they fill with the structural token (light-mode ready). */
