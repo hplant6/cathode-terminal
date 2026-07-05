@@ -3467,6 +3467,7 @@ function equalizeTabWidths() {
   const appBar      = document.getElementById('app-bar');
   const settingsBtn = document.getElementById('btn-settings');
   const rightTools  = document.getElementById('window-controls');
+  const sysperfBtn  = document.getElementById('btn-sysperf-toggle');
 
   // Reset to natural size for measurement
   container.style.maxWidth = '';
@@ -3475,7 +3476,11 @@ function equalizeTabWidths() {
   // Centered tab bar must not overlap the tools on either side.
   // Left boundary = the settings button; right boundary = the window controls.
   const center     = appBar.offsetWidth / 2;
-  const rightLimit = (rightTools ? rightTools.offsetLeft : appBar.offsetWidth) - 10;
+  // #window-controls is display:none on macOS, so its offsetLeft is 0 — which
+  // collapsed the right boundary and squished every tab to 50px (overlapping).
+  // Use the always-visible sysperf toggle as the boundary when controls are hidden.
+  const rightRef   = (rightTools && rightTools.offsetWidth) ? rightTools : sysperfBtn;
+  const rightLimit = (rightRef ? rightRef.offsetLeft : appBar.offsetWidth) - 10;
   const leftLimit  = settingsBtn.offsetLeft + settingsBtn.offsetWidth + 10;
   const halfAvail  = Math.min(rightLimit - center, center - leftLimit);
   const maxWidth   = Math.max(80, 2 * halfAvail);
