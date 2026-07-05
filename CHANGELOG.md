@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-07-05
+
+### Fixed
+- **Claude "Internal error" in the installed app** — the packaged app (launched from the Start menu, so no `ANTHROPIC_API_KEY` in its environment) started the Claude ACP adapter with an **empty** API key, which overrode the signed-in subscription and made every prompt fail with "Internal error." The key is now only forwarded when it's actually set, so subscription/OAuth auth (`CLAUDE_CONFIG_DIR`) is used. Clearing an API key now removes it rather than setting an empty string. (Dev builds were unaffected because the shell already had a key.)
+- Onboarding setup steps now render as visible cards — they had collapsed to the same shade as the modal, so each step's container was invisible.
+
 ## [1.0.7] - 2026-07-04
 
 ### Added
@@ -112,7 +118,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.8...HEAD
+[1.0.8]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.8
 [1.0.7]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.7
 [1.0.6]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.6
 [1.0.5]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.5
