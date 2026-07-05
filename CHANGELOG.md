@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-07-05
+
+### Added
+- **Update progress modal** — auto-updates now show an in-app modal with a live download **progress bar** (transferred / total + speed) and a **Restart & Install** button, instead of downloading silently. Dismiss it and the download continues in the background; you'll get a clickable "ready to install" prompt when it finishes. (Packaged Windows/Linux only.)
+
 ## [1.0.8] - 2026-07-05
 
 ### Fixed
@@ -118,7 +123,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.8...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.9...HEAD
+[1.0.9]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.9
 [1.0.8]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.8
 [1.0.7]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.7
 [1.0.6]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.6
