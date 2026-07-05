@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-07-05
+
+### Fixed
+- **macOS: nav tabs still overlapping** — a firmer fix for the tab bar. The width calculation now measures in viewport coordinates and falls back to natural tab width whenever the bar has room, so a collapsed boundary measurement can no longer squish the tabs into an overlapping sliver.
+
+### Changed
+- Removed the redundant native "Downloading update" dialog — the in-app progress modal covers it now.
+
 ## [1.0.15] - 2026-07-05
 
 ### Fixed
@@ -153,7 +161,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.15...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.16...HEAD
+[1.0.16]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.16
 [1.0.15]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.15
 [1.0.14]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.14
 [1.0.13]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.13
