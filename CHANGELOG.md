@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-07-05
+
+### Fixed
+- **macOS: overlapping nav tabs** — the view-tab bar measured its right boundary from the window controls, which are hidden on macOS (native traffic lights), collapsing the width calculation and squishing every tab so their labels overlapped. It now falls back to the sysperf toggle when the controls are hidden.
+
 ## [1.0.14] - 2026-07-05
 
 ### Fixed
@@ -148,7 +153,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.14...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.15...HEAD
+[1.0.15]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.15
 [1.0.14]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.14
 [1.0.13]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.13
 [1.0.12]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.12
