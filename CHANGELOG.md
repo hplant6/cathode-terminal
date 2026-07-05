@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-07-05
+
+### Added
+- **macOS: real update flow** — "Check for Updates…" now queries the GitHub Releases API, compares versions, and (when newer) offers a Download button that opens the matching `.dmg` for your Mac's architecture (arm64 / x64). A dismissible "update available" toast also surfaces on launch. Replaces the broken "not a git checkout" dialog, since Squirrel.Mac auto-update needs code-signing.
+
+### Fixed
+- **macOS chrome: restored the concave curve** on the left edge of the right-hand logo/settings seat, so it meets the bar with the signature fillet instead of a hard angle.
+
 ## [1.0.17] - 2026-07-05
 
 ### Changed

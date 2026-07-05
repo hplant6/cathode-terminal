@@ -1,6 +1,6 @@
 {
   "name": "cathode-terminal",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Split chat + browser dev tool for AI coding agents",
   "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
   "author": "hplan",

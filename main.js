@@ -2591,6 +2591,34 @@ async function checkForAppUpdate() {
   const info = (message, detail, type = 'info') =>
     dialog.showMessageBox(mainWindow, { type, message, detail: detail || '', buttons: ['OK'] });
 
+  // Packaged macOS → no Squirrel.Mac (needs code-signing), so check the GitHub
+  // Releases API and hand the user a direct download link for their arch.
+  if (app.isPackaged && process.platform === 'darwin') {
+    let rel;
+    try {
+      rel = await fetchLatestRelease();
+    } catch (e) {
+      return info('Could not check for updates', String((e && e.message) || e).slice(0, 300), 'warning');
+    }
+    const latest = (rel.tag || '').replace(/^v/, '');
+    if (!latest || !isNewerVersion(latest, app.getVersion())) {
+      return info('You’re up to date', 'No new updates are available.');
+    }
+    // Prefer the .dmg matching this Mac's arch; fall back to the release page.
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    const asset = (rel.assets || []).find(a => /\.dmg$/i.test(a.name) && a.name.includes(arch))
+      || (rel.assets || []).find(a => /\.dmg$/i.test(a.name));
+    const link = (asset && asset.url) || rel.page;
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      message: `Version ${latest} is available`,
+      detail: `You’re on ${app.getVersion()}. Download the new version${asset ? ` (${asset.name})` : ''}, then drag it into Applications.`,
+      buttons: ['Download', 'Later'], defaultId: 0, cancelId: 1,
+    });
+    if (response === 0 && link) shell.openExternal(link).catch(() => {});
+    return;
+  }
+
   // Packaged Windows/Linux → electron-updater, not git.
   if (updaterSupported()) {
     const up = getAutoUpdater();
@@ -2665,6 +2693,49 @@ async function checkForAppUpdate() {
 // dialog (renderer shows a dismissible toast + a dot on the gear).
 // ── Auto-update (electron-updater) — packaged Windows/Linux only. macOS needs a
 // signed app for Squirrel.Mac, so it stays on the git/manual flow below.
+// Fetch the newest GitHub release (tag, release page, and downloadable assets).
+// Used on macOS where electron-updater's Squirrel.Mac can't run unsigned.
+function fetchLatestRelease() {
+  return new Promise((resolve, reject) => {
+    const req = net.request({
+      method: 'GET',
+      url: 'https://api.github.com/repos/hplant6/cathode-terminal/releases/latest',
+    });
+    req.setHeader('Accept', 'application/vnd.github+json');
+    req.setHeader('User-Agent', 'Cathode-Terminal');
+    req.on('response', (res) => {
+      let body = '';
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`GitHub returned HTTP ${res.statusCode}`));
+        }
+        try {
+          const j = JSON.parse(body);
+          resolve({
+            tag: j.tag_name || '',
+            page: j.html_url || 'https://github.com/hplant6/cathode-terminal/releases/latest',
+            assets: (j.assets || []).map(a => ({ name: a.name, url: a.browser_download_url })),
+          });
+        } catch (e) { reject(new Error('Could not parse GitHub response')); }
+      });
+    });
+    req.on('error', (e) => reject(e));
+    req.end();
+  });
+}
+
+// Semver-ish compare: is `a` strictly newer than `b`? (numeric dotted parts)
+function isNewerVersion(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
 let _autoUpdater;
 let _updaterTried = false;
 let updateDownloaded = null;   // UpdateInfo once a download is ready to install
@@ -2693,6 +2764,15 @@ async function startupUpdateCheck() {
   if (updaterSupported()) {
     const up = getAutoUpdater();
     if (up) up.checkForUpdates().catch(() => {});   // silent; downloads + notifies via events
+    return;
+  }
+  // Packaged macOS → GitHub Releases API; surface a dismissible "update available" toast.
+  if (app.isPackaged && process.platform === 'darwin') {
+    try {
+      const rel = await fetchLatestRelease();
+      const latest = (rel.tag || '').replace(/^v/, '');
+      if (latest && isNewerVersion(latest, app.getVersion())) uiSend(IPC.UPDATE_AVAILABLE, { behind: 1 });
+    } catch (_) { /* offline / rate-limited — stay quiet */ }
     return;
   }
   try {
