@@ -1502,13 +1502,17 @@ function acpAdapterInstalledVersion() {
     let done = false;
     const finish = v => { if (!done) { done = true; resolve(v); } };
     try {
-      // On Windows, run through `cmd.exe /c npm` — Node refuses to spawn a
-      // `.cmd` file directly (throws EINVAL). On POSIX, npm runs natively.
-      const p = platform.cmdSpawn(['/c', 'npm', 'ls', '-g', ACP_ADAPTER_PKG, '--json', '--depth=0'],
+      // The Claude adapter runs WSL-side (Windows) / natively (POSIX) — the
+      // Windows-bundled claude.exe is a Bun binary that segfaults (exit 3). Probe
+      // via a login+interactive shell so the nvm PATH (npm) resolves.
+      const p = platform.nixSpawn(['bash', '-lic', `npm ls -g ${ACP_ADAPTER_PKG} --json --depth=0`],
         { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
       p.stdout.on('data', d => out += d);
       p.on('close', () => {
-        try { finish(JSON.parse(out).dependencies?.[ACP_ADAPTER_PKG]?.version || null); }
+        try {
+          const j = out.indexOf('{');   // skip any shell-rc noise before the JSON
+          finish(j >= 0 ? (JSON.parse(out.slice(j)).dependencies?.[ACP_ADAPTER_PKG]?.version || null) : null);
+        }
         catch (_) { finish(null); }
       });
       p.on('error', () => finish(null));
@@ -1567,8 +1571,9 @@ async function ensureClaudeAdapter(id) {
   if (!needInstall) return true;
   uiSend(IPC.ACP_INSTALLING, { id });
   const ok = await new Promise(resolve => {
-    // Windows: `cmd.exe /c npm` — never spawn `npm.cmd` directly (EINVAL). POSIX: npm native.
-    const inst = platform.cmdSpawn(['/c', 'npm', 'install', '-g', `${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
+    // Install WSL-side (Windows) / natively (POSIX) via a login+interactive shell
+    // for the nvm PATH — the adapter must run where a non-crashing claude lives.
+    const inst = platform.nixSpawn(['bash', '-lic', `npm install -g ${ACP_ADAPTER_PKG}@${ACP_ADAPTER_VERSION}`],
       { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     inst.stdout.on('data', d => uiSend(IPC.ACP_INSTALL_PROGRESS, { id, text: d.toString() }));
     inst.stderr.on('data', d => uiSend(IPC.ACP_INSTALL_PROGRESS, { id, text: d.toString() }));
@@ -1581,35 +1586,29 @@ async function ensureClaudeAdapter(id) {
 }
 
 async function launchClaudeAcp(modelOverride) {
-  // Point the adapter at WSL's ~/.claude (same OAuth credentials). Probes run
-  // async + parallel — sync versions froze the UI for ~14s on every spawn.
-  const [cfgOut, verOut, setOut] = await Promise.all([
-    wslExecFile(platform.claudeConfigDirArgs(), 5000),
+  // Run the adapter WSL-side (Windows) / natively (POSIX), where Claude Code uses
+  // its own ~/.claude subscription creds. We used to run the *Windows*-side adapter
+  // pointed at WSL's ~/.claude via a UNC path, but its bundled claude.exe is a Bun
+  // binary that segfaults (exit 3) on some machines. Probes run async + parallel —
+  // sync versions froze the UI for ~14s on every spawn.
+  const [verOut, setOut] = await Promise.all([
     wslExecFile(['bash', '-lc', 'claude --version 2>/dev/null'], 6000),
     wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/settings.json 2>/dev/null'], 3000),
   ]);
-  const wslClaudeConfigDir = (cfgOut || '').trim() || null;
   const version = (verOut || '').trim().replace(/^Claude\s+Code\s+/i, '').replace(/^v/i, '');
   let model = '';
   try { model = JSON.parse(setOut).model || ''; } catch (_) {}
   if (modelOverride) model = modelOverride;
   const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
-  const proc = platform.cmdSpawn(['/c', 'claude-agent-acp'], {
-    env: {
-      ...process.env,
-      // Only forward a real key. Passing `''` when none is set (e.g. the GUI-
-      // launched packaged app, whose env lacks ANTHROPIC_API_KEY) made the adapter
-      // auth with an empty key instead of the signed-in subscription → "Internal
-      // error". Absent the var, it falls back to CLAUDE_CONFIG_DIR / OAuth.
-      ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
-      ...(wslClaudeConfigDir ? { CLAUDE_CONFIG_DIR: wslClaudeConfigDir } : {}),
-      // STORYBOOK_URL must survive the adapter's Windows→WSL hop, so list it in
-      // WSLENV (wsl.exe only forwards vars named there).
-      ...(sbUrl ? { STORYBOOK_URL: sbUrl, WSLENV: (process.env.WSLENV ? process.env.WSLENV + ':' : '') + 'STORYBOOK_URL' } : {}),
-      ...(modelOverride ? { ANTHROPIC_MODEL: modelOverride } : {}),
-    },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  // Per-session vars cross the Windows→WSL hop via a shell export inside the command
+  // (matches the Gemini/Codex WSL launch); a real API key (API-key users) rides
+  // WSLENV so its value isn't exposed in the process list. Subscription users need none.
+  let cmd = 'claude-agent-acp';
+  if (modelOverride) cmd = `export ANTHROPIC_MODEL="${modelOverride}"; ${cmd}`;
+  if (sbUrl) cmd = `export STORYBOOK_URL="${sbUrl}"; ${cmd}`;
+  const key = process.env.ANTHROPIC_API_KEY;
+  const env = key ? { ...process.env, WSLENV: (process.env.WSLENV ? process.env.WSLENV + ':' : '') + 'ANTHROPIC_API_KEY' } : process.env;
+  const proc = platform.nixSpawn(['bash', '-lic', cmd], { stdio: ['pipe', 'pipe', 'pipe'], cwd: sessionCwd(), env });
   return { proc, version, model };
 }
 
