@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-07-05
+
+### Changed
+- **macOS window chrome** — the logo + settings button now sit on the right side (the native traffic lights own the top-left), and the decorative corner-curve fillets around the window controls are dropped on macOS. Windows chrome is unchanged.
+
 ## [1.0.16] - 2026-07-05
 
 ### Fixed
@@ -161,7 +166,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.16...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.17...HEAD
+[1.0.17]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.17
 [1.0.16]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.16
 [1.0.15]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.15
 [1.0.14]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.14
