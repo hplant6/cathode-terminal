@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-07-05
+
+### Changed
+- Agent (ACP) errors now show the underlying error **code and detail** instead of a bare "Internal error," across the connect, spawn, and prompt paths — so agent failures can actually be diagnosed.
+
 ## [1.0.9] - 2026-07-05
 
 ### Added
@@ -123,7 +128,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.9...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.10...HEAD
+[1.0.10]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.10
 [1.0.9]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.9
 [1.0.8]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.8
 [1.0.7]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.7
