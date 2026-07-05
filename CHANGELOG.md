@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-07-05
+
+### Fixed
+- **Auto-update now downloads and installs** — the Windows installer's filename contained spaces, which GitHub rewrites to dots on upload; electron-updater then requested a non-matching (hyphenated) URL and got a **404 on every download**, so updates never installed. The installer is now named `cathode-terminal-Setup-<version>.exe` (no spaces), so the download resolves. (This — not code-signing — was why auto-update never worked.)
+
 ## [1.0.13] - 2026-07-05
 
 ### Added
@@ -143,7 +148,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.13...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.14...HEAD
+[1.0.14]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.14
 [1.0.13]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.13
 [1.0.12]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.12
 [1.0.11]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.11
