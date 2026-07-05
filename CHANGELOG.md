@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-07-05
+
+### Fixed
+- **Claude "Claude Code native binary … exists but failed to launch"** — a follow-up to the v1.0.11 WSL move: the ACP session was still handed a Windows `C:\…` working directory, which the Linux Claude Code can't `chdir` into, so it failed to launch. The session directory is now translated to its WSL `/mnt/…` path (confirmed end-to-end). Applies to every WSL-side agent.
+
 ## [1.0.11] - 2026-07-05
 
 ### Fixed
@@ -133,7 +138,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.11...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.12...HEAD
+[1.0.12]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.12
 [1.0.11]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.11
 [1.0.10]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.10
 [1.0.9]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.9
