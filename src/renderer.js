@@ -5704,6 +5704,56 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   }
 });
 
+// ── Auto-update modal (download progress bar) ─────────────────────
+(function initUpdateModal() {
+  const modal = document.getElementById('update-modal');
+  if (!modal) return;
+  const $u = (id) => document.getElementById(id);
+  const desc = $u('update-desc'), bar = $u('update-bar'), statusEl = $u('update-status');
+  const installBtn = $u('update-install'), laterBtn = $u('update-later'), closeBtn = $u('update-close');
+  let ready = false, dismissed = false;
+
+  const open  = () => { modal.classList.add('open'); dismissed = false; };
+  const close = () => { modal.classList.remove('open'); dismissed = true; };
+  const setPct = (p) => { bar.style.width = Math.max(0, Math.min(100, p || 0)) + '%'; };
+  const mb = (b) => (Number(b) / 1048576).toFixed(1) + ' MB';
+
+  ipcRenderer.on(IPC.UPDATE_DOWNLOADING, (_, info) => {
+    ready = false;
+    desc.textContent = info && info.version ? `Downloading Cathode ${info.version}…` : 'Downloading the latest version…';
+    setPct(0); statusEl.textContent = 'Starting download…';
+    installBtn.disabled = true;
+    open();
+  });
+  ipcRenderer.on(IPC.UPDATE_PROGRESS, (_, p) => {
+    if (ready) return;
+    const pct = p && p.percent != null ? p.percent : 0;
+    setPct(pct);
+    const spd = p && p.bytesPerSecond ? ` · ${mb(p.bytesPerSecond)}/s` : '';
+    statusEl.textContent = p && p.total ? `${mb(p.transferred)} / ${mb(p.total)}  (${Math.round(pct)}%)${spd}` : `${Math.round(pct)}%`;
+  });
+  ipcRenderer.on(IPC.UPDATE_DOWNLOADED, (_, info) => {
+    ready = true; setPct(100);
+    desc.textContent = info && info.version ? `Cathode ${info.version} is ready to install.` : 'Update ready to install.';
+    statusEl.textContent = 'Downloaded — restart to finish updating.';
+    installBtn.disabled = false;
+    document.getElementById('btn-settings')?.classList.add('has-update');
+    if (!dismissed) { modal.classList.add('open'); return; }   // ready while dismissed → non-intrusive toast that reopens it
+    const t = showToast('↑ Update ready — click to install', { duration: 9000 });
+    if (t && t.el) { t.el.style.cursor = 'pointer'; t.el.addEventListener('click', () => { open(); t.dismiss(); }); }
+  });
+  ipcRenderer.on(IPC.UPDATE_ERROR, (_, e) => {
+    if (!modal.classList.contains('open')) return;
+    statusEl.textContent = 'Update failed: ' + ((e && e.message) || 'unknown error');
+  });
+
+  installBtn.addEventListener('click', () => ipcRenderer.send(IPC.APP_INSTALL_UPDATE));
+  laterBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('mousedown', (e) => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) close(); });
+})();
+
 // ── Console & Network tab ─────────────────────────────────────────
 (function initConsole() {
   const listEl  = document.getElementById('console-list');

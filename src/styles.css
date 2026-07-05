@@ -391,6 +391,10 @@ html, body {
 }
 .modal-input:focus { border-color: var(--spec-text-dim); background: var(--spec-toolbar-bg); }   /* shade 1 border, shade 5 fill */
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* Auto-update modal progress bar */
+.upd-progress { height: 8px; border-radius: 999px; background: var(--spec-input-bg); overflow: hidden; margin: 16px 0 9px; }
+.upd-progress-fill { height: 100%; width: 0%; background: var(--spec-accent); border-radius: 999px; transition: width 0.2s ease; }
+.upd-status { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); min-height: 14px; margin-bottom: 4px; }
 /* App buttons: Zalando SemiExpanded uppercase (matches the title / tabs / PanelFooter), fixed md height, radius-md */
 .modal-btn-cancel, .modal-btn-confirm {
   box-sizing: border-box;

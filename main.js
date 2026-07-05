@@ -2667,11 +2667,15 @@ function getAutoUpdater() {
     _autoUpdater = require('electron-updater').autoUpdater;
     _autoUpdater.autoDownload = true;
     _autoUpdater.autoInstallOnAppQuit = true;
+    _autoUpdater.on('update-available', (info) => uiSend(IPC.UPDATE_DOWNLOADING, { version: info && info.version }));
+    _autoUpdater.on('download-progress', (p) => uiSend(IPC.UPDATE_PROGRESS, {
+      percent: p && p.percent, transferred: p && p.transferred, total: p && p.total, bytesPerSecond: p && p.bytesPerSecond,
+    }));
     _autoUpdater.on('update-downloaded', (info) => {
       updateDownloaded = info || {};
-      uiSend(IPC.UPDATE_AVAILABLE, { version: info && info.version });   // reuse the toast
+      uiSend(IPC.UPDATE_DOWNLOADED, { version: info && info.version });
     });
-    _autoUpdater.on('error', (e) => console.log('[updater]', (e && e.message) || e));
+    _autoUpdater.on('error', (e) => { console.log('[updater]', (e && e.message) || e); uiSend(IPC.UPDATE_ERROR, { message: (e && e.message) || String(e) }); });
   } catch (e) { console.log('[updater] unavailable:', (e && e.message) || e); }
   return _autoUpdater || null;
 }
@@ -2694,6 +2698,10 @@ async function startupUpdateCheck() {
 }
 // Let the toast / gear trigger the full (dialog-driven) update flow.
 ipcMain.on(IPC.APP_CHECK_UPDATES, () => { checkForAppUpdate().catch(() => {}); });
+ipcMain.on(IPC.APP_INSTALL_UPDATE, () => {
+  const up = getAutoUpdater();
+  if (up && updateDownloaded) setImmediate(() => up.quitAndInstall());
+});
 
 ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
   const act = id => () => uiSend(IPC.SETTINGS_ACTION, id);

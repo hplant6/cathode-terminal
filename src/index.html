@@ -1268,6 +1268,21 @@
   </div>
 
   <!-- ── Onboarding (first-run setup + tools tour) ── -->
+  <!-- Auto-update progress -->
+  <div id="update-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <button id="update-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Updating Cathode</div>
+      <p class="modal-desc" id="update-desc">Downloading the latest version…</p>
+      <div class="upd-progress"><div class="upd-progress-fill" id="update-bar"></div></div>
+      <div class="upd-status" id="update-status">Starting…</div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="update-later">Later</button>
+        <button class="modal-btn-confirm" id="update-install" disabled>Restart &amp; Install</button>
+      </div>
+    </div>
+  </div>
+
   <div id="onboarding" class="modal-backdrop">
     <div id="onb-panel">
       <div id="onb-header">
