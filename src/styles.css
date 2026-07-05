@@ -4527,7 +4527,7 @@ button:active { background: var(--btn-active); }
 #onb-steps { display: flex; flex-direction: column; gap: 10px; }
 .onb-step {
   border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: var(--bg-input); overflow: hidden;
+  background: var(--spec-toolbar-bg); overflow: hidden;   /* shade-5 card, visibly recessed from the shade-3 modal (was shade-3 → invisible) */
 }
 .onb-step-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
 .onb-step-icon {
