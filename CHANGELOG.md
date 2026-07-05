@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-07-05
+
+### Fixed
+- **Claude "Internal error … Claude Code process exited with code 3" in the installed app** — the Windows-side ACP adapter bundles Claude Code as a Bun-compiled `claude.exe`, and that binary **segfaults** on some machines the moment it does real work (a plain prompt → "panic: Segmentation fault", exit 3). Cathode now runs the Claude adapter **inside WSL** — like Gemini/Codex/Hermes — using Claude Code's native `~/.claude` subscription, so it no longer touches the crashing Windows binary. (The earlier empty-key change was a red herring; the real cause was the crashing bundled executable.)
+
 ## [1.0.10] - 2026-07-05
 
 ### Changed
@@ -128,7 +133,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.10...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.11...HEAD
+[1.0.11]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.11
 [1.0.10]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.10
 [1.0.9]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.9
 [1.0.8]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.8
