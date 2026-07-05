@@ -2607,9 +2607,9 @@ async function checkForAppUpdate() {
     try {
       const r = await up.checkForUpdates();
       const v = r && r.updateInfo && r.updateInfo.version;
-      if (v && v !== app.getVersion()) {
-        return info('Downloading update', `Version ${v} is downloading in the background — you'll be prompted to restart when it's ready.`);
-      }
+      // A new version → the in-app progress modal (UPDATE_DOWNLOADING) takes over;
+      // no redundant native "Downloading update" dialog.
+      if (v && v !== app.getVersion()) return;
       return info('You’re up to date', 'No new updates are available.');
     } catch (e) {
       return info('Could not check for updates', String((e && e.message) || 'Update check failed').slice(0, 300), 'warning');
