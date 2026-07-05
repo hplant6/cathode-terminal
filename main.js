@@ -1587,7 +1587,11 @@ async function launchClaudeAcp(modelOverride) {
   const proc = platform.cmdSpawn(['/c', 'claude-agent-acp'], {
     env: {
       ...process.env,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+      // Only forward a real key. Passing `''` when none is set (e.g. the GUI-
+      // launched packaged app, whose env lacks ANTHROPIC_API_KEY) made the adapter
+      // auth with an empty key instead of the signed-in subscription → "Internal
+      // error". Absent the var, it falls back to CLAUDE_CONFIG_DIR / OAuth.
+      ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
       ...(wslClaudeConfigDir ? { CLAUDE_CONFIG_DIR: wslClaudeConfigDir } : {}),
       // STORYBOOK_URL must survive the adapter's Windows→WSL hop, so list it in
       // WSLENV (wsl.exe only forwards vars named there).
@@ -1836,7 +1840,9 @@ ipcMain.on(IPC.ACP_PROMPT, async (_, { id, text } = {}) => {
     uiSend(IPC.ACP_DONE, { id, usage: (res && res.usage) || null });
   } catch (err) {
     console.error('[acp] prompt error:', err);
-    uiSend(IPC.ACP_ERROR, { id, message: err.message });
+    let m = (err && err.message) || 'Internal error';
+    if (err && err.data) { try { m += ' — ' + JSON.stringify(err.data).slice(0, 300); } catch (_) {} }   // surface the real detail behind a generic "Internal error"
+    uiSend(IPC.ACP_ERROR, { id, message: m });
   }
 });
 
@@ -2540,7 +2546,8 @@ function loadSavedApiKey() {
 }
 
 ipcMain.on(IPC.SET_API_KEY, (_, key) => {
-  process.env.ANTHROPIC_API_KEY = key || '';
+  if (key) process.env.ANTHROPIC_API_KEY = key;
+  else delete process.env.ANTHROPIC_API_KEY;   // clear, don't set '' — an empty key breaks subscription auth for spawned Claude
   try { encryptToFile(getApiKeyFile(), key || ''); } catch (e) { logErr('save api key', e); }
 });
 
