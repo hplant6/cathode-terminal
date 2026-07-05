@@ -1804,7 +1804,9 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
         return;
       }
     }
-    const { sessionId } = await conn.newSession({ cwd: sessionCwd(), mcpServers: [] });
+    // WSL-side agents (Claude/Gemini/Codex/Hermes on Windows) chdir into this cwd
+    // and fail to launch on a raw `C:\…` path — hand them the /mnt path.
+    const { sessionId } = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] });
     clearTimeout(connectTimer);
     connected = true;
     const entry = { proc, conn, sessionId };

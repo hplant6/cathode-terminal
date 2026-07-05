@@ -73,6 +73,15 @@ function claudeConfigDirArgs() {
     : ['bash', '-lc', 'echo "$HOME/.claude"'];
 }
 
+// Translate a Windows drive path to its WSL /mnt path, for handing a working
+// directory to a WSL-side agent (its ACP session cwd — Claude Code chdirs into it
+// and fails to launch if it's a raw `C:\…` path). POSIX: identity.
+function toWslPath(p) {
+  if (!IS_WIN || !p) return p;
+  const m = /^([A-Za-z]):[\\/](.*)$/.exec(p);
+  return m ? '/mnt/' + m[1].toLowerCase() + '/' + m[2].replace(/\\/g, '/') : p;
+}
+
 // ── Generic *nix runners (delegate to nixFileArgs) ────────────────
 // execFile-based: resolves stdout string, or null on error.
 function nixExecFile(wslArgs, timeout = 6000) {
@@ -337,7 +346,7 @@ function readRealScale() {
 
 module.exports = {
   homeDir,
-  nixFileArgs, cmdFileArgs, claudeConfigDirArgs,
+  nixFileArgs, cmdFileArgs, claudeConfigDirArgs, toWslPath,
   nixExecFile, nixExecInput, nixSpawn, cmdSpawn,
   checkNixEnv, resolveAgentEnv, agentVersion, agentCwd,
   gitBase,
