@@ -1547,6 +1547,16 @@ const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex'
 // advertises auth/config methods (installed but not yet set up).
 const ACP_SETUP_CMD = { hermes: 'hermes setup' };
 
+// Build a user-visible message from an ACP/JSON-RPC error, surfacing the code and
+// data payload that otherwise hide behind an opaque "Internal error".
+function acpErrText(err) {
+  if (!err) return 'Internal error';
+  let m = err.message || String(err);
+  if (err.code != null) m += ` [${err.code}]`;
+  if (err.data) { try { m += ' — ' + JSON.stringify(err.data).slice(0, 400); } catch (_) {} }
+  return m;
+}
+
 async function ensureClaudeAdapter(id) {
   let needInstall = false;
   if (!_acpAdapterVerified) {
@@ -1817,7 +1827,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     // initialize reject, which lands here; don't send a second acp-error.
     if (!errorSent) {
       errorSent = true;
-      send(IPC.ACP_ERROR, { id, message: err.message });
+      send(IPC.ACP_ERROR, { id, message: acpErrText(err) });
     }
     safeKill(proc);
   }
@@ -1826,7 +1836,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
 ipcMain.on(IPC.ACP_SPAWN, (_, { id, model, agent } = {}) => {
   spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
     console.error('[acp] spawn error:', err);
-    uiSend(IPC.ACP_ERROR, { id, message: err.message });
+    uiSend(IPC.ACP_ERROR, { id, message: acpErrText(err) });
   });
 });
 
@@ -1840,9 +1850,7 @@ ipcMain.on(IPC.ACP_PROMPT, async (_, { id, text } = {}) => {
     uiSend(IPC.ACP_DONE, { id, usage: (res && res.usage) || null });
   } catch (err) {
     console.error('[acp] prompt error:', err);
-    let m = (err && err.message) || 'Internal error';
-    if (err && err.data) { try { m += ' — ' + JSON.stringify(err.data).slice(0, 300); } catch (_) {} }   // surface the real detail behind a generic "Internal error"
-    uiSend(IPC.ACP_ERROR, { id, message: m });
+    uiSend(IPC.ACP_ERROR, { id, message: acpErrText(err) });
   }
 });
 
