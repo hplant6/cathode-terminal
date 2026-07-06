@@ -80,6 +80,14 @@ if (REMOTE_DEBUG) {
   app.commandLine.appendSwitch('remote-allow-origins', `http://127.0.0.1:${DEVTOOLS_PORT}`);
 }
 
+// macOS renders through the display's wide-gamut (P3) profile, which shifts the
+// authored sRGB shades — the near-black grays (shade 6/7) get crushed toward black
+// so selected toggles/thumbs become invisible. Force sRGB so colors match Windows.
+// (Windows already renders sRGB, so it's left untouched.)
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('force-color-profile', 'srgb');
+}
+
 // ── Persistent browser URL ────────────────────────────────────────
 function getStateFile() {
   return path.join(app.getPath('userData'), 'browser-state.json');
@@ -406,7 +414,7 @@ function createWindow() {
   if (typeof browserView.setBorderRadius === 'function') browserView.setBorderRadius(0);
   attachConsoleCapture();
   browserView.webContents.loadURL(loadLastURL()).catch(() => {});
-  // Style the Working File page's scrollbar to match the app — shade 7 track + arrow buttons, shade 3 thumb (the grab handle)
+  // Style the Browser page's scrollbar to match the app — shade 7 track + arrow buttons, shade 3 thumb (the grab handle)
   const WF_SCROLLBAR_CSS = [
     '::-webkit-scrollbar { width: 16px; height: 16px; }',
     '::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: #08090C; }',
@@ -2947,7 +2955,7 @@ function getActivePickView() {
 function activePageUrl() {
   try { return getActivePickView()?.webContents.getURL() || ''; } catch (_) { return ''; }
 }
-// Human label for where the active page lives — the Working File or a specific Storybook instance.
+// Human label for where the active page lives — the Browser or a specific Storybook instance.
 function pageSource() {
   try {
     if (rightPanelMode === 'storybook' && activeSbId) {
@@ -2956,7 +2964,7 @@ function pageSource() {
       return 'the Storybook';
     }
   } catch (_) {}
-  return "the app's Working File";
+  return "the app's Browser";
 }
 
 // ── IPC: element picker ───────────────────────────────────────────

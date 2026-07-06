@@ -2357,8 +2357,10 @@ function acpScrollEnd(s) {
     s._scrollScheduled = false;
     acpTrim(s);
     // Only follow new content when the user is at/near the bottom, so a message
-    // pinned to the middle isn't yanked away by the streaming reply.
-    if (s.msgsEl._stick !== false) s.msgsEl.lastElementChild?.scrollIntoView({ block: 'end' });
+    // pinned to the middle isn't yanked away by the streaming reply. Scroll to the
+    // TRUE bottom (not the last child's edge) so the container's bottom padding
+    // clears the 52px edge fade — otherwise new messages land inside it and fade out.
+    if (s.msgsEl._stick !== false) s.msgsEl.scrollTop = s.msgsEl.scrollHeight;
     updateMsgsFade(s.msgsEl);
   });
 }
@@ -3861,7 +3863,7 @@ function listDevProjects() {
   } catch (_) { return []; }   // never let a slow/odd home dir break module load
 }
 function startDevServer(dir) {
-  sendToAgent(`Start the local dev server for the project at "${dir}". Detect the project type (Node/Vite/Next/etc.) and the correct dev command, pick a free localhost port, start it, and reply with the exact http://localhost:<port> URL so I can open it in the Working File. Just start it — don't ask me to confirm the folder.`);
+  sendToAgent(`Start the local dev server for the project at "${dir}". Detect the project type (Node/Vite/Next/etc.) and the correct dev command, pick a free localhost port, start it, and reply with the exact http://localhost:<port> URL so I can open it in the Browser. Just start it — don't ask me to confirm the folder.`);
 }
 
 const wfPromptIn   = document.getElementById('wf-prompt-in');
@@ -3910,19 +3912,19 @@ wfTabs.forEach(t => t.addEventListener('click', () => setWfTab(t.dataset.tab)));
 function wfPromptGo() {
   const v = wfPromptIn.value.trim();
   if (!v) { wfPromptIn.focus(); return; }
-  sendToAgent(`Build a new web app: ${v}. Use the Cathode design system / Storybook components where they fit, scaffold it (a Vite + React app is fine), start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Working File. Just build and run it — don't ask me to confirm.`);
+  sendToAgent(`Build a new web app: ${v}. Use the Cathode design system / Storybook components where they fit, scaffold it (a Vite + React app is fine), start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Browser. Just build and run it — don't ask me to confirm.`);
   wfPromptIn.value = '';
 }
 function wfFigmaGo() {
   const v = wfFigmaIn.value.trim();
   if (!v) { wfFigmaIn.focus(); return; }
-  sendToAgent(`Build a web app from this Figma design: ${v}. Use the Figma MCP to read the frames, recreate them with the Cathode design system / Storybook components, start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Working File.`);
+  sendToAgent(`Build a web app from this Figma design: ${v}. Use the Figma MCP to read the frames, recreate them with the Cathode design system / Storybook components, start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Browser.`);
   wfFigmaIn.value = '';
 }
 function wfCloneGo() {
   const repo = wfRepo.value.trim();
   if (!repo) { wfRepo.focus(); return; }
-  sendToAgent(`Clone the repository at ${repo} into my project folder, install its dependencies, and start its dev server on a free, open localhost port. When it's running, reply with the exact http://localhost:<port> URL so I can open it here in the Working File.`);
+  sendToAgent(`Clone the repository at ${repo} into my project folder, install its dependencies, and start its dev server on a free, open localhost port. When it's running, reply with the exact http://localhost:<port> URL so I can open it here in the Browser.`);
   wfRepo.value = '';
 }
 document.getElementById('wf-prompt-go')?.addEventListener('click', wfPromptGo);
@@ -7841,7 +7843,7 @@ let openOnboarding = null;
   // (its icon is also cloned from that element so the cards match the app).
   const TOOL_SECTIONS = [
     { title: 'Workspace', tools: [
-      { n: 'Working File', d: 'Target a live site or local dev server to inspect & edit with your agent.', sel: '.view-tab[data-view="project"]' },
+      { n: 'Browser', d: 'Target a live site or local dev server to inspect & edit with your agent.', sel: '.view-tab[data-view="project"]' },
       { n: 'Storybook', d: 'Pick a design-system component to insert at a targeted location on the page.', sel: '.view-tab[data-view="storybook"]' },
       { n: 'Usage', d: 'Context-window fill and your 5-hour / weekly Claude limits as live gauges.', sel: '#btn-usage' },
     ]},

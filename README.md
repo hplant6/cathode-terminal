@@ -49,7 +49,7 @@ Everything Cathode gives you, straight from the in-app **Meet the tools** tour.
 
 | Tool | What it does |
 | --- | --- |
-| **Working File** | Target a live site or local dev server to inspect & edit with your agent. |
+| **Browser** | Target a live site or local dev server to inspect & edit with your agent. |
 | **Storybook** | Pick a design-system component to insert at a targeted location on the page. |
 | **Usage** | Context-window fill and your 5-hour / weekly Claude limits as live gauges. |
 

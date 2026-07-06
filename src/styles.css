@@ -1008,7 +1008,6 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 #btn-new-pty:hover, #btn-restart:hover { background: var(--spec-structural); color: var(--spec-text); }
-#btn-restart { margin-right: 8px; }   /* separate the restart button from the AUDIT cluster */
 #btn-manage-profiles { flex-shrink: 0; width: 26px; height: 26px; font-size: 12px; color: var(--text-dim); }
 
 /* ── PTY sessions ── */
@@ -1075,7 +1074,7 @@ html, body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 14px 16px;
+  padding: 16px 14px 52px;   /* bottom clearance = edge-fade height, so new messages sit above the fade */
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1665,6 +1664,13 @@ html, body {
 .acp-status.working:hover .acp-status-text,
 .acp-status.working:hover .acp-status-spec { display: none; }
 .acp-status.working:hover .acp-status-stop { display: inline-flex; }
+/* Working → the whole bar goes green (success-badge palette: green text + dark-green fill) */
+.acp-status.working::before { background: rgba(78, 201, 176, 0.12); }
+.acp-status.working .acp-status-text { color: var(--success); }
+.acp-status.working .acp-status-spec li { background: linear-gradient(var(--success), rgba(78, 201, 176, 0.2)); }
+/* Hover the working bar (click = stop) → the whole bar goes red */
+.acp-status.working:hover::before { background: rgba(244, 71, 71, 0.12); }
+.acp-status.working:hover .acp-status-stop { color: var(--danger); }
 /* Notification-sound toggle — right-aligned, clear of the floating toolbar */
 .notif-toggle {
   margin-left: auto;

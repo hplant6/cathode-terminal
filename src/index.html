@@ -755,7 +755,7 @@
         <div id="wf-empty">
           <div class="wf-empty-inner">
             <h2 class="wf-title">Target a project to work on</h2>
-            <p class="wf-desc">Point the Working File at a <strong>live site</strong> or a <strong>local dev server</strong> — then use the tools and your agent to inspect, edit, and iterate on it.</p>
+            <p class="wf-desc">Point the Browser at a <strong>live site</strong> or a <strong>local dev server</strong> — then use the tools and your agent to inspect, edit, and iterate on it.</p>
 
             <div class="wf-or"><span>Start a dev server</span></div>
 
@@ -781,7 +781,7 @@
             <div class="wf-panel">
               <div class="wf-tabpanel" data-panel="folder">
                 <div class="wf-headline">pick a local project and run it.</div>
-                <div class="wf-subdesc">Choose a recent project or browse for a folder on your machine. Cathode opens it in the Working File so you can inspect and edit it with your agent.</div>
+                <div class="wf-subdesc">Choose a recent project or browse for a folder on your machine. Cathode opens it in the Browser so you can inspect and edit it with your agent.</div>
                 <div class="wf-folder-cols">
                   <div class="wf-folder-recent">
                     <div class="wf-col-label">Select a recent project</div>
@@ -795,7 +795,7 @@
               </div>
               <div class="wf-tabpanel" data-panel="prompt" hidden>
                 <div class="wf-headline">describe it and generate it</div>
-                <div class="wf-subdesc">Describe the app you want and your agent scaffolds it from scratch. It starts the dev server and opens the result here in the Working File.</div>
+                <div class="wf-subdesc">Describe the app you want and your agent scaffolds it from scratch. It starts the dev server and opens the result here in the Browser.</div>
                 <div class="wf-panel-form">
                   <input id="wf-prompt-in" type="text" placeholder="Describe the app to build…" spellcheck="false" />
                   <button id="wf-prompt-go">Generate</button>
@@ -811,7 +811,7 @@
               </div>
               <div class="wf-tabpanel" data-panel="repo" hidden>
                 <div class="wf-headline">clone a repo and run it</div>
-                <div class="wf-subdesc">Paste a Git URL and your agent clones the repo, installs its dependencies, and starts the dev server. When it's live, the app opens in the Working File.</div>
+                <div class="wf-subdesc">Paste a Git URL and your agent clones the repo, installs its dependencies, and starts the dev server. When it's live, the app opens in the Browser.</div>
                 <div class="wf-panel-form">
                   <input id="wf-repo" type="text" placeholder="https://github.com/owner/repo.git" spellcheck="false" />
                   <button id="wf-clone-go">Clone &amp; run</button>
@@ -867,7 +867,7 @@
         </div>
       </div>
 
-      <!-- Console & Network — captured from the Working File page -->
+      <!-- Console & Network — captured from the Browser page -->
       <div id="console-panel">
         <div id="console-toolbar">
           <div id="console-filters">
@@ -883,7 +883,7 @@
           </div>
         </div>
         <div id="console-list"></div>
-        <div id="console-empty">No output captured yet.<br>Interact with the page in <b>Working File</b> — console logs, errors, and failed requests appear here.</div>
+        <div id="console-empty">No output captured yet.<br>Interact with the page in <b>Browser</b> — console logs, errors, and failed requests appear here.</div>
       </div>
 
       <!-- Changes / Diff — git working-tree diff of the project -->

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.24] - 2026-07-06
+
+### Fixed
+- **macOS: dark grays rendering too dark** — forced the sRGB color profile on macOS so the near-black shades (selected toggles/thumbs, panel backgrounds) render as authored, matching Windows. macOS was color-managing through the display's wide-gamut profile and crushing them toward black.
+- **Chat messages landing inside the bottom fade** — new messages now scroll to the true bottom with clearance equal to the edge-fade height, so they sit fully visible above the fade instead of dimming out.
+- **Uneven gap** between the restart button and the AUDIT dropdown — removed a stray margin so the header row is evenly spaced.
+
+### Changed
+- **"Working File" renamed to "Browser"** throughout the UI (empty states, onboarding, tool tour, agent prompts) to match the tab name.
+- **Status bar is now stateful** — the whole bar turns green while the agent is working (success palette) and red on hover (the click-to-stop target).
+
 ## [1.0.23] - 2026-07-06
 
 ### Added
