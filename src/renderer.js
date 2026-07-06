@@ -2323,9 +2323,14 @@ function acpSetStatus(s, state) {
 // banner resting at the very top (startup) is never faded.
 function updateMsgsFade(el) {
   if (!el) return;
+  const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
   el.classList.toggle('fade-top', el.scrollTop > 6);
-  el.classList.toggle('fade-bot', el.scrollHeight - el.scrollTop - el.clientHeight > 6);
-  el._stick = el.scrollHeight - el.scrollTop - el.clientHeight < 80;   // near bottom → keep following
+  // Only fade the bottom once you've scrolled UP past the fade band (the 52px mask +
+  // margin). Near the bottom the fade stays OFF, so the newest messages are never
+  // dimmed by it — even if a layout reflow (System/Usage panels toggling) leaves the
+  // scroll a few px short of the exact bottom.
+  el.classList.toggle('fade-bot', fromBottom > 60);
+  el._stick = fromBottom < 80;   // near bottom → keep following
 }
 
 // Cap the rendered chat at ACP_MAX_MSGS nodes so long sessions stay bounded
@@ -2671,6 +2676,7 @@ function acpAddUserMsg(s, text, images = [], chips = null) {
 }
 
 function acpAppendChunk(s, text, messageId) {
+  if (text) s._turnHadOutput = true;   // real agent text → this turn produced visible output
   if (s.streamEl && messageId && s.streamMsgId && s.streamMsgId !== messageId) {
     acpFinalizeStream(s);
   }
@@ -2713,6 +2719,7 @@ function makeToolCard(name) {
 }
 
 function acpAddToolCard(s, update) {
+  s._turnHadOutput = true;   // a tool card is visible output
   acpFinalizeStream(s);
   const name = update.title || update.toolCallId || 'tool';
   const { card, header, statusEl, bodyEl } = makeToolCard(name);
@@ -2758,6 +2765,26 @@ function acpAddTermCard(s, { termId, title }) {
 }
 
 function handleAcpUpdate(s, update) {
+  // Keep the "Working…" banner honest. Normally the turn stays "thinking" from send
+  // until ACP_DONE, but on some platforms the adapter emits trailing updates AFTER the
+  // turn resolves to "ready" — so new agent output / a new tool call re-lights the
+  // banner. A settle timer (reset by each trailing update) returns it to "ready" when
+  // the trailing activity goes quiet, so it can't get stuck on if no ACP_DONE follows.
+  const kind = update.sessionUpdate;
+  const isActivity = kind === 'agent_message_chunk' || kind === 'tool_call' || kind === 'tool_call_update';
+  if (isActivity && s.status !== 'closed' && s.status !== 'error') {
+    if (s.status !== 'thinking' && (kind === 'agent_message_chunk' || kind === 'tool_call')) {
+      acpSetStatus(s, 'thinking');
+      s._trailingWork = true;   // re-lit after a resolved turn → guard against sticking
+    }
+    if (s._trailingWork) {
+      clearTimeout(s._trailingTimer);
+      s._trailingTimer = setTimeout(() => {
+        s._trailingWork = false;
+        if (s.status === 'thinking') acpSetStatus(s, 'ready');
+      }, 3000);
+    }
+  }
   switch (update.sessionUpdate) {
     case 'agent_message_chunk':
       if (update.content?.type === 'text') acpAppendChunk(s, update.content.text, update.messageId);
@@ -2829,7 +2856,18 @@ ipcRenderer.on(IPC.ACP_UPDATE, (_, { id, update }) => {
 ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') {
+    clearTimeout(s._trailingTimer); s._trailingWork = false;   // real turn-end supersedes the trailing-work guard
     acpFinalizeStream(s); acpSetStatus(s, 'ready');
+    // A slash command that returned no chat text (e.g. /usage only refreshes the gauges)
+    // would otherwise look like nothing happened — leave a small acknowledgement.
+    if (s._sentSlash && !s._turnHadOutput) {
+      const note = document.createElement('div');
+      note.className = 'acp-cmd-note';
+      note.textContent = `Ran ${s._sentSlash} — no text response (it updates state; check the matching panel).`;
+      s.msgsEl.appendChild(note);
+      acpScrollEnd(s);
+    }
+    s._sentSlash = null;
     if (s._pendingNotif) { Notif.play(s._pendingNotif); s._pendingNotif = null; }   // one chime per turn
     // Total session tokens across turns (agents like Hermes report per-turn usage).
     const t = usage && typeof usage.totalTokens === 'number' ? usage.totalTokens
@@ -5769,6 +5807,13 @@ function routeToActiveSession(text, display = text, images = [], chips = null) {
   if (!s) return false;
   if (s.type === 'acp') {
     acpAddUserMsg(s, display, images, chips);
+    clearTimeout(s._trailingTimer); s._trailingWork = false;   // a real new turn — ACP_DONE will govern the banner
+    // Track slash-command turns so a command that returns no chat output (e.g. /usage
+    // just refreshes the usage gauges) still gets a visible acknowledgement.
+    const firstWord = (text || '').trim().split(/\s+/)[0];
+    const cmds = (Array.isArray(s.availableCommands) && s.availableCommands.length) ? s.availableCommands : SLASH_COMMANDS;
+    s._sentSlash = cmds.some(c => c.cmd === firstWord) ? firstWord : null;
+    s._turnHadOutput = false;
     acpSetStatus(s, 'thinking');
     ipcRenderer.send(IPC.ACP_PROMPT, { id: activeId, text });
   } else {

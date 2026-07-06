@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.25] - 2026-07-06
+
+### Fixed
+- **New chat messages no longer dimmed by the bottom fade** — the bottom edge-fade now only appears once you've scrolled up past it, so the newest messages stay crisp regardless of split size, fullscreen, or the System/Usage panels reflowing the chat height.
+- **Status banner reflects trailing agent activity** — if the agent keeps emitting after a turn resolves (seen on macOS), the banner re-lights "Working…" and auto-settles back to "Ready" so it can't get stuck.
+- **Storybook URL clear (✕) button** was rendering as a full-size pill (a broad `.wf-panel-form button` rule outranked it) — scoped so it stays a small inline button.
+- **Inline `code` chips were unreadable in light themes** — pinned their text color to the token matched to the chip's own background.
+
+### Added
+- **Slash-command acknowledgement** — a command that returns no chat output (e.g. `/usage`, which only refreshes the usage gauges) now leaves a small "✓ Ran /usage — no text response" note instead of appearing to do nothing.
+
 ## [1.0.24] - 2026-07-06
 
 ### Fixed

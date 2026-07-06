@@ -1371,6 +1371,14 @@ html, body {
 }
 @keyframes toast-spin { to { transform: rotate(360deg); } }
 .acp-msg-text { white-space: pre-wrap; }
+/* Subtle acknowledgement for a slash command that produced no chat output */
+.acp-cmd-note {
+  align-self: flex-start;
+  font-family: var(--font-mono); font-size: 11px; font-style: italic;
+  color: var(--spec-text-dim);
+  padding: 2px 2px;
+}
+.acp-cmd-note::before { content: '✓ '; color: var(--success); font-style: normal; }
 /* Fenced code blocks in chat replies (Monaco-colorized; falls back to plain-but-styled) */
 .acp-code {
   position: relative;
@@ -1398,6 +1406,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.92em;
   background: var(--spec-input-bg);          /* shade 7 */
+  color: var(--spec-text);                   /* pair with the chip's own bg, not the bubble's inherited text (unreadable in light themes) */
   border: 1px solid var(--spec-structural);
   border-radius: 4px;
   padding: 0 4px;
@@ -3603,14 +3612,15 @@ html, body {
 }
 .wf-panel-form input:focus { border-color: var(--spec-text-dim); }   /* shade 1 */
 .wf-panel-form input::placeholder { color: var(--text-dim); }
-.wf-panel-form button {
+.wf-panel-form > .clearable { flex: 1; min-width: 0; }   /* the input's wrap fills the row (input has flex:1 inside) */
+.wf-panel-form > button {   /* direct child only — not the injected .input-clear inside the .clearable wrap */
   flex-shrink: 0; width: 150px; height: auto; padding: 0;   /* fixed width → all tab buttons + flex inputs match */
   background: var(--spec-accent); border: none; border-radius: var(--radius-md);
   color: #fff; cursor: pointer; white-space: nowrap;
   font-family: var(--font-title); font-stretch: 112.5%; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
   transition: background 0.12s;
 }
-.wf-panel-form button:hover { background: var(--spec-accent-dark); }
+.wf-panel-form > button:hover { background: var(--spec-accent-dark); }
 /* Framework combobox — styled dropdown of popular frameworks that still takes free text */
 .sb-fw-combo { position: relative; flex: 1; min-width: 0; display: flex; gap: 0; }
 .sb-fw-combo input { height: 36px; border-radius: var(--radius-md) 0 0 var(--radius-md); }   /* round left only; right border = divider */
