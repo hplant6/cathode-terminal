@@ -1338,6 +1338,27 @@ function queuePtyOut(id, data) {
   if (!ptyFlushTimer) ptyFlushTimer = setTimeout(flushPtyOut, 16);
 }
 
+// Claude Code gates each new folder behind an interactive "trust this folder?"
+// prompt. In a PTY that prompt blocks forever (the ACP/chat path auto-bypasses it,
+// but the raw terminal view runs interactive `claude`). The user explicitly pointed
+// Cathode at this project, so pre-accept trust for its cwd in ~/.claude.json — the
+// same thing choosing "Yes, I trust this folder" would do. Runs in the nix env
+// (WSL on Windows / native on macOS+Linux) where that config actually lives.
+async function ensureClaudeTrusted(dir) {
+  if (!dir) return;
+  try {
+    const script =
+      "const fs=require('fs'),os=require('os'),p=os.homedir()+'/.claude.json';" +
+      "let j={};try{j=JSON.parse(fs.readFileSync(p,'utf8'))}catch(e){}" +
+      "j.projects=j.projects||{};const k=" + JSON.stringify(dir) + ";" +
+      "j.projects[k]=j.projects[k]||{};" +
+      "if(j.projects[k].hasTrustDialogAccepted!==true){j.projects[k].hasTrustDialogAccepted=true;" +
+      "fs.writeFileSync(p,JSON.stringify(j,null,2));}";
+    const b64 = Buffer.from(script).toString('base64');
+    await wslExecFile(['bash', '-lic', `node -e "eval(Buffer.from(process.argv[1],'base64').toString())" ${b64}`], 6000);
+  } catch (e) { console.log('[trust] ensureClaudeTrusted failed:', (e && e.message) || e); }
+}
+
 async function spawnPty(id, command = 'claude') {
   // Kill-before-spawn: a stray double PTY_SPAWN for a live id (no kill first)
   // would orphan the previous ConPTY — its onData/onExit ownership guards then
@@ -1348,6 +1369,9 @@ async function spawnPty(id, command = 'claude') {
   try {
     const pty  = require('node-pty');
     const base = command.trim().split(/\s+/)[0].replace(/.*\//, '');
+    // Interactive `claude` in the terminal view would otherwise block on the
+    // "trust this folder?" prompt — pre-accept trust for the session cwd first.
+    if (base === 'claude') await ensureClaudeTrusted(platform.toWslPath(sessionCwd()));
     const env  = DUAL_ENV_BINS.has(base) ? await resolveAgentEnv(base) : 'wsl';
     const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
     let proc;

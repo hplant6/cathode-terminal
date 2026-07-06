@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.22] - 2026-07-06
+
+### Fixed
+- **Terminal view no longer hangs on "trust this folder?"** — switching a Claude session to the terminal view spawns interactive `claude`, which blocked forever on Claude Code's first-run workspace-trust prompt. Cathode now pre-accepts trust for the session's folder in `~/.claude.json` before launching (the chat/ACP path already bypasses this).
+
 ## [1.0.21] - 2026-07-06
 
 ### Fixed
