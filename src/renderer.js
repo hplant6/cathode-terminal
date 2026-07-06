@@ -2696,6 +2696,16 @@ function handleAcpUpdate(s, update) {
         if (sessions.get(activeId) === s) refreshUsage();
       }
       break;
+    case 'available_commands_update':
+      // The session advertises which slash commands actually work in this headless
+      // ACP session — CLI/TUI-only ones (/help, /login, /doctor, /exit…) are simply
+      // absent. Drive the slash menu from this so a picked command really executes
+      // (sending the "/name" as prompt text is the correct ACP invocation) instead
+      // of the model just describing a command the session can't run.
+      s.availableCommands = (update.availableCommands || [])
+        .map(c => ({ cmd: '/' + String(c.name || '').replace(/^\//, ''), desc: c.description || '' }))
+        .filter(c => c.cmd.length > 1);
+      break;
   }
 }
 
@@ -6697,25 +6707,17 @@ function autoResize(el) {
 }
 
 // ── Slash command menu ────────────────────────────────────────────
+// Fallback list, used only until (or unless) the ACP session reports its real
+// commands via `available_commands_update` (see handleAcpUpdate). It holds ONLY
+// commands that dispatch in a headless SDK/ACP session — the interactive-CLI-only
+// ones (/help, /login, /logout, /doctor, /exit, /init, /model, /vim, /status…) are
+// deliberately excluded because they do nothing here and the model would just
+// describe them.
 const SLASH_COMMANDS = [
-  { cmd: '/help',          desc: 'Show help and available commands' },
-  { cmd: '/clear',         desc: 'Clear conversation history' },
-  { cmd: '/compact',       desc: 'Compact conversation (add optional instructions)' },
-  { cmd: '/cost',          desc: 'Show token usage and cost for this session' },
-  { cmd: '/doctor',        desc: 'Check Claude Code installation health' },
-  { cmd: '/exit',          desc: 'Exit Claude Code' },
-  { cmd: '/init',          desc: 'Initialize CLAUDE.md in current project' },
-  { cmd: '/login',         desc: 'Sign in to Anthropic' },
-  { cmd: '/logout',        desc: 'Sign out from Anthropic' },
-  { cmd: '/memory',        desc: 'Edit CLAUDE.md memory files' },
-  { cmd: '/model',         desc: 'Set or view the AI model' },
-  { cmd: '/permissions',   desc: 'Manage tool permissions' },
-  { cmd: '/pr_comments',   desc: 'View comments on the current pull request' },
-  { cmd: '/release_notes', desc: 'Show Claude Code release notes' },
-  { cmd: '/review',        desc: 'Run a code review on recent changes' },
-  { cmd: '/status',        desc: 'Show account and billing status' },
-  { cmd: '/vim',           desc: 'Toggle vim keybindings mode' },
-  { cmd: '/bug',           desc: 'Report a bug to Anthropic' },
+  { cmd: '/compact',  desc: 'Compact conversation (add optional instructions)' },
+  { cmd: '/context',  desc: 'Show the current context-window usage' },
+  { cmd: '/usage',    desc: 'Show token usage and limits' },
+  { cmd: '/review',   desc: 'Run a code review on recent changes' },
 ];
 
 // ── Saved prompts ─────────────────────────────────────────────────
@@ -6869,7 +6871,14 @@ function showSlashMenu(query) {
   slashMenuView = 'commands';
   const entry = getSavedPromptsEntry();
   const savedMatches = entry.cmd.startsWith(query);
-  const filtered = SLASH_COMMANDS.filter(c => c.cmd.startsWith(query));
+  // Prefer the active ACP session's advertised commands (the ones that actually run
+  // headless); fall back to the built-in list only if the session hasn't reported any.
+  const activeSess = sessions.get(activeId);
+  const commandSource = (activeSess && activeSess.type === 'acp'
+      && Array.isArray(activeSess.availableCommands) && activeSess.availableCommands.length)
+    ? activeSess.availableCommands
+    : SLASH_COMMANDS;
+  const filtered = commandSource.filter(c => c.cmd.startsWith(query));
   if (!savedMatches && !filtered.length) { hideSlashMenu(); return; }
   const allItems = savedMatches ? [entry, ...filtered] : filtered;
   slashMenu.innerHTML = '';

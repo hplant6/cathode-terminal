@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-07-06
+
+### Fixed
+- **Slash commands now execute** instead of being described by the model. The menu was a hardcoded list of Claude Code *CLI* commands (`/help`, `/login`, `/doctor`, `/cost`…) that do nothing in a headless ACP session, so sending them just prompted the model to explain them. The menu is now driven by the session's real `available_commands_update` (verified: the adapter advertises 27 genuinely-dispatchable commands like `/compact`, `/context`, `/usage`, `/review`, `/verify`), and picking one runs it.
+
 ## [1.0.20] - 2026-07-06
 
 ### Added
