@@ -925,12 +925,13 @@ html, body {
 .pty-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 40px;
-  max-width: 160px;
-  flex: 1 1 100px;
+  gap: 5px;               /* kebab · name · close */
+  min-width: 0;
+  max-width: 240px;
+  flex: 0 1 auto;         /* size to content so full names (e.g. "Claude Code") aren't clipped */
+  width: auto;
   height: 41px;
-  padding: 0 14px;
+  padding: 0 6px 0 0;     /* no left padding — kebab hugs the tab's left edge */
   background: transparent;
   border: 2px solid var(--spec-toolbar-bg);   /* shade-5 outline (inactive) */
   border-bottom: none;
@@ -943,7 +944,7 @@ html, body {
 .pty-tab.active { background: var(--spec-toolbar-bg); border-color: var(--spec-toolbar-bg); }   /* solid shade-5 */
 
 .pty-tab-name {
-  flex: 1;
+  flex: 0 1 auto;   /* size to the text; only ellipsize if it hits the tab's max-width */
   font-size: 10px;
   color: var(--spec-text-dim);   /* shade 1 (inactive) */
   overflow: hidden;
@@ -1007,6 +1008,7 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 #btn-new-pty:hover, #btn-restart:hover { background: var(--spec-structural); color: var(--spec-text); }
+#btn-restart { margin-right: 8px; }   /* separate the restart button from the AUDIT cluster */
 #btn-manage-profiles { flex-shrink: 0; width: 26px; height: 26px; font-size: 12px; color: var(--text-dim); }
 
 /* ── PTY sessions ── */
@@ -4380,6 +4382,10 @@ button:active { background: var(--btn-active); }
    padded/spaced (Chromium won't let you style a native select popup). */
 .ct-select { position: relative; width: 100%; }
 .ct-select > select { display: none; }
+/* These modal selects are always routed through the custom .ct-select dropdown, so the
+   raw <select> must never show alongside it — hide it explicitly (the class sits on both
+   the native element and its wrap; this only matches the <select>). */
+select.tabs-add-select-field { display: none; }
 /* Canonical dropdown — spec style (shade-4 blob button, shade-7 menu) shared app-wide */
 .ct-select-btn {
   width: 100%; box-sizing: border-box;
@@ -4524,18 +4530,34 @@ button:active { background: var(--btn-active); }
   display: flex; padding: 0 24px 14px; flex-shrink: 0;
   border-bottom: 1px solid var(--border);
 }
+/* Design-system sliding-thumb toggle (matches #usage-view-toggle / the chat·terminal switch) */
 .onb-seg {
-  display: inline-flex; gap: 2px; padding: 3px;
-  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-pill);
+  position: relative;
+  display: inline-grid; grid-template-columns: 1fr 1fr;   /* equal halves so the thumb aligns */
+  padding: 2px;
+  background: var(--spec-black);        /* shade 8 track */
+  border: none; border-radius: 5px;
 }
+.onb-seg-thumb {
+  position: absolute; top: 2px; bottom: 2px; left: 2px; right: 50%;
+  background: var(--spec-input-bg);     /* shade 7 thumb */
+  border-radius: 3px;
+  transition: left 0.34s cubic-bezier(0.45,0.05,0.2,1), right 0.34s cubic-bezier(0.45,0.05,0.2,1);
+  pointer-events: none;
+}
+.onb-seg:has(.onb-tab[data-tab="tools"].active) .onb-seg-thumb { left: 50%; right: 2px; }
 .onb-tab {
+  position: relative; z-index: 1;       /* text rides above the thumb */
   width: auto; height: auto; white-space: nowrap;
   background: transparent; border: none; cursor: pointer;
-  padding: 6px 16px; font-size: 12px; font-weight: 600; color: var(--text-dim);
-  border-radius: var(--radius-pill); transition: background 0.12s, color 0.12s;
+  padding: 5px 16px;
+  font-family: var(--font-title); font-stretch: 112.5%;   /* Zalando SemiExpanded, UPPER */
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--spec-text-faint);        /* inactive → shade 2 */
+  border-radius: 3px; transition: color 0.18s;
 }
-.onb-tab:hover { color: var(--text); }
-.onb-tab.active { background: var(--accent-dim); color: var(--accent); }
+.onb-tab:hover  { background: transparent; color: var(--spec-text-dim); }   /* no bg change (override global button:hover) */
+.onb-tab.active { color: var(--spec-text-dim); }   /* active text → shade 1 (bg is the sliding thumb) */
 #onb-body { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px 24px; }
 .onb-section-intro { font-size: 12.5px; line-height: 1.55; color: var(--text-dim); margin-bottom: 16px; }
 
@@ -4606,7 +4628,8 @@ button:active { background: var(--btn-active); }
 .onb-tool-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .onb-tool {
   display: flex; align-items: flex-start; gap: 12px; padding: 14px; cursor: default;
-  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--spec-toolbar-bg);   /* shade-5 card, visibly recessed from the modal (was --bg-input → invisible) */
+  border: 1px solid var(--border); border-radius: var(--radius-md);
 }
 .onb-tool-icon { flex-shrink: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
 .onb-tool-icon svg, .onb-tool-icon img { width: 22px; height: 22px; }

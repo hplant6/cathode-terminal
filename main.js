@@ -1302,7 +1302,7 @@ function sessionCwd() { return currentProjectDir || homeDir(); }
 ipcMain.on(IPC.SET_PROJECT_DIR, (_, { dir } = {}) => { currentProjectDir = dir || ''; });
 
 // ── Agent runtime environment (WSL vs Windows vs native) ──────────
-// Most tools (claude/aider/llm) run in WSL on Windows. Gemini/Codex may be
+// Most tools (claude/hermes) run in WSL on Windows. Gemini/Codex may be
 // installed via *Windows* npm instead, so we detect where each binary lives.
 // On macOS/Linux there is no split — agents run natively. resolveAgentEnv,
 // agentVersion (Windows cmd.exe versions) and agentCwd live in the platform
@@ -1359,7 +1359,7 @@ async function spawnPty(id, command = 'claude') {
         cwd: winCwd(), env: { ...process.env, ...(sbUrl ? { STORYBOOK_URL: sbUrl } : {}) },
       });
     } else {
-      // Prepend pip/pipx user-install dir so tools like aider are found
+      // Prepend the user-local bin dir so pip/pipx/uv-installed tools are found
       const wrappedCmd = `export PATH="$HOME/.local/bin:$PATH";${sbUrl ? ` export STORYBOOK_URL="${sbUrl}";` : ''} ${command}`;
       const { file, args } = platform.nixFileArgs(['bash', '-lic', wrappedCmd]);
       proc = pty.spawn(file, args, {

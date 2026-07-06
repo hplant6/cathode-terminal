@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.20] - 2026-07-06
+
+### Added
+- **macOS logo curve** — restored the concave corner-curve on the left edge of the logo/settings seat, which now spans the window corner and contains the traffic lights.
+
+### Changed
+- **Agent tabs** — the kebab menu now leads the title (⋮ · name · ✕), tabs size to their content so full names like "Claude Code" are never clipped, and left padding is removed so the kebab hugs the edge.
+- **Removed Aider and LLM CLI** — the agent lineup is now the four ACP-capable agents: Claude Code, OpenAI Codex CLI, Gemini CLI, and Hermes.
+- **Onboarding** — "Meet the tools" cards regained their recessed card background, and the Setup / Meet-the-tools switch now uses the design-system sliding-thumb toggle.
+- **About modal** — attribution updated to "by Hplant6".
+
+### Fixed
+- **Duplicate dropdown** — the Edit Tabs and MCP Connections modals no longer show a raw `<select>` stacked behind the styled custom dropdown.
+- **Restart / new-session buttons** no longer bleed through the tool panels (Eyedropper, etc.); kept the spacing from the AUDIT cluster.
+
 ## [1.0.19] - 2026-07-06
 
 ### Changed

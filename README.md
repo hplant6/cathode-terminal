@@ -1,9 +1,12 @@
 <div align="center">
-  <img src="icon.png" width="128" alt="Cathode Terminal" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/cathode-logo.svg" />
+    <img src="docs/cathode-logo-light.svg" width="360" alt="Cathode Terminal" />
+  </picture>
   <h1>Cathode Terminal</h1>
   <p><strong>A split chat + browser dev tool for AI coding agents.</strong></p>
   <p>
-    Pair Claude Code, Codex, Gemini, Aider, LLM, or Hermes with an embedded browser and
+    Pair Claude Code, Codex, Gemini, or Hermes with an embedded browser and
     point them at live pages — inspect elements, pick components, capture screenshots,
     and hand context straight to your agent.
   </p>
@@ -15,15 +18,19 @@
 
 ---
 
+## Why Cathode?
+
+I built Cathode Terminal out of sheer frustration with current AI coding tools. Translating visual intuition and HTML structure into endless text prompts was completely draining my creative energy. Cathode is designed to fix that: **it requires less typing while delivering much higher precision to your AI agents.** By eliminating design drift, enforcing strict UI consistency, and offering clear visibility into your daily limits, Cathode accelerates your workflow — helping you ship production-ready code faster while keeping your credit budget intact.
+
 ## Screenshot
 
-![Cathode Terminal — agent chat + usage gauges on the left, the code viewer on the right](docs/screenshot.png)
+![Cathode Terminal — the Eyedropper tool sampling a color from a live page and sending it to the agent](docs/eyedropper.png)
 
 ## Features
 
 - **Split workspace** — an AI coding agent on the left, an embedded Chromium browser on the right, resizable.
-- **Multiple agents** — Claude Code, OpenAI Codex CLI, Gemini CLI, Aider, LLM CLI, and Hermes. ACP-capable agents get a rich chat UI; the rest run as their native terminal TUI.
-- **Page-inspection tools** — Box/Lasso select, Pick component, Extract, Eyedropper, Resize, Accessibility, Screenshot, and Draw. Target any element on a live page and send it to your agent.
+- **Multiple agents** — Claude Code, OpenAI Codex CLI, Gemini CLI, and Hermes, all speaking the Agent Client Protocol for a rich chat UI.
+- **Page-inspection tools** — Box/Lasso select, Pick component, Extract, Eyedropper, Resize, Animate, Accessibility, Screenshot, and Draw. Target any element on a live page and send it to your agent.
 - **Embedded DevTools** — inspect the browsed page without leaving the app.
 - **Live gauges** — context-window fill and your Claude usage limits (5-hour / weekly) as real-time dials.
 - **System panel** — CPU / RAM / GPU meters plus a top-process breakdown.
@@ -32,11 +39,50 @@
 - **Audits & code review** — run audits and review changes in-app.
 - **Theming** — a shade-based theme engine with presets.
 
+![Live usage gauges and element context — Cathode captures a live element from the page and hands its exact computed styles to the agent](docs/workspace.png)
+
+## The tools
+
+Everything Cathode gives you, straight from the in-app **Meet the tools** tour.
+
+### Workspace
+
+| Tool | What it does |
+| --- | --- |
+| **Working File** | Target a live site or local dev server to inspect & edit with your agent. |
+| **Storybook** | Pick a design-system component to insert at a targeted location on the page. |
+| **Usage** | Context-window fill and your 5-hour / weekly Claude limits as live gauges. |
+
+### Page tools (toolbar)
+
+| Tool | Shortcut | What it does |
+| --- | --- | --- |
+| **Box select** | `B` | Draw a box to select page elements and send them to chat. |
+| **Lasso select** | `L` | Freehand-select page elements. |
+| **Resize** | `R` | Resize an element directly on the page. |
+| **Animate** | `N` | Target an element and build an animation request (type, easing, timing) for chat. |
+| **Pick component** | `S` | Pick a Storybook design-system component on the page. |
+| **Extract** | `E` | Extract a page element for your agent. |
+| **Eyedropper** | `C` | Sample any color with a magnifier loupe, then edit it live or send it to chat. |
+| **Accessibility** | `A` | Scan the page for WCAG contrast failures and a11y issues, then send them to chat to fix. |
+| **Screenshot** | `I` | Capture a region of the page for the agent. |
+| **Draw** | `M` | Annotate the page with a marker, then hand it over. |
+
+### Panel controls
+
+| Tool | What it does |
+| --- | --- |
+| **Audit** | Run a code audit — pick an audit type from the dropdown. |
+| **Chat / Terminal** | Toggle a Claude session between chat view and the raw terminal. |
+| **Inspect (DevTools)** | Open the embedded DevTools panel for the page. |
+
+![The Console panel capturing page errors, with "Send errors to agent" — and the slash-command palette in the chat](docs/console.png)
+
 ## Requirements
 
 - **Windows** — [WSL 2](https://learn.microsoft.com/windows/wsl/install); agents run inside the Linux environment.
 - **macOS / Linux** — agents run in your native login shell.
-- **At least one agent CLI** — Claude Code, Codex, Gemini, Aider, LLM, or Hermes. Cathode's first-run setup helps install what's missing.
+- **At least one agent CLI** — Claude Code, Codex, Gemini, or Hermes. Cathode's first-run setup helps install what's missing.
 
 ## Install
 
@@ -59,14 +105,12 @@ Grab the latest build for your platform from the [**Releases**](https://github.c
 
 ## Supported agents
 
-| Agent | Mode |
-| --- | --- |
-| Claude Code | Chat (ACP) |
-| OpenAI Codex CLI | Chat (ACP) |
-| Gemini CLI | Chat (ACP) |
-| Aider | Terminal TUI |
-| LLM CLI | Terminal |
-| Hermes | Terminal TUI |
+| Agent | Mode | Description |
+| --- | --- | --- |
+| **Claude Code** | Chat (ACP) | Anthropic's coding agent CLI — the default agent. |
+| **OpenAI Codex CLI** | Chat (ACP) | OpenAI's AI coding agent for the terminal. |
+| **Gemini CLI** | Chat (ACP) | Google's AI assistant for the command line. |
+| **Hermes** | Chat (ACP) | Nous Research's agentic CLI. |
 
 Install, add, or remove agents any time from **Manage LLMs**.
 

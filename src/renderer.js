@@ -437,8 +437,7 @@ function getDefaultProfile() {
   return sessionProfiles[0] || { name: 'Claude Code', command: 'claude' };
 }
 
-// Agents that speak ACP (and thus get the chat front-end). Aider (a REPL) and
-// LLM (one-shot) have no agent protocol — they stay terminal-only.
+// Agents that speak ACP (and thus get the chat front-end).
 const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex', 'hermes']);
 function acpAgentFor(command) {
   const base = (command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
@@ -1485,7 +1484,6 @@ function renderPtyTabs() {
       e.stopPropagation();
       if (id !== activeId) switchSession(id);
     });
-    tab.appendChild(nameEl);
 
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'pty-tab-settings';
@@ -1495,7 +1493,9 @@ function renderPtyTabs() {
       e.stopPropagation();
       openTabSettingsMenu(settingsBtn, s);
     });
+    // Kebab leads the title, then the name, then the close button.
     tab.appendChild(settingsBtn);
+    tab.appendChild(nameEl);
 
     if (sessions.size > 1) {
       const x = document.createElement('button');
@@ -1558,12 +1558,10 @@ const DEFAULT_PROFILES = [
 ];
 
 // `acp: true` → speaks the Agent Client Protocol, so it gets the chat front-end
-// by default. Aider (REPL) and LLM (one-shot) are terminal-only.
+// by default; otherwise the agent runs terminal-only.
 const AVAILABLE_MODELS = [
   { id: 'codex',  name: 'OpenAI Codex CLI', desc: "OpenAI's AI coding agent for the terminal",       install: 'npm install -g @openai/codex',                                                              command: 'codex',  acp: true  },
   { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
-  { id: 'aider',  name: 'Aider',             desc: 'AI pair programming in your terminal',            install: 'curl -fsSL https://aider.chat/install.sh | sh',                                             command: 'aider',  acp: false },
-  { id: 'llm',    name: 'LLM CLI',           desc: 'Multi-model CLI tool, supports many providers',   install: 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install llm',       command: 'llm',    acp: false },
   { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic CLI",                     install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes',  acp: true },
 ];
 
@@ -1590,21 +1588,6 @@ const MODEL_CATALOG = {
     { id: '',                 label: 'Default' },
     { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro' },
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  ]},
-  aider: { flag: '--model', models: [
-    { id: '',         label: 'Default' },
-    { id: 'sonnet',   label: 'Claude Sonnet' },
-    { id: 'opus',     label: 'Claude Opus' },
-    { id: 'gpt-4o',   label: 'GPT-4o' },
-    { id: 'gpt-4.1',  label: 'GPT-4.1' },
-    { id: 'deepseek', label: 'DeepSeek' },
-  ]},
-  llm: { flag: '-m', models: [
-    { id: '',                  label: 'Default' },
-    { id: 'gpt-4o',            label: 'GPT-4o' },
-    { id: 'gpt-4o-mini',       label: 'GPT-4o mini' },
-    { id: 'claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
-    { id: 'gemini-1.5-pro',    label: 'Gemini 1.5 Pro' },
   ]},
 };
 
