@@ -175,31 +175,15 @@ html, body {
   gap: 10px;
   -webkit-app-region: drag;
 }
-/* macOS: native traffic lights sit top-left, so hide the custom controls and inset
-   the app-bar so the lights don't overlap the logo. */
+/* macOS: native traffic lights sit top-left. Rather than hide our chrome, the logo
+   seat spans the window corner and *contains* the lights — extra left padding clears
+   them, so the traffic lights read as part of the same structural container. The
+   bottom-right blob and the right armpit + fillet are inherited from the Windows
+   rules below; only the (now hidden) window-controls' own fillets are dropped. */
 .is-mac #window-controls { display: none; }
-.is-mac #app-bar { padding-left: 78px; }
-/* macOS: native traffic lights own the top-left corner, so the logo/settings seat
-   moves to the right, and the decorative armpit/fillet curves (which framed the
-   left seat and the now-hidden window controls) are dropped. */
-.is-mac #app-bar-logo {
-  order: 10;                              /* to the far right, past the sysperf toggle */
-  margin-left: 4px; margin-right: 0;      /* flush to the right corner */
-  border-radius: 0 0 0 var(--r-blob);     /* bottom-LEFT blob — mirror of the left seat */
-}
-/* Hide the Windows-side curves (they framed the left seat & the hidden controls). */
-.is-mac #app-bar-logo::before,
+.is-mac #app-bar-logo { padding-left: 84px; }   /* traffic lights: x16 → ~x74 */
 .is-mac #app-bar::after,
 .is-mac #app-bar::before { display: none; }
-/* …but keep the concave armpit on the LEFT of the right-hand logo seat (mirror of
-   Windows: there it sits at the seat's right edge with scaleX(-1); here it's at the
-   seat's left edge in the default orientation). */
-.is-mac #app-bar-logo::after {
-  display: block;
-  left: auto;
-  right: 100%;
-  transform: none;
-}
 /* Concave fillets (corner0curve.svg) in the armpits where the structural strip meets
    the logo seat & window controls — so there are no hard inner right angles.
    Masked so they fill with the structural token (light-mode ready). */

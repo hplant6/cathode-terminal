@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.19] - 2026-07-06
+
+### Changed
+- **macOS chrome: logo/settings back on the left**, inside a structural container that now spans the window corner and *contains* the traffic lights (extra left padding clears them), so the lights read as part of the same seat. The bottom-right blob and the concave corner-curve on the right edge are back, matching the Windows chrome.
+
 ## [1.0.18] - 2026-07-05
 
 ### Added
