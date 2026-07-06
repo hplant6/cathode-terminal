@@ -1372,6 +1372,37 @@ html, body {
 }
 @keyframes toast-spin { to { transform: rotate(360deg); } }
 .acp-msg-text { white-space: pre-wrap; }
+/* Fenced code blocks in chat replies (Monaco-colorized; falls back to plain-but-styled) */
+.acp-code {
+  position: relative;
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--spec-black);              /* shade 8 — matches the code viewer */
+  border: 1px solid var(--spec-structural);  /* shade 3 */
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  white-space: pre;                          /* preserve indentation; Monaco output relies on this */
+  font-family: var(--font-mono);
+  font-size: 12px; line-height: 1.5;
+  color: var(--spec-text);
+}
+.acp-code code { font-family: inherit; white-space: pre; background: none; border: none; padding: 0; }
+.acp-code-lang {
+  position: absolute; top: 4px; right: 8px;
+  font-family: var(--font-title); font-stretch: 112.5%;
+  font-size: 8px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--spec-text-faint);             /* shade 2 */
+  pointer-events: none; user-select: none;
+}
+/* `inline code` chips */
+.acp-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--spec-input-bg);          /* shade 7 */
+  border: 1px solid var(--spec-structural);
+  border-radius: 4px;
+  padding: 0 4px;
+}
 .acp-msg.user {
   align-self: flex-end;
   background: transparent;
@@ -1585,9 +1616,19 @@ html, body {
 }
 .acp-perm-btns { display: flex; gap: 8px; justify-content: flex-end; }
 .acp-perm-btns button {
-  min-width: 0; height: 28px; padding: 0 14px; border: none; border-radius: var(--radius-sm); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-width: 0; height: 28px; padding: 0 10px 0 14px; border: none; border-radius: var(--radius-sm); cursor: pointer;
   font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
 }
+/* Number keycap badge (1 Allow · 2 Always · 3 Deny) */
+.perm-key {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 3px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
+}
+.acp-perm-deny   .perm-key { background: var(--spec-structural); color: var(--spec-text); }
+.acp-perm-always .perm-key { background: var(--spec-black); color: var(--spec-text-dim); }
+.acp-perm-allow  .perm-key { background: rgba(255,255,255,0.85); color: var(--spec-accent); }
 .acp-perm-deny   { background: var(--spec-toolbar-bg); color: var(--spec-text-dim); }
 .acp-perm-deny:hover   { background: var(--spec-toolbar-bg); color: var(--spec-text); }
 .acp-perm-always { background: var(--spec-header-bg); color: var(--spec-text); }
@@ -3033,7 +3074,7 @@ html, body {
 
 /* ── Save prompt button ── */
 #btn-save-prompt {
-  display: none;
+  display: flex;                                /* always present next to Send */
   flex-shrink: 0;
   width: auto; height: auto; aspect-ratio: 1;   /* square; fills the row height */
   background: var(--spec-dropdown-bg);          /* shade 4 */
@@ -3042,9 +3083,9 @@ html, body {
   color: var(--spec-text-dim);                  /* shade 1 */
   cursor: pointer;
   align-items: center; justify-content: center;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
 }
-#btn-save-prompt.show { display: flex; }
+#btn-save-prompt.empty { opacity: 0.35; cursor: default; }   /* nothing to save yet */
 #btn-save-prompt:hover { color: var(--spec-text); background: var(--spec-structural); }
 #btn-save-prompt.saved { color: var(--spec-text); }
 

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.23] - 2026-07-06
+
+### Added
+- **Syntax-highlighted code in chat** — fenced ` ``` ` code blocks in agent replies now render as styled blocks with Monaco syntax colors (the same vs-dark palette as the Code viewer, no new dependency), and `inline code` gets a chip. Streaming stays plain-text; highlighting is applied when the message completes.
+- **Number-key shortcuts on permission prompts** — Allow/Always/Deny now show keycaps (Allow `1`, Always `2`, Deny `3`) and respond to pressing `1`/`2`/`3`.
+
+### Changed
+- **Save-prompt (bookmark) button** is now always visible next to Send — dimmed when the input is empty instead of disappearing entirely.
+
 ## [1.0.22] - 2026-07-06
 
 ### Fixed

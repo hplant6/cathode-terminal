@@ -2438,6 +2438,76 @@ function formatMsgTime(d) {
   return `${date} ${h}:${String(d.getMinutes()).padStart(2, '0')}${ampm}`;
 }
 
+// ── Rich chat rendering ───────────────────────────────────────────
+// Streaming appends plain text nodes (fast, O(1) per chunk). Once a message is
+// finalized we re-render it: ```fenced``` blocks become styled <pre> with Monaco
+// syntax colors (same vs-dark palette as the Code viewer — no extra dependency),
+// and `inline code` becomes a chip. Copy still uses the raw text (see addReplyMeta).
+let _hlMonaco;
+function monacoForHighlight() {
+  if (_hlMonaco !== undefined) return Promise.resolve(_hlMonaco);
+  return new Promise(resolve => {
+    if (window.monaco) { _hlMonaco = window.monaco; return resolve(_hlMonaco); }
+    if (!window.__amdRequire) { _hlMonaco = null; return resolve(null); }
+    window.__amdRequire(['vs/editor/editor.main'],
+      () => {
+        _hlMonaco = window.monaco || null;
+        // colorize() uses the global theme — pin it dark to match the Code viewer.
+        try { _hlMonaco && _hlMonaco.editor.setTheme('vs-dark'); } catch (_) {}
+        resolve(_hlMonaco);
+      },
+      () => { _hlMonaco = null; resolve(null); });
+  });
+}
+// Fenced-code language hint → Monaco language id (reuse the ext map; else pass through).
+function fenceToLang(fence) {
+  const f = String(fence || '').toLowerCase().trim();
+  return f ? (EXT_LANG[f] || f) : 'plaintext';
+}
+// Append escaped text with `inline code` spans as child nodes (parent is pre-wrap).
+function appendInline(container, plain) {
+  for (const part of plain.split(/(`[^`\n]+`)/g)) {
+    if (part.length > 2 && part[0] === '`' && part.endsWith('`')) {
+      const c = document.createElement('code');
+      c.className = 'acp-inline-code';
+      c.textContent = part.slice(1, -1);
+      container.appendChild(c);
+    } else if (part) {
+      container.appendChild(document.createTextNode(part));
+    }
+  }
+}
+function renderRichText(container, text) {
+  container.innerHTML = '';
+  const FENCE = /```([^\n`]*)\n?([\s\S]*?)```/g;
+  const jobs = [];
+  let last = 0, m;
+  while ((m = FENCE.exec(text)) !== null) {
+    if (m.index > last) appendInline(container, text.slice(last, m.index).replace(/\n$/, ''));
+    const pre = document.createElement('pre');
+    pre.className = 'acp-code';
+    if (m[1].trim()) { const lbl = document.createElement('span'); lbl.className = 'acp-code-lang'; lbl.textContent = m[1].trim(); pre.appendChild(lbl); }
+    const codeEl = document.createElement('code');
+    const code = m[2].replace(/\n$/, '');
+    codeEl.textContent = code;   // styled plain fallback until (or unless) Monaco colorizes
+    pre.appendChild(codeEl);
+    container.appendChild(pre);
+    jobs.push({ codeEl, code, lang: fenceToLang(m[1]) });
+    last = FENCE.lastIndex;
+  }
+  if (last < text.length) appendInline(container, text.slice(last).replace(/^\n/, ''));
+  if (jobs.length) {
+    monacoForHighlight().then(monaco => {
+      if (!monaco) return;   // no Monaco → keep the styled plain blocks
+      for (const j of jobs) {
+        monaco.editor.colorize(j.code, j.lang, {})
+          .then(html => { if (html) j.codeEl.innerHTML = html; })
+          .catch(() => {});
+      }
+    });
+  }
+}
+
 function acpFinalizeStream(s) {
   if (s.streamEl) {
     const bubble = s.streamEl;
@@ -2445,6 +2515,8 @@ function acpFinalizeStream(s) {
     const text = (s.streamTextEl ? s.streamTextEl.textContent : '').trim();
     if (text) {
       addReplyMeta(s, bubble, text);
+      // Re-render with highlighting only when there's something to format.
+      if (s.streamTextEl && /```|`[^`\n]+`/.test(text)) renderRichText(s.streamTextEl, text);
       const isLimit = /\blimit (reached|exceeded|hit)\b|\b(usage|rate|session|message|weekly|hourly) limit\b|reached your .{0,25}\blimit\b/i.test(text);
       // Defer to turn end (ACP_DONE) — finalize also fires mid-turn on tool-call
       // boundaries, which played several "done" chimes per turn.
@@ -2774,29 +2846,53 @@ ipcRenderer.on(IPC.ACP_CLOSED, (_, { id }) => {
 });
 
 // Risky tool (execute/edit/delete/…) needs the user's OK before the agent runs it.
+// The active tool-permission prompt, for number-key shortcuts (1 Allow / 2 Always / 3 Deny).
+let _activePerm = null;
+document.addEventListener('keydown', (e) => {
+  if (!_activePerm) return;
+  if (!_activePerm.card.isConnected) { _activePerm = null; return; }   // card removed elsewhere
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable)) return;  // typing wins
+  const fn = _activePerm.keys[e.key];
+  if (fn) { e.preventDefault(); fn(); }
+});
+
 ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlways }) => {
   const s = acpSession(id);
   if (!s) { ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision: 'deny' }); return; }
   acpFinalizeStream(s);
   const verb = { execute: 'run a command', edit: 'edit a file', delete: 'delete files', move: 'move / rename files', fetch: 'fetch a URL' }[kind] || `use the ${kind} tool`;
+  // Numbering runs primary-first, right-to-left: Allow = 1, Always = 2, Deny = 3 (or 2 without Always).
+  const denyKey = canAlways ? '3' : '2';
+  const cap = n => `<span class="perm-key">${n}</span>`;
   const card = document.createElement('div');
   card.className = 'acp-permission';
   card.innerHTML =
     `<div class="acp-perm-head">Allow the agent to <b></b>?</div>` +
     (title ? `<div class="acp-perm-title"></div>` : '') +
     `<div class="acp-perm-btns">` +
-      `<button class="acp-perm-deny" type="button">Deny</button>` +
-      (canAlways ? `<button class="acp-perm-always" type="button">Always</button>` : '') +
-      `<button class="acp-perm-allow" type="button">Allow</button>` +
+      `<button class="acp-perm-deny" type="button">Deny${cap(denyKey)}</button>` +
+      (canAlways ? `<button class="acp-perm-always" type="button">Always${cap('2')}</button>` : '') +
+      `<button class="acp-perm-allow" type="button">Allow${cap('1')}</button>` +
     `</div>`;
   card.querySelector('.acp-perm-head b').textContent = verb;   // textContent → no XSS from kind/title
   if (title) card.querySelector('.acp-perm-title').textContent = title;
-  const decide = (decision) => { ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision }); card.remove(); };
+  const decide = (decision) => {
+    if (_activePerm && _activePerm.card === card) _activePerm = null;
+    ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision });
+    card.remove();
+  };
   card.querySelector('.acp-perm-deny').addEventListener('click', () => decide('deny'));
   card.querySelector('.acp-perm-allow').addEventListener('click', () => decide('approve'));
   card.querySelector('.acp-perm-always')?.addEventListener('click', () => decide('always'));
+  // Wire the number-key shortcuts to this prompt.
+  const keys = { '1': () => decide('approve'), [denyKey]: () => decide('deny') };
+  if (canAlways) keys['2'] = () => decide('always');
+  _activePerm = { card, keys };
   s.msgsEl.appendChild(card);
   acpScrollEnd(s);
+  if (document.activeElement === uiTextarea) uiTextarea.blur();   // so 1/2/3 drive the prompt immediately
   Notif.play('message');   // audible cue — the agent is paused waiting on you
 });
 
@@ -6738,10 +6834,12 @@ const savePromptTag = document.getElementById('save-prompt-tag');
 let saveTagTimer    = null;
 
 function updateSaveBtn() {
-  btnSavePrompt.classList.toggle('show', uiTextarea.value.length > 0);
+  // Always visible next to Send; dim it (and no-op the click) when there's nothing to save.
+  btnSavePrompt.classList.toggle('empty', uiTextarea.value.trim().length === 0);
 }
 
 btnSavePrompt.addEventListener('click', () => {
+  if (!uiTextarea.value.trim()) return;   // nothing to save
   const name = uiTextarea.value.split('\n')[0].slice(0, 50).trim() || 'Untitled';
   savedPrompts.push({ id: Date.now(), name, text: uiTextarea.value });
   savePromptsToStorage();
@@ -6753,6 +6851,7 @@ btnSavePrompt.addEventListener('click', () => {
     btnSavePrompt.classList.remove('saved');
   }, 1500);
 });
+updateSaveBtn();   // set initial dimmed/empty state on load
 
 function showSavedPromptsView() {
   slashMenu.innerHTML = '';
