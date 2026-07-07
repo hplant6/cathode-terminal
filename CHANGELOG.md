@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.27] - 2026-07-07
+
+### Added
+- **Design-drift scanner** (new toolbar tool, Alt+D) — scans the page for hard-coded colors that are a near-miss to one of your design tokens (discovered from `:root` CSS custom properties) and should really use `var(--token)`. Lists each finding with a current-color → suggested-token swatch, previews the token live on the page when you check "Fix," flashes the element on hover, and sends the selected fixes to the agent. Phase 1 covers colors; spacing/type/radius and Storybook token sources come next.
+
 ## [1.0.26] - 2026-07-07
 
 ### Added

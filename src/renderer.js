@@ -4360,6 +4360,15 @@ document.getElementById('btn-pick-a11y')?.addEventListener('click', () => {
   ipcRenderer.send(IPC.PICK_A11Y);
 });
 
+document.getElementById('btn-pick-drift')?.addEventListener('click', () => {
+  if (pickMode === 'drift') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
+  clearPickMode();
+  pickMode = 'drift';
+  applyPickCursor('drift');
+  document.getElementById('btn-pick-drift')?.classList.add('active');
+  ipcRenderer.send(IPC.PICK_DRIFT);
+});
+
 
 document.getElementById('btn-pick-animate')?.addEventListener('click', () => {
   if (pickMode === 'animate') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
@@ -5529,6 +5538,92 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   addPanelEscClose(panel, cancel, el => /^(TEXTAREA|INPUT)$/.test(el.tagName));
 
   ipcRenderer.on(IPC.A11Y_PANEL_OPEN, (_, data) => open(data || {}));
+})();
+
+// ── Design-drift panel (mirror of the a11y panel) ─────────────────
+(function initDriftPanel() {
+  const panel     = document.getElementById('drift-panel');
+  if (!panel) return;
+  const listEl    = document.getElementById('drift-list');
+  const barCount  = document.getElementById('drift-count');
+  const toggleAll = document.getElementById('drift-toggle-all');
+  const instrEl   = document.getElementById('drift-instructions');
+  const sendBtn   = document.getElementById('drift-send');
+  const cancelBtn = document.getElementById('drift-cancel');
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  let issues = [], state = {}, url = '', tokenCount = 0;
+
+  function updateCount() {
+    const n = issues.filter(i => state[i.idx].checked).length;
+    barCount.textContent = `${issues.length} drifted color${issues.length === 1 ? '' : 's'}`;
+    sendBtn.textContent = n ? `Send ${n}` : 'Send';
+    toggleAll.textContent = n > 0 ? 'uncheck all' : 'check all';
+  }
+  function buildIssue(iss, n) {
+    const wrap = el('div', 'a11y-issue');
+    const head = el('div', 'a11y-head');
+    head.append(el('span', 'a11y-num', String(n)));
+    const mid = el('div', 'a11y-mid');
+    mid.append(el('span', 'a11y-detail', iss.prop));
+    const sw = el('div', 'drift-swatches');
+    const from = el('span', 'drift-swatch'); from.style.background = iss.hex;
+    const arrow = el('span', 'drift-arrow', '→');
+    const to = el('span', 'drift-swatch'); to.style.background = iss.tokenHex;
+    sw.append(from, el('span', 'drift-hex', iss.hex), arrow, to, el('span', 'drift-token', `var(${iss.token})`));
+    mid.append(sw);
+    head.append(mid);
+    const fix = el('label', 'a11y-fix');
+    fix.append(el('span', 'a11y-fix-label', 'Fix'));
+    const cb = el('input', 'a11y-cb'); cb.type = 'checkbox'; cb.checked = state[iss.idx].checked;
+    fix.append(cb);
+    head.append(fix);
+    wrap.append(head);
+    // Checking a fix previews the token live on the page (unchecking reverts).
+    cb.addEventListener('change', () => { state[iss.idx].checked = cb.checked; ipcRenderer.send(IPC.DRIFT_PREVIEW, { idx: iss.idx, on: cb.checked }); updateCount(); });
+    head.addEventListener('mouseenter', () => ipcRenderer.send(IPC.DRIFT_FLASH, { idx: iss.idx }));
+    return wrap;
+  }
+  function render() {
+    listEl.innerHTML = '';
+    if (!issues.length) {
+      listEl.appendChild(el('div', 'a11y-empty', tokenCount
+        ? 'No color drift found — every color maps to a token.'
+        : 'No design tokens found on :root. Define CSS custom properties (or connect a Storybook) so drift can be detected.'));
+      return;
+    }
+    issues.forEach((iss, i) => listEl.appendChild(buildIssue(iss, i + 1)));
+  }
+  function open(data) {
+    clearPickMode();
+    issues = data.issues || [];
+    url = data.url || '';
+    tokenCount = data.tokens || 0;
+    state = {};
+    issues.forEach(i => { state[i.idx] = { checked: false }; });
+    if (instrEl) instrEl.value = '';
+    render(); updateCount();
+    panel.hidden = false;
+  }
+  function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; if (instrEl) instrEl.value = ''; }
+  function send() {
+    const out = issues.filter(i => state[i.idx].checked).map(i => ({ selector: i.selector, prop: i.prop, hex: i.hex, token: i.token, tokenHex: i.tokenHex, url }));
+    ipcRenderer.send(IPC.DRIFT_SEND, { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
+    close();
+  }
+  function cancel() { ipcRenderer.send(IPC.DRIFT_CANCEL); close(); }
+
+  toggleAll.addEventListener('click', () => {
+    const next = !issues.some(i => state[i.idx].checked);
+    issues.forEach(i => { state[i.idx].checked = next; ipcRenderer.send(IPC.DRIFT_PREVIEW, { idx: i.idx, on: next }); });
+    render(); updateCount();
+  });
+  sendBtn.addEventListener('click', send);
+  cancelBtn.addEventListener('click', cancel);
+  instrEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  addPanelEscClose(panel, cancel, el2 => /^(TEXTAREA|INPUT)$/.test(el2.tagName));
+
+  ipcRenderer.on(IPC.DRIFT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
 
 // ── Screenshot tool panel (overtakes the chat column) ────────────

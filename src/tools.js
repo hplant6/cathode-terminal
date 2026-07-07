@@ -18,6 +18,7 @@ const TOOLS = [
   { key: 'e', id: 'btn-pick-aidev',      label: 'Extract',        menu: true },
   { key: 'c', id: 'btn-pick-eyedropper', label: 'Eyedropper',     menu: true,  desc: 'Sample any color with a magnifier loupe, then edit it live or send it to chat' },
   { key: 'a', id: 'btn-pick-a11y',       label: 'Accessibility',  menu: true,  desc: 'Scan the page for WCAG contrast failures and a11y issues, then send them to chat to fix' },
+  { key: 'd', id: 'btn-pick-drift',      label: 'Design drift',   menu: true,  desc: 'Flag hard-coded colors that should use a design token, and send them to chat to fix' },
   { key: 'i', id: 'btn-screenshot',      label: 'Screenshot',     menu: true,  desc: 'Capture a region of the page for the agent' },
   { key: 'm', id: 'btn-draw',            label: 'Draw',           menu: true,  desc: 'Annotate the page with a marker, then hand it over' },
 ];

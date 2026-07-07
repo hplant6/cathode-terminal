@@ -25,6 +25,7 @@ const { cssSnippet: animCss, jsSnippet: animJs, summaryFor: animSummary } = requ
 const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
+const { getDriftScript }          = require('./src/drift-inject');
 const http = require('http');
 const { iconB64 } = require('./src/read-icon');
 
@@ -3602,6 +3603,47 @@ ipcMain.on(IPC.A11Y_SEND, async (_, { issues = [], instruction = '' } = {}) => {
 ipcMain.on(IPC.A11Y_CANCEL, async () => {
   if (pendingA11y) await a11yExec('window.__cathodeA11y && window.__cathodeA11y.clear()');
   pendingA11y = null;
+});
+
+// ── Design-drift scanner (mirror of the a11y flow): flag near-miss colors that
+// should snap to a design token, preview the fix, then hand the list to the agent. ──
+let pendingDrift = null;
+function driftExec(js) {
+  const p = pendingDrift;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return Promise.resolve(null);
+  return p.view.webContents.executeJavaScript(js).catch(() => null);
+}
+ipcMain.on(IPC.PICK_DRIFT, async () => {
+  const view = getActivePickView();
+  if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
+  try {
+    const result = await view.webContents.executeJavaScript(getDriftScript());
+    uiSend(IPC.PICK_CANCELLED);
+    if (!result) return;
+    pendingDrift = { view };
+    uiSend(IPC.DRIFT_PANEL_OPEN, { tool: 'Design Drift', url: result.url, total: result.total, tokens: result.tokens, issues: result.issues });
+  } catch (err) {
+    console.error('Drift scan error:', err);
+    uiSend(IPC.PICK_CANCELLED);
+  }
+});
+ipcMain.on(IPC.DRIFT_FLASH, (_, { idx } = {}) => { driftExec(`window.__cathodeDrift && window.__cathodeDrift.flash(${Number(idx)})`); });
+ipcMain.on(IPC.DRIFT_PREVIEW, (_, { idx, on } = {}) => { driftExec(`window.__cathodeDrift && window.__cathodeDrift.${on ? 'apply' : 'unapply'}(${Number(idx)})`); });
+ipcMain.on(IPC.DRIFT_SEND, async (_, { issues = [], instruction = '' } = {}) => {
+  if (!pendingDrift) return;
+  await driftExec('window.__cathodeDrift && window.__cathodeDrift.clear()');
+  pendingDrift = null;
+  if (!issues.length && !instruction.trim()) return;
+  const lines = ['───── Design Drift ─────', `${issues.length} hard-coded color${issues.length === 1 ? '' : 's'} that should use a design token:`];
+  for (const it of issues) lines.push(`• ${it.selector} — ${it.prop}: ${it.hex}  →  var(${it.token})  (${it.tokenHex})`);
+  const url = activePageUrl();
+  const detail = (url ? `From ${pageSource()} — ${url}\n\n` : '') + lines.join('\n');
+  const body = (instruction.trim() ? instruction.trim() + '\n\n' : '') + 'Replace each hard-coded color with the matching design token (CSS custom property) so the UI stays consistent with the design system. Edit the source CSS / components, not inline styles.';
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Design drift' });
+});
+ipcMain.on(IPC.DRIFT_CANCEL, async () => {
+  if (pendingDrift) await driftExec('window.__cathodeDrift && window.__cathodeDrift.clear()');
+  pendingDrift = null;
 });
 
 // Hover the "Selected location" link → outline that element on the live page

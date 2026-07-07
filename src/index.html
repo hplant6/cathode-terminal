@@ -445,6 +445,31 @@
       </div>
 
       <!-- Accessibility checker panel — overtakes the chat column -->
+      <div id="drift-panel" class="tool-panel tp-framed" hidden>
+        <div class="tp-inner">
+        <div class="tp-head">
+          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none"><circle cx="9" cy="9" r="7.25" stroke="currentColor" stroke-width="1.25"></circle><circle cx="6.4" cy="6.9" r="1.15" fill="currentColor"></circle><circle cx="11.2" cy="6.5" r="1.15" fill="currentColor"></circle><circle cx="11.6" cy="10.6" r="1.15" fill="currentColor"></circle><circle cx="6.8" cy="11.1" r="1.15" fill="currentColor"></circle></svg></span>
+          <div class="pp-head-text">
+            <span class="tp-title">Design Drift</span>
+            <span class="tp-sub">Colors that should use a design token</span>
+          </div>
+        </div>
+        <div id="drift-bar" class="a11y-bar">
+          <span id="drift-count"></span>
+          <button id="drift-toggle-all" class="a11y-link">check all</button>
+        </div>
+        <div id="drift-list" class="a11y-list"></div>
+        <div class="tp-foot">
+          <textarea id="drift-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
+          <div class="pp-btns">
+            <button id="drift-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
+            <button id="drift-send" class="pp-btn pp-btn-primary">Send</button>
+          </div>
+        </div>
+        </div>
+      </div>
+
       <div id="a11y-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
@@ -573,6 +598,7 @@
         <button id="btn-pick-aidev" class="pick-btn pick-btn-aidev" title="Extract — download images / SVGs / videos or pull styles, colors, type &amp; more from a selection (Shift = whole page) (Alt+E)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" width="18" height="18" fill="none"><path d="M20.1329 12.4801C20.5733 12.0397 21.2878 12.0397 21.7282 12.4801C22.1687 12.9205 22.1687 13.635 21.7282 14.0755L17.2977 18.506C17.0862 18.7175 16.7991 18.8364 16.5 18.8364C16.2009 18.8364 15.9138 18.7175 15.7023 18.506L11.2718 14.0755C10.8313 13.635 10.8313 12.9205 11.2718 12.4801C11.7122 12.0397 12.4267 12.0397 12.8671 12.4801L16.5 16.1129L20.1329 12.4801Z" fill="currentColor"/><path d="M15.3719 17.7083V6.43055C15.3719 5.8077 15.8771 5.30246 16.5 5.30246C17.1228 5.30246 17.6281 5.8077 17.6281 6.43055V17.7083C17.6281 18.3312 17.1228 18.8364 16.5 18.8364C15.8771 18.8364 15.3719 18.3312 15.3719 17.7083Z" fill="currentColor"/><path d="M16.5 25.4413C17.8641 25.4413 19.8295 25.5923 22.0744 26.2988C22.6684 26.4858 22.999 27.1193 22.8123 27.7133C22.6253 28.3072 21.9918 28.6379 21.3978 28.4512C19.4249 27.8302 17.6975 27.6975 16.5 27.6975C14.4329 27.6975 12.7456 28.0912 11.6037 28.4512C11.0099 28.6384 10.3752 28.3086 10.1877 27.7148C10.0005 27.121 10.3303 26.4863 10.924 26.2988C12.2246 25.8888 14.1465 25.4413 16.5 25.4413Z" fill="currentColor"/><path d="M16.5 22.5417V26.5694" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.69135 19.3194V9.65277C3.69135 7.24964 5.63853 5.30246 8.04166 5.30246H11.6667C12.2895 5.30246 12.7948 5.8077 12.7948 6.43055C12.7948 7.05341 12.2895 7.55864 11.6667 7.55864H8.04166C6.88424 7.55864 5.94753 8.49535 5.94753 9.65277V19.3194C5.94753 20.4769 6.88424 21.4136 8.04166 21.4136H24.9583C26.1158 21.4136 27.0525 20.4769 27.0525 19.3194V9.65277C27.0525 8.49535 26.1158 7.55864 24.9583 7.55864H21.3333C20.7105 7.55864 20.2052 7.05341 20.2052 6.43055C20.2052 5.8077 20.7105 5.30246 21.3333 5.30246H24.9583C27.3615 5.30246 29.3086 7.24964 29.3086 9.65277V19.3194C29.3086 21.7226 27.3615 23.6698 24.9583 23.6698H8.04166C5.63853 23.6698 3.69135 21.7226 3.69135 19.3194Z" fill="currentColor"/></svg></button>
         <button id="btn-pick-eyedropper" class="pick-btn" title="Eyedropper — sample a color, edit it live or send to chat (Alt+C)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></button>
         <button id="btn-pick-a11y" class="pick-btn" title="Accessibility &amp; contrast check — flag WCAG issues, send to chat (Alt+A)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></button>
+        <button id="btn-pick-drift" class="pick-btn" title="Design-drift scan — flag hard-coded colors that should use a design token, send to chat (Alt+D)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none"><circle cx="9" cy="9" r="7.25" stroke="currentColor" stroke-width="1.25"/><circle cx="6.4" cy="6.9" r="1.15" fill="currentColor"/><circle cx="11.2" cy="6.5" r="1.15" fill="currentColor"/><circle cx="11.6" cy="10.6" r="1.15" fill="currentColor"/><circle cx="6.8" cy="11.1" r="1.15" fill="currentColor"/></svg></button>
         <button id="btn-screenshot" class="pick-btn" title="Screenshot region (Alt+I)"><svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75" data-color="color-2"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></button>
         <button id="btn-draw"       class="pick-btn" title="Draw on page (Alt+M)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></button>
       </div>

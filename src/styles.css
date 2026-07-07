@@ -2490,12 +2490,18 @@ html, body {
 
 /* Accessibility checker panel */
 /* ── WCAG accessibility tool ── */
-#a11y-bar { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--spec-header-bg); background: var(--spec-toolbar-bg); flex-shrink: 0; }
-#a11y-count { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; color: var(--spec-text-dim); }
+#a11y-bar, #drift-bar { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--spec-header-bg); background: var(--spec-toolbar-bg); flex-shrink: 0; }
+#a11y-count, #drift-count { font: 600 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; color: var(--spec-text-dim); }
 .a11y-link { width: auto; height: auto; background: none; border: none; box-shadow: none; color: var(--spec-accent); font: 600 11px var(--font-mono); cursor: pointer; padding: 0; }
 .a11y-link:hover { background: none; text-decoration: underline; }
-#a11y-list { flex: 1; overflow-y: auto; min-height: 0; padding: 0; background: var(--spec-header-bg); }
-.a11y-empty { padding: 24px 16px; text-align: center; color: var(--spec-text-dim); font: 12px var(--font-mono); }
+#a11y-list, #drift-list { flex: 1; overflow-y: auto; min-height: 0; padding: 0; background: var(--spec-header-bg); }
+.a11y-empty { padding: 24px 16px; text-align: center; color: var(--spec-text-dim); font: 12px var(--font-mono); line-height: 1.5; }
+/* Design-drift swatches: current color → suggested token */
+.drift-swatches { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.drift-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--spec-structural); flex-shrink: 0; }
+.drift-hex { font: 11px var(--font-mono); color: var(--spec-text-dim); }
+.drift-arrow { color: var(--spec-text-faint); }
+.drift-token { font: 11px var(--font-mono); color: var(--spec-accent); overflow: hidden; text-overflow: ellipsis; }
 .a11y-issue { padding: 16px 14px; background: var(--spec-input-bg); border-bottom: 1px solid var(--spec-header-bg); }   /* shade 7, shade-6 separator */
 .a11y-issue:has(.a11y-cb:checked) { background: var(--spec-header-bg); border-bottom-color: var(--spec-input-bg); }   /* checked → shade-6 fill */
 .a11y-head { display: flex; align-items: center; gap: 12px; }
