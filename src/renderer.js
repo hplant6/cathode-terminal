@@ -4360,6 +4360,7 @@ document.getElementById('btn-pick-a11y')?.addEventListener('click', () => {
   ipcRenderer.send(IPC.PICK_A11Y);
 });
 
+
 document.getElementById('btn-pick-animate')?.addEventListener('click', () => {
   if (pickMode === 'animate') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
@@ -4439,6 +4440,26 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const toggleSelBtn = document.getElementById('pick-panel-toggle-sel');
   let selVisible = false;   // pinned state; selection is hidden by default and previewed on hover of the Show/Hide selection link
   if (!panel) return;
+
+  // ── States: a sticky row inside each element's drawer. Each drawer forces
+  // :hover/:focus/:active/:disabled on its OWN element (via CDP). ──
+  const STATE_LIST = ['hover', 'focus', 'active', 'disabled'];
+  function clearStates() { ipcRenderer.send(IPC.STATES_CLEAR); }
+  function buildStatesRow(row) {
+    const wrap = el('div', 'pp-states');
+    wrap.appendChild(el('span', 'pp-states-label', 'States'));
+    STATE_LIST.forEach(s => {
+      const chip = el('button', 'states-chip' + (row.states.has(s) ? ' on' : ''), ':' + s);
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (row.states.has(s)) { row.states.delete(s); chip.classList.remove('on'); }
+        else { row.states.add(s); chip.classList.add('on'); }
+        ipcRenderer.send(IPC.STATES_FORCE, { selector: row.item.cssSelector, states: Array.from(row.states) });
+      });
+      wrap.appendChild(chip);
+    });
+    return wrap;
+  }
 
   let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
   let activeChip = null;
@@ -4730,19 +4751,27 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const count = el('span', 'pp-el-count', `${row.checked.size} Selected`);
       const x     = el('button', 'pp-el-x', '✕'); x.title = 'Remove';
       head.append(caret, name, count, x);
-      drawer.appendChild(head);
+      // Head + per-element states row stick together as ONE unit, so the title never
+      // folds under the chips when the drawer's properties scroll.
+      const sticky = el('div', 'pp-drawer-sticky');
+      sticky.appendChild(head);
+      const statesRow = buildStatesRow(row);
+      statesRow.style.display = row.expanded ? '' : 'none';
+      sticky.appendChild(statesRow);
+      drawer.appendChild(sticky);
 
       const body  = el('div', 'pp-drawer-body');
       body.style.display = row.expanded ? '' : 'none';
       if (row.expanded) buildBody(row, i, body);
       drawer.appendChild(body);
-      fieldBodies.push({ row, i, body, caret, count });
+      fieldBodies.push({ row, i, body, caret, count, statesRow });
 
       head.addEventListener('click', (e) => {
         if (e.target === x) return;
         row.expanded = !row.expanded;
         if (row.expanded) buildBody(row, i, body);
         body.style.display = row.expanded ? '' : 'none';
+        statesRow.style.display = row.expanded ? '' : 'none';
         caret.classList.toggle('open', row.expanded);
         pushHighlight();
       });
@@ -4767,7 +4796,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const kw = activeChip;
     const q  = filterInput.value.trim().toLowerCase();
     if (kw || q) {   // build + expand every drawer so matches are visible/searchable
-      fieldBodies.forEach(fb => { fb.row.expanded = true; buildBody(fb.row, fb.i, fb.body); fb.body.style.display = ''; fb.caret.classList.add('open'); });
+      fieldBodies.forEach(fb => { fb.row.expanded = true; buildBody(fb.row, fb.i, fb.body); fb.body.style.display = ''; if (fb.statesRow) fb.statesRow.style.display = ''; fb.caret.classList.add('open'); });
     }
     listEl.querySelectorAll('.pp-field').forEach(f => {
       const okChip = !kw || f.dataset.name.includes(kw);
@@ -4887,7 +4916,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function open(items, tool) {
     clearPickMode();
     if (tool) titleEl.textContent = tool;
-    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {} }));   // single selection → open by default
+    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {}, states: new Set() }));   // single selection → open by default
+    clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
     hovered = null;
     if (filterSelect) filterSelect.value = '';   // reset to "Filter: All"
@@ -4903,6 +4933,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     setTimeout(() => textarea.focus(), 0);
   }
   function close() {
+    clearStates();   // drop any forced pseudo-states on the page
     colorPicker.hide();
     panel.hidden = true;
     document.getElementById('toolbar')?.classList.remove('hidden-by-pick');

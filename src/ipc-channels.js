@@ -114,6 +114,8 @@ const IPC = Object.freeze({
   PICK_RESIZE: 'pick-resize',
   PICK_SCREENSHOT: 'pick-screenshot',
   PICK_SEND_TO_SESSION: 'pick-send-to-session',
+  STATES_FORCE: 'states-force',
+  STATES_CLEAR: 'states-clear',
   PICK_START: 'pick-start',
   POPUP_URL: 'popup-url',
   PROFILE_INSTALL: 'profile-install',

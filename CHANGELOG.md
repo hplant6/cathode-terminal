@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.26] - 2026-07-07
+
+### Added
+- **States inspector** — inside the Box/Lasso panel, each selected element's drawer has a sticky **States** row (`:hover · :focus · :active · :disabled`) that forces that element's pseudo-state live in the Browser (or a Storybook instance) via CDP, so you can inspect and edit states that are invisible in a static render. Per-element and independent; node IDs are cached per selection so a toggle reliably turns the state back off.
+
 ## [1.0.25] - 2026-07-06
 
 ### Fixed

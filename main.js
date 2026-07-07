@@ -3012,6 +3012,7 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
         cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
       }
       pendingPanelPick = { view, items: result.items, cssRefs };
+      statesView = view; resetStatesCache();   // States rows force pseudo-classes in this view
       const toolLabel = mode === 'lasso' ? 'Lasso Select' : 'Box Select';
       uiSend(IPC.PICK_PANEL_OPEN, { items: result.items, tool: toolLabel });   // full items incl. cssProps/debugSource
       return;   // panel stays open; result is finalized via pick-panel-send/-cancel
@@ -3408,6 +3409,55 @@ ipcMain.on(IPC.ANIM_PANEL_PREVIEW, async (_, { spec = {} } = {}) => {
   const p = pendingAnim;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodeAnim && window.__cathodeAnim.preview(${JSON.stringify(spec)})`); } catch (_) {}
+});
+
+// ── States rows (inside each element's drawer in the Box/Lasso panel): force
+// :hover/:focus/:active/:disabled on that element via CDP so you can inspect + edit
+// states that are invisible in a static render. Each selected element is independent.
+//
+// Node IDs are the fragile part: DOM.getDocument re-assigns them, so re-resolving on
+// every toggle makes forcePseudoState([]) fail to clear. So we resolve the document
+// ONCE per selection and cache each element's nodeId, reusing it for all force/clear
+// calls — force([]) then reliably clears whatever force([hover]) set on the same node.
+const STATES_ALLOWED = ['hover', 'active', 'focus', 'focus-visible', 'focus-within', 'visited', 'disabled', 'enabled', 'checked'];
+let statesView   = null;         // the view the selection lives in (Browser / Storybook)
+let statesRootId = null;         // cached document root nodeId for statesView
+const statesNodes = new Map();   // selector → cached element nodeId
+function resetStatesCache() { statesRootId = null; statesNodes.clear(); }
+async function statesDebugger() {
+  if (devToolsView || !statesView || statesView.webContents.isDestroyed()) return null;
+  const dbg = statesView.webContents.debugger;
+  try { dbg.attach('1.3'); } catch (_) {}   // no-op if already attached (Browser via ensureCDP)
+  await dbg.sendCommand('DOM.enable');
+  await dbg.sendCommand('CSS.enable');
+  if (statesRootId == null) { const { root } = await dbg.sendCommand('DOM.getDocument', { depth: 0 }); statesRootId = root.nodeId; }
+  return dbg;
+}
+async function statesNodeFor(dbg, selector) {
+  if (statesNodes.has(selector)) return statesNodes.get(selector);
+  let id = 0;
+  try { const r = await dbg.sendCommand('DOM.querySelector', { nodeId: statesRootId, selector }); id = r.nodeId || 0; } catch (_) {}
+  statesNodes.set(selector, id);
+  return id;
+}
+ipcMain.on(IPC.STATES_FORCE, async (_, { selector, states } = {}) => {
+  if (!selector) return;
+  try {
+    const dbg = await statesDebugger();
+    if (!dbg) return;
+    const nodeId = await statesNodeFor(dbg, selector);
+    if (!nodeId) return;
+    await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: (Array.isArray(states) ? states : []).filter(s => STATES_ALLOWED.includes(s)) });
+  } catch (e) { console.log('[states] force failed:', (e && e.message) || e); }
+});
+ipcMain.on(IPC.STATES_CLEAR, async () => {
+  try {
+    const dbg = await statesDebugger();
+    if (dbg) for (const nodeId of statesNodes.values()) {
+      if (nodeId) { try { await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] }); } catch (_) {} }
+    }
+  } catch (_) {}
+  resetStatesCache();
 });
 ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '' } = {}) => {
   const p = pendingAnim;
