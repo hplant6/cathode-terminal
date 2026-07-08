@@ -326,6 +326,77 @@ function topProcs(by) {
   });
 }
 
+// ── Localhost servers (listening TCP ports → owning process) ──────
+// Enumerate LISTEN-state TCP ports and the process behind each, so the app can
+// surface dev servers on localhost — open one in the browser, or kill a zombie.
+function listPortsMac() {
+  return new Promise(resolve => {
+    execFile('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN'], { encoding: 'utf8', maxBuffer: 8 << 20, timeout: 8000 }, (err, stdout) => {
+      if (err || !stdout) { resolve({ ok: false }); return; }
+      const seen = new Map();
+      for (const line of stdout.split('\n')) {
+        if (!line || line.startsWith('COMMAND')) continue;
+        const parts = line.split(/\s+/);
+        const pm = line.match(/:(\d+)\s+\(LISTEN\)/);
+        if (parts.length < 2 || !pm) continue;
+        const port = parseInt(pm[1], 10);
+        if (!seen.has(port)) seen.set(port, { port, pid: parseInt(parts[1], 10), name: parts[0] });
+      }
+      resolve({ ok: true, ports: [...seen.values()].sort((a, b) => a.port - b.port) });
+    });
+  });
+}
+function listPortsLinux() {
+  return new Promise(resolve => {
+    execFile('ss', ['-tlnpH'], { encoding: 'utf8', maxBuffer: 8 << 20, timeout: 8000 }, (err, stdout) => {
+      if (err || !stdout) { resolve({ ok: false }); return; }
+      const seen = new Map();
+      for (const line of stdout.split('\n')) {
+        const pm = line.match(/[\s\[]([\d.:a-fA-F*]+):(\d+)\s/);   // local address:port column
+        if (!pm) continue;
+        const port = parseInt(pm[2], 10);
+        const proc = line.match(/users:\(\("([^"]+)",pid=(\d+)/);
+        if (!seen.has(port)) seen.set(port, { port, pid: proc ? parseInt(proc[2], 10) : 0, name: proc ? proc[1] : '?' });
+      }
+      resolve({ ok: true, ports: [...seen.values()].sort((a, b) => a.port - b.port) });
+    });
+  });
+}
+function listPortsWin() {
+  const cmd = "Get-NetTCPConnection -State Listen | Group-Object LocalPort | ForEach-Object { " +
+    "$c=$_.Group[0]; $p=Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue; " +
+    "[pscustomobject]@{ port=[int]$c.LocalPort; procId=[int]$c.OwningProcess; name=$p.ProcessName } } | " +
+    "Sort-Object port | ConvertTo-Json -Compress";
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true, maxBuffer: 8 << 20, timeout: 10000 }, (err, stdout) => {
+      if (err || !stdout) { resolve({ ok: false }); return; }
+      try {
+        let data = JSON.parse(stdout.trim());
+        if (!Array.isArray(data)) data = [data];
+        resolve({ ok: true, ports: data.map(d => ({ port: d.port, pid: d.procId, name: d.name || '?' })) });
+      } catch (_) { resolve({ ok: false }); }
+    });
+  });
+}
+function listPorts() {
+  if (IS_MAC) return listPortsMac();
+  if (IS_WIN) return listPortsWin();
+  return listPortsLinux();
+}
+// Kill a process by PID. Force + tree-kill so a dev server's child workers die too.
+function killPid(pid) {
+  pid = parseInt(pid, 10);
+  if (!pid || pid < 2) return Promise.resolve({ ok: false, error: 'invalid pid' });
+  return new Promise(resolve => {
+    if (IS_WIN) {
+      execFile('taskkill', ['/PID', String(pid), '/F', '/T'], { windowsHide: true, timeout: 6000 }, err => resolve({ ok: !err, error: err && err.message }));
+    } else {
+      try { process.kill(pid, 'SIGTERM'); resolve({ ok: true }); }
+      catch (e) { resolve({ ok: false, error: e.message }); }
+    }
+  });
+}
+
 // ── HiDPI scale ───────────────────────────────────────────────────
 // Read the user's *real* display scale. Windows latches the forced
 // --force-device-scale-factor, so we consult the registry (AppliedDPI). macOS
@@ -351,5 +422,6 @@ module.exports = {
   checkNixEnv, resolveAgentEnv, agentVersion, agentCwd,
   gitBase,
   startGpuSampler, stopGpuSampler, gpuPercent, topProcs,
+  listPorts, killPid,
   readRealScale,
 };

@@ -373,6 +373,10 @@ ipcMain.handle(IPC.TOP_PROCS, (_, by) => {
   return p;
 });
 
+// Localhost server scanner — list listening ports (+ owning process), kill one.
+ipcMain.handle(IPC.PORTS_LIST, () => platform.listPorts());
+ipcMain.handle(IPC.PORTS_KILL, (_, pid) => platform.killPid(pid));
+
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -2841,6 +2845,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Edit Tabs',          click: act('edit-tabs') },
     { label: 'MCP Tool Tokens',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
+    { label: 'Localhost Servers…', click: act('localhost') },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },

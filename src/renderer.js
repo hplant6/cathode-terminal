@@ -3202,6 +3202,7 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'new-window':    ipcRenderer.send(IPC.NEW_WINDOW); break;
     case 'about':         openAboutModal();      break;
     case 'perf-report':   openPerfReportModal?.(); break;
+    case 'localhost':     openLocalhostModal?.(); break;
   }
 });
 
@@ -3251,6 +3252,67 @@ let openPerfReportModal = null;
     perfModalCtl.open();
     collect(0);   // quick snapshot on open; user can run the 5s sample for sustained CPU
   };
+})();
+
+// ── Localhost server scanner (Settings → Localhost Servers) ───────
+let openLocalhostModal = null;
+(function initLocalhost() {
+  const modal = document.getElementById('localhost-modal');
+  if (!modal) return;
+  const ctl = wireModal(modal);
+  const listEl = document.getElementById('lh-list');
+  const filterEl = document.getElementById('lh-filter');
+  const refreshBtn = document.getElementById('lh-refresh');
+  let ports = [], busy = false;
+  const urlFor = p => 'http://localhost:' + p.port;
+  const mkBtn = (label, cls) => { const b = document.createElement('button'); b.className = 'lh-btn ' + cls; b.textContent = label; return b; };
+
+  function render() {
+    const q = (filterEl.value || '').trim().toLowerCase();
+    const rows = ports.filter(p => !q || String(p.port).includes(q) || (p.name || '').toLowerCase().includes(q));
+    if (!rows.length) {
+      listEl.innerHTML = '';
+      const e = document.createElement('div'); e.className = 'lh-empty';
+      e.textContent = busy ? 'Scanning…' : (ports.length ? 'No matches.' : 'No listening ports found.');
+      listEl.appendChild(e); return;
+    }
+    listEl.innerHTML = '';
+    rows.forEach(p => {
+      const row = document.createElement('div'); row.className = 'lh-row';
+      const port = document.createElement('span'); port.className = 'lh-port'; port.textContent = p.port;
+      const proc = document.createElement('span'); proc.className = 'lh-proc';
+      const name = document.createElement('span'); name.className = 'lh-name'; name.textContent = p.name || '?';
+      const pid = document.createElement('span'); pid.className = 'lh-pid'; pid.textContent = 'pid ' + (p.pid || '—');
+      proc.append(name, pid);
+      const actions = document.createElement('span'); actions.className = 'lh-actions';
+      const openB = mkBtn('Open', 'lh-open'), copyB = mkBtn('Copy', 'lh-copy'), killB = mkBtn('Kill', 'lh-kill');
+      openB.title = 'Open ' + urlFor(p) + ' in the Browser';
+      openB.addEventListener('click', () => { ipcRenderer.send(IPC.BROWSER_NAVIGATE, urlFor(p)); ctl.close(); });
+      copyB.addEventListener('click', () => { navigator.clipboard.writeText(urlFor(p)).then(() => { copyB.textContent = 'Copied'; setTimeout(() => { copyB.textContent = 'Copy'; }, 1000); }).catch(() => {}); });
+      if (!p.pid) killB.disabled = true;
+      let armed = false, armTimer = null;
+      killB.addEventListener('click', () => {   // two-step confirm — killing is destructive
+        if (!armed) { armed = true; killB.textContent = 'Sure?'; killB.classList.add('lh-arm'); armTimer = setTimeout(() => { armed = false; killB.textContent = 'Kill'; killB.classList.remove('lh-arm'); }, 2500); return; }
+        clearTimeout(armTimer); killB.textContent = '…'; killB.disabled = true;
+        ipcRenderer.invoke(IPC.PORTS_KILL, p.pid).finally(() => setTimeout(scan, 350));
+      });
+      actions.append(openB, copyB, killB);
+      row.append(port, proc, actions);
+      listEl.appendChild(row);
+    });
+  }
+  async function scan() {
+    busy = true; if (!ports.length) render();
+    try { const r = await ipcRenderer.invoke(IPC.PORTS_LIST); ports = (r && r.ok && Array.isArray(r.ports)) ? r.ports : []; }
+    catch (_) { ports = []; }
+    finally { busy = false; render(); }
+  }
+  refreshBtn?.addEventListener('click', scan);
+  filterEl?.addEventListener('input', render);
+  document.getElementById('lh-close')?.addEventListener('click', ctl.close);
+  document.getElementById('lh-done')?.addEventListener('click', ctl.close);
+
+  openLocalhostModal = function() { ports = []; filterEl.value = ''; ctl.open(); scan(); };
 })();
 
 const apiKeyModalCtl = wireModal(apiKeyModal);

@@ -1364,6 +1364,22 @@
     </div>
   </div>
 
+  <div id="localhost-modal" class="modal-backdrop">
+    <div class="modal-box lh-box">
+      <button id="lh-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Localhost Servers</div>
+      <p class="modal-desc">TCP ports listening on this machine right now — open one in the Browser, copy its URL, or kill a stray dev server.</p>
+      <div class="lh-toolbar">
+        <input id="lh-filter" class="modal-input lh-filter" placeholder="Filter by port or process…" spellcheck="false" autocomplete="off" />
+        <button id="lh-refresh" class="modal-btn-cancel">Refresh</button>
+      </div>
+      <div id="lh-list" class="lh-list"><div class="lh-empty">Scanning…</div></div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="lh-done">Done</button>
+      </div>
+    </div>
+  </div>
+
   <div id="onboarding" class="modal-backdrop">
     <div id="onb-panel">
       <div id="onb-header">
