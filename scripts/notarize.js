@@ -24,11 +24,32 @@ exports.default = async function notarizing(context) {
   const { notarize } = require('@electron/notarize');
   const appName = context.packager.appInfo.productFilename;
   console.log(`[notarize] Submitting ${appName}.app to the Apple notary service — this can take a few minutes…`);
-  await notarize({
-    appPath: `${appOutDir}/${appName}.app`,
-    appleId: APPLE_ID,
-    appleIdPassword: APPLE_APP_SPECIFIC_PASSWORD,
-    teamId: APPLE_TEAM_ID,
+
+  // Apple's notary service has hung this step for the entire CI job timeout before.
+  // Cap it, and treat any failure/timeout as NON-FATAL: the app is already
+  // Developer-ID signed, so shipping signed-but-not-notarized (users right-click →
+  // Open once) beats a pipeline that hangs for hours. A healthy notary still fully
+  // notarizes + staples. Re-run the release when Apple recovers for a clean build.
+  const TIMEOUT_MIN = Number(process.env.NOTARIZE_TIMEOUT_MIN || 20);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${TIMEOUT_MIN} min`)), TIMEOUT_MIN * 60_000);
+    if (timer.unref) timer.unref();
   });
-  console.log(`[notarize] ${appName}.app notarized and stapled.`);
+  try {
+    await Promise.race([
+      notarize({
+        appPath: `${appOutDir}/${appName}.app`,
+        appleId: APPLE_ID,
+        appleIdPassword: APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: APPLE_TEAM_ID,
+      }),
+      timeout,
+    ]);
+    console.log(`[notarize] ${appName}.app notarized and stapled.`);
+  } catch (err) {
+    console.warn(`[notarize] ⚠️  Notarization did not complete (${err && err.message}). Shipping the SIGNED (un-notarized) build — open it via right-click → Open. Re-run the release once Apple's notary service recovers for a fully notarized build.`);
+  } finally {
+    clearTimeout(timer);
+  }
 };

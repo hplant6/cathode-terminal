@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.29] - 2026-07-08
+
+### Fixed
+- **Restart button no longer hides behind the AUDIT dropdown.** The vertical tool rail's "dodge" was shoving the audit button alone onto the restart button; now the whole `+ · restart · AUDIT` cluster shifts as a unit, so nothing overlaps.
+
+### Added
+- **Animation tool — motion-framework output.** The Animate panel now emits idiomatic code for **CSS, Web Animations, GSAP, Framer Motion, and Motion One** from one spec, chosen via a sliding-thumb toggle. Includes a framework-adaptive **Spring** easing (real springs for Framer/Motion One, physics-ease approximation elsewhere) with stiffness/damping/mass.
+- **Ctrl/Cmd+Shift+I toggles the app's DevTools** (Windows/Linux have no menu bar, so there was no built-in binding).
+
+### Changed
+- macOS notarization is now resilient — a stalled Apple notary can't hang the release; the build ships signed and notarizes when the service is healthy.
+
 ## [1.0.28] - 2026-07-08
 
 ### Added
