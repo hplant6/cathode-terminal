@@ -193,9 +193,10 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const ctrl = input.control || input.meta;
 
-    // F12 — toggle DevTools for the APP window itself (debugging the app UI,
-    // not the browsed page — that has its own DevTools panel).
-    if (input.key === 'F12') {
+    // F12 or Ctrl/Cmd+Shift+I — toggle DevTools for the APP window itself (debug the
+    // app UI, not the browsed page — that has its own DevTools panel). Windows/Linux
+    // set no app menu, so this is the only DevTools binding (no F12 key? use Ctrl+Shift+I).
+    if (input.key === 'F12' || (ctrl && input.shift && input.code === 'KeyI')) {
       event.preventDefault();
       mainWindow.webContents.toggleDevTools();
       return;
