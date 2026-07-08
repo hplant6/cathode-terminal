@@ -3851,7 +3851,9 @@ window.addEventListener('resize', () => {
 // ── Dodge the vertical tool rail ──────────────────────────────────
 // Right-aligned chrome that the #toolbar rail can overlap shifts left only
 // while it's actually covered, and snaps back when it isn't.
-const DODGE_SELECTORS = ['.usage-cost-val', '#audit-wrap', '.notif-toggle', '#btn-ui-resize'];
+// NB: dodge the whole #terminal-actions cluster (+, restart, AUDIT) as a unit —
+// dodging #audit-wrap alone drove it left onto the restart button beside it.
+const DODGE_SELECTORS = ['.usage-cost-val', '#terminal-actions', '.notif-toggle', '#btn-ui-resize'];
 function dodgeToolbar() {
   const toolbar = document.getElementById('toolbar');
   const els = [];
