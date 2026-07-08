@@ -5119,8 +5119,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const distSlider = $('anim-distance-slider'), distNum = $('anim-distance');
   const amtSlider = $('anim-amount-slider'), amtNum = $('anim-amount'), amtLabel = $('anim-amount-label');
   const colorSwatch = $('anim-color'), replayBtn = $('anim-replay'), loopBtn = $('anim-loop');
-  const staggerBtn = $('anim-stagger'), staggerRow = $('anim-row-stagger-by'), staggerSlider = $('anim-stagger-slider'), staggerNum = $('anim-stagger-amt');
-  let targetColor = '#ff5720', staggerOn = false;
+  let targetColor = '#ff5720';
   const rowDir = $('anim-row-direction'), rowDist = $('anim-row-distance'), rowAmt = $('anim-row-amount'), rowColor = $('anim-row-color');
   const bezierRow = $('anim-row-bezier');
   // Cubic-bézier curve editor: two draggable handles. SVG maps time x∈[0,1]→[20,180]
@@ -5216,7 +5215,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (f.amount) spec.amount = +amtNum.value;
     if (f.color) spec.targetColor = targetColor;
     if (easingSel.value === 'spring') spec.spring = { stiffness: +stiffNum.value || 100, damping: +dampNum.value || 10, mass: +massNum.value || 1 };
-    if (staggerOn) spec.stagger = +staggerNum.value || 0;
     return spec;
   }
 
@@ -5245,10 +5243,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
   wirePair(stiffSlider, stiffNum); wirePair(dampSlider, dampNum); wirePair(massSlider, massNum);
-  wirePair(staggerSlider, staggerNum);
-  staggerBtn?.addEventListener('click', () => { staggerOn = !staggerOn; staggerBtn.classList.toggle('on', staggerOn); staggerRow.hidden = !staggerOn; schedulePreview(); });
   // Custom number spinner: click the top/bottom half of the icon zone to step.
-  [durNum, distNum, amtNum, delayNum, stiffNum, dampNum, massNum, staggerNum].forEach(num => num.addEventListener('click', (e) => {
+  [durNum, distNum, amtNum, delayNum, stiffNum, dampNum, massNum].forEach(num => num.addEventListener('click', (e) => {
     const rect = num.getBoundingClientRect();
     if (e.clientX < rect.right - 16) return;   // only the right-edge icon zone steps
     (e.clientY < rect.top + rect.height / 2) ? num.stepUp() : num.stepDown();
@@ -5267,7 +5263,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     currentSelector = selector || '';
     if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
     typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true; springRow.hidden = true;
-    staggerOn = false; staggerBtn?.classList.remove('on'); if (staggerRow) staggerRow.hidden = true;
     loopPreview = false; loopBtn?.classList.remove('on');
     BZ.x1 = 0.4; BZ.y1 = 0; BZ.x2 = 0.2; BZ.y2 = 1; bzRender();
     durSlider.value = durNum.value = 1000; delayNum.value = 0;
