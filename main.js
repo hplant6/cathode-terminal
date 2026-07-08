@@ -2068,6 +2068,73 @@ ipcMain.handle(IPC.GET_USAGE, async (_, { cwd } = {}) => {
   }
 });
 
+// ── Spend management: aggregate cost across every project's transcripts ────
+// Scan all ~/.claude/projects/*/*.jsonl, cost each message by its OWN model
+// (opus/sonnet/haiku differ ~20×), and bucket by project / day / model. Per-file
+// cache keyed on mtime+size so re-opens only re-read changed transcripts (these
+// live on the slow \\wsl.localhost FS). Reuses usagePricing().
+const _spendCache = new Map();   // filepath -> { mtime, size, cost, tokens, byDay, byModel, sessions }
+async function scanSpendFile(file) {
+  const st = await fsp.stat(file);
+  const hit = _spendCache.get(file);
+  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit;
+  const raw = await fsp.readFile(file, 'utf8');
+  let cost = 0, tokens = 0; const byDay = {}, byModel = {};
+  for (const line of raw.split('\n')) {
+    const t = line.trim(); if (!t) continue;
+    let ev; try { ev = JSON.parse(t); } catch { continue; }
+    const msg = ev.message || ev; const u = msg && msg.usage; if (!u) continue;
+    const model = msg.model || '';
+    const p = usagePricing(model);
+    const inT = u.input_tokens || 0, outT = u.output_tokens || 0, cc = u.cache_creation_input_tokens || 0, cr = u.cache_read_input_tokens || 0;
+    const lc = (inT * p.in + outT * p.out + cc * p.cacheWrite + cr * p.cacheRead) / 1e6;
+    const lt = inT + outT + cc + cr;
+    cost += lc; tokens += lt;
+    const day = String(ev.timestamp || '').slice(0, 10);   // YYYY-MM-DD
+    if (day) byDay[day] = (byDay[day] || 0) + lc;
+    if (model) { const bm = byModel[model] || (byModel[model] = { cost: 0, tokens: 0 }); bm.cost += lc; bm.tokens += lt; }
+  }
+  const rec = { mtime: st.mtimeMs, size: st.size, cost, tokens, byDay, byModel };
+  _spendCache.set(file, rec);
+  return rec;
+}
+function prettyProjectName(encoded) {
+  const segs = String(encoded).split('-').filter(Boolean);
+  return { name: segs[segs.length - 1] || encoded, path: segs.join('/') };
+}
+ipcMain.handle(IPC.SPEND_REPORT, async () => {
+  try {
+    const dir = await claudeProjectsDir();
+    if (!dir) return { ok: false, reason: 'no-projects-dir' };
+    const names = await fsp.readdir(dir);
+    const byProject = [], byDayAll = {}, byModelAll = {};
+    let totalCost = 0, totalTokens = 0, scannedFiles = 0;
+    for (const pn of names) {
+      const pdir = path.join(dir, pn);
+      let files;
+      try { if (!(await fsp.stat(pdir)).isDirectory()) continue; files = await fsp.readdir(pdir); } catch { continue; }
+      const jsonls = files.filter(f => f.endsWith('.jsonl'));
+      if (!jsonls.length) continue;
+      let pc = 0, pt = 0, plast = 0;
+      for (const f of jsonls) {
+        let rec; try { rec = await scanSpendFile(path.join(pdir, f)); } catch { continue; }
+        scannedFiles++;
+        pc += rec.cost; pt += rec.tokens; plast = Math.max(plast, rec.mtime);
+        totalCost += rec.cost; totalTokens += rec.tokens;
+        for (const d in rec.byDay) byDayAll[d] = (byDayAll[d] || 0) + rec.byDay[d];
+        for (const m in rec.byModel) { const bm = byModelAll[m] || (byModelAll[m] = { cost: 0, tokens: 0 }); bm.cost += rec.byModel[m].cost; bm.tokens += rec.byModel[m].tokens; }
+      }
+      if (pc > 0 || pt > 0) { const pp = prettyProjectName(pn); byProject.push({ name: pp.name, path: pp.path, cost: pc, tokens: pt, sessions: jsonls.length, lastActive: plast }); }
+    }
+    byProject.sort((a, b) => b.cost - a.cost);
+    const byDay = Object.entries(byDayAll).map(([date, cost]) => ({ date, cost })).sort((a, b) => (a.date < b.date ? -1 : 1));
+    const byModel = Object.entries(byModelAll).map(([model, v]) => ({ model, cost: v.cost, tokens: v.tokens })).sort((a, b) => b.cost - a.cost);
+    return { ok: true, totalCost, totalTokens, byProject, byDay, byModel, scannedFiles, scannedAt: Date.now() };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+});
+
 // Read the Claude OAuth access token from WSL ~/.claude/.credentials.json
 async function claudeOauthToken() {
   const base = await claudeConfigDir();
@@ -2845,6 +2912,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Edit Tabs',          click: act('edit-tabs') },
     { label: 'MCP Tool Tokens',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
+    { label: 'AI Spend…',          click: act('spend') },
     { label: 'Localhost Servers…', click: act('localhost') },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },

@@ -3203,6 +3203,7 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'about':         openAboutModal();      break;
     case 'perf-report':   openPerfReportModal?.(); break;
     case 'localhost':     openLocalhostModal?.(); break;
+    case 'spend':         openSpendModal?.();     break;
   }
 });
 
@@ -3325,6 +3326,92 @@ let openLocalhostModal = null;
   document.getElementById('lh-done')?.addEventListener('click', ctl.close);
 
   openLocalhostModal = function() { ports = []; filterEl.value = ''; if (showAllEl) showAllEl.checked = false; ctl.open(); scan(); };
+})();
+
+// ── AI Spend dashboard (Settings → AI Spend) ─────────────────────
+let openSpendModal = null;
+(function initSpend() {
+  const modal = document.getElementById('spend-modal');
+  if (!modal) return;
+  const ctl = wireModal(modal);
+  const bodyEl = document.getElementById('spend-body');
+  const refreshBtn = document.getElementById('spend-refresh');
+  const BUDGET_KEY = 'cathode-spend-budget';
+  let report = null, busy = false;
+
+  const usd = (n) => { n = n || 0; return n >= 100 ? '$' + Math.round(n).toLocaleString() : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(n < 0.01 ? 4 : 2); };
+  const tok = (n) => { n = n || 0; return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); };
+  const modelName = (m) => String(m).replace(/^claude-/, '');
+  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const monthSpend = (byDay) => { const ym = new Date().toISOString().slice(0, 7); return (byDay || []).filter(d => d.date.startsWith(ym)).reduce((s, d) => s + d.cost, 0); };
+
+  function render() {
+    bodyEl.innerHTML = '';
+    if (busy && !report) { bodyEl.appendChild(el('div', 'lh-empty', 'Scanning transcripts…')); return; }
+    if (!report || !report.ok) { bodyEl.appendChild(el('div', 'lh-empty', 'No spend data found (no Claude transcripts).')); return; }
+    const month = monthSpend(report.byDay);
+
+    // Summary stats
+    const sum = el('div', 'spend-summary');
+    [[usd(report.totalCost), 'Total (all time)'], [usd(month), 'This month'], [tok(report.totalTokens), 'Total tokens']].forEach(([v, l]) => {
+      const s = el('div', 'spend-stat'); s.append(el('div', 'spend-stat-val', v), el('div', 'spend-stat-lbl', l)); sum.appendChild(s);
+    });
+    bodyEl.appendChild(sum);
+
+    // Monthly budget
+    const budget = parseFloat(localStorage.getItem(BUDGET_KEY)) || 0;
+    const bw = el('div', 'spend-budget');
+    const bh = el('div', 'spend-budget-head'); bh.appendChild(el('span', null, 'Monthly budget'));
+    const bi = document.createElement('input'); bi.type = 'number'; bi.className = 'spend-budget-input'; bi.placeholder = 'Set $…'; bi.min = '0'; bi.step = '10'; if (budget) bi.value = budget;
+    bi.addEventListener('change', () => { const v = parseFloat(bi.value) || 0; v > 0 ? localStorage.setItem(BUDGET_KEY, String(v)) : localStorage.removeItem(BUDGET_KEY); render(); });
+    bh.appendChild(bi); bw.appendChild(bh);
+    if (budget > 0) {
+      const ratio = month / budget;
+      const bar = el('div', 'spend-bar'); const fill = el('div', 'spend-bar-fill' + (ratio >= 1 ? ' over' : ratio >= 0.75 ? ' warn' : ''));
+      fill.style.width = Math.min(100, ratio * 100) + '%'; bar.appendChild(fill); bw.appendChild(bar);
+      bw.appendChild(el('div', 'spend-budget-note', `${usd(month)} of ${usd(budget)} · ${Math.round(ratio * 100)}%` + (ratio >= 1 ? ' — over budget' : ratio >= 0.75 ? ' — approaching limit' : '')));
+    }
+    bodyEl.appendChild(bw);
+
+    // Trend — last 14 days
+    const dayMap = {}; report.byDay.forEach(d => { dayMap[d.date] = d.cost; });
+    const todayUTC = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+    const days = []; for (let i = 13; i >= 0; i--) { const key = new Date(todayUTC.getTime() - i * 86400000).toISOString().slice(0, 10); days.push({ date: key, cost: dayMap[key] || 0 }); }
+    const maxDay = Math.max(...days.map(d => d.cost), 0.01);
+    const tr = el('div', 'spend-section'); tr.appendChild(el('div', 'spend-section-title', 'Last 14 days'));
+    const chart = el('div', 'spend-chart');
+    days.forEach(d => { const col = el('div', 'spend-chart-col'); const b = el('div', 'spend-chart-bar'); b.style.height = Math.max(3, (d.cost / maxDay) * 100) + '%'; b.title = d.date + ' · ' + usd(d.cost); col.appendChild(b); chart.appendChild(col); });
+    tr.appendChild(chart); bodyEl.appendChild(tr);
+
+    // By model
+    const models = report.byModel.filter(m => m.cost > 0).slice(0, 6);
+    if (models.length) {
+      const ms = el('div', 'spend-section'); ms.appendChild(el('div', 'spend-section-title', 'By model'));
+      const maxM = Math.max(...models.map(m => m.cost), 0.01);
+      models.forEach(m => { const row = el('div', 'spend-mrow'); row.appendChild(el('span', 'spend-mname', modelName(m.model))); const t = el('div', 'spend-mtrack'); const f = el('div', 'spend-mfill'); f.style.width = (m.cost / maxM * 100) + '%'; t.appendChild(f); row.appendChild(t); row.appendChild(el('span', 'spend-mval', usd(m.cost))); ms.appendChild(row); });
+      bodyEl.appendChild(ms);
+    }
+
+    // By project
+    const projs = report.byProject.slice(0, 8);
+    if (projs.length) {
+      const ps = el('div', 'spend-section'); ps.appendChild(el('div', 'spend-section-title', 'By project'));
+      projs.forEach(p => { const row = el('div', 'spend-prow'); const info = el('div', 'spend-pinfo'); info.append(el('div', 'spend-pname', p.name), el('div', 'spend-ppath', p.path)); const meta = el('div', 'spend-pmeta'); meta.append(el('div', 'spend-pcost', usd(p.cost)), el('div', 'spend-psub', tok(p.tokens) + ' tok · ' + p.sessions + ' sess')); row.append(info, meta); ps.appendChild(row); });
+      bodyEl.appendChild(ps);
+    }
+    bodyEl.appendChild(el('div', 'spend-foot', `Estimated from ${report.scannedFiles} transcripts · list prices, excludes subscription plans`));
+  }
+
+  async function scan() {
+    busy = true; render();
+    try { report = await ipcRenderer.invoke(IPC.SPEND_REPORT); }
+    catch (_) { report = { ok: false }; }
+    finally { busy = false; render(); }
+  }
+  refreshBtn?.addEventListener('click', () => { report = null; scan(); });
+  document.getElementById('spend-close')?.addEventListener('click', ctl.close);
+  document.getElementById('spend-done')?.addEventListener('click', ctl.close);
+  openSpendModal = function() { ctl.open(); report ? render() : scan(); };
 })();
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
