@@ -3263,17 +3263,28 @@ let openLocalhostModal = null;
   const listEl = document.getElementById('lh-list');
   const filterEl = document.getElementById('lh-filter');
   const refreshBtn = document.getElementById('lh-refresh');
+  const showAllEl = document.getElementById('lh-showall');
   let ports = [], busy = false;
   const urlFor = p => 'http://localhost:' + p.port;
+  // "Servers I spun up" ≈ common dev-server runtimes. Everything else (svchost, system
+  // services, …) is hidden unless Show all is ticked. Prefixes catch python3.11, nodejs, etc.
+  const DEV_NAMES = new Set(['node', 'nodejs', 'deno', 'bun', 'python', 'pythonw', 'py', 'ruby', 'php', 'php-cgi', 'java', 'javaw', 'dotnet', 'caddy', 'nginx', 'httpd', 'apache2', 'puma', 'unicorn', 'gunicorn', 'uvicorn', 'hypercorn', 'waitress', 'rails', 'iisexpress', 'esbuild', 'vite', 'webpack', 'next-server']);
+  const DEV_PREFIXES = ['python', 'node', 'java', 'php', 'ruby', 'dotnet'];
+  const isDevServer = (name) => { const n = String(name || '').toLowerCase().replace(/\.(exe|app)$/, ''); return DEV_NAMES.has(n) || DEV_PREFIXES.some(p => n.startsWith(p)); };
   const mkBtn = (label, cls) => { const b = document.createElement('button'); b.className = 'lh-btn ' + cls; b.textContent = label; return b; };
 
   function render() {
     const q = (filterEl.value || '').trim().toLowerCase();
-    const rows = ports.filter(p => !q || String(p.port).includes(q) || (p.name || '').toLowerCase().includes(q));
+    const showAll = !!(showAllEl && showAllEl.checked);
+    const visible = ports.filter(p => showAll || isDevServer(p.name));
+    const rows = visible.filter(p => !q || String(p.port).includes(q) || (p.name || '').toLowerCase().includes(q));
     if (!rows.length) {
       listEl.innerHTML = '';
       const e = document.createElement('div'); e.className = 'lh-empty';
-      e.textContent = busy ? 'Scanning…' : (ports.length ? 'No matches.' : 'No listening ports found.');
+      if (busy) e.textContent = 'Scanning…';
+      else if (q) e.textContent = 'No matches.';
+      else if (!showAll && ports.length) e.textContent = `No dev servers detected — ${ports.length} other port${ports.length === 1 ? '' : 's'} listening. Tick “Show all” to see them.`;
+      else e.textContent = 'No listening ports found.';
       listEl.appendChild(e); return;
     }
     listEl.innerHTML = '';
@@ -3309,10 +3320,11 @@ let openLocalhostModal = null;
   }
   refreshBtn?.addEventListener('click', scan);
   filterEl?.addEventListener('input', render);
+  showAllEl?.addEventListener('change', render);
   document.getElementById('lh-close')?.addEventListener('click', ctl.close);
   document.getElementById('lh-done')?.addEventListener('click', ctl.close);
 
-  openLocalhostModal = function() { ports = []; filterEl.value = ''; ctl.open(); scan(); };
+  openLocalhostModal = function() { ports = []; filterEl.value = ''; if (showAllEl) showAllEl.checked = false; ctl.open(); scan(); };
 })();
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
