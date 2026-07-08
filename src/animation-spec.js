@@ -49,6 +49,7 @@ function animKeyframes(spec) {
   var dur   = spec.duration != null ? Number(spec.duration) : 1000;
   var delay = spec.delay != null ? Number(spec.delay) : 0;
   var ease  = spec.easing || 'ease';
+  if (ease === 'spring') ease = 'cubic-bezier(0.34, 1.56, 0.64, 1)';   // spring → overshoot bezier for CSS / WAAPI / live preview (real spring goes to framer/motion emitters)
   var dist  = spec.distance != null ? Number(spec.distance) : 40;
   var amt   = spec.amount != null ? Number(spec.amount) : null;
   var dir   = spec.direction || 'up';
@@ -141,6 +142,146 @@ function jsSnippet(spec, selector) {
   return "const el = document.querySelector('" + String(selector).replace(/'/g, "\\'") + "');\n" + triggerJs(spec, play);
 }
 
+// ── Framework emitters ─────────────────────────────────────────────────────
+// Same spec → idiomatic code for popular motion libraries. Live preview stays
+// WAAPI; these drive the code the panel shows and the request sent to the agent.
+function _q(sel) { return "'" + String(sel).replace(/'/g, "\\'") + "'"; }
+function _num(v) { var n = parseFloat(v); return isNaN(n) ? v : n; }
+// Parse a CSS transform string into library-native props (numbers).
+function parseTransform(str) {
+  var out = {};
+  if (!str || str === 'none') return out;
+  var re = /(translateX|translateY|scale|scaleX|scaleY|rotate|rotateZ|skewX|skewY)\(([^)]+)\)/g, m;
+  while ((m = re.exec(str))) {
+    var v = _num(m[2]);
+    switch (m[1]) {
+      case 'translateX': out.x = v; break;
+      case 'translateY': out.y = v; break;
+      case 'scale': out.scale = v; break;
+      case 'scaleX': out.scaleX = v; break;
+      case 'scaleY': out.scaleY = v; break;
+      case 'rotate': case 'rotateZ': out.rotate = v; break;
+      case 'skewX': out.skewX = v; break;
+      case 'skewY': out.skewY = v; break;
+    }
+  }
+  return out;
+}
+// One WAAPI keyframe → library-native vars ('gsap' uses `rotation`, others `rotate`).
+function kfToVars(kf, dialect) {
+  var v = {};
+  if (kf.opacity != null) v.opacity = _num(kf.opacity);
+  if (kf.backgroundColor != null) v.backgroundColor = kf.backgroundColor;
+  if (kf.color != null) v.color = kf.color;
+  if (kf.filter != null) v.filter = kf.filter;
+  if (kf.transform) { var t = parseTransform(kf.transform); for (var k in t) { if (k === 'rotate' && dialect === 'gsap') v.rotation = t[k]; else v[k] = t[k]; } }
+  return v;
+}
+function serVars(o) { return Object.keys(o).map(function (k) { var v = o[k]; return k + ': ' + (typeof v === 'number' ? v : "'" + String(v).replace(/'/g, "\\'") + "'"); }).join(', '); }
+// A transform prop set on one end but not the other must animate to/from its
+// identity — else libraries that parse transforms (GSAP/Framer) leave it stuck.
+var _IDENT = { x: 0, y: 0, skewX: 0, skewY: 0, rotate: 0, rotation: 0, scale: 1, scaleX: 1, scaleY: 1, opacity: 1, filter: 'none' };
+function balance(a, b) {
+  [[a, b], [b, a]].forEach(function (pair) { Object.keys(pair[0]).forEach(function (k) { if (!(k in pair[1]) && k in _IDENT) pair[1][k] = _IDENT[k]; }); });
+}
+function serArr(arr) { return '[' + arr.map(function (v) { return typeof v === 'number' ? v : "'" + String(v).replace(/'/g, "\\'") + "'"; }).join(', ') + ']'; }
+// Multi-keyframe → per-prop value arrays (union of keys, identity-filled), for
+// libraries that take keyframe arrays (Framer / Motion). Keeps arrays aligned.
+function perPropArrays(kfs, dialect) {
+  var list = kfs.map(function (kf) { return kfToVars(kf, dialect); });
+  var keys = {}; list.forEach(function (v) { Object.keys(v).forEach(function (k) { keys[k] = 1; }); });
+  var out = {};
+  Object.keys(keys).forEach(function (k) { out[k] = list.map(function (v) { return (k in v) ? v[k] : (k in _IDENT ? _IDENT[k] : v[k]); }); });
+  return out;
+}
+function gsapEase(e) {
+  var map = { 'ease':'power1.inOut','linear':'none','ease-in':'power1.in','ease-out':'power1.out','ease-in-out':'power1.inOut','cubic-bezier(0.68,-0.55,0.265,1.55)':'back.out(1.7)','cubic-bezier(0.34,1.56,0.64,1)':'back.out(1.4)','cubic-bezier(0.68,-0.6,0.32,1.6)':'elastic.out(1,0.4)','steps(6,end)':'steps(6)' };
+  return map[e] || 'power2.out';
+}
+function framerEase(e) {
+  var named = { 'ease':'easeInOut','linear':'linear','ease-in':'easeIn','ease-out':'easeOut','ease-in-out':'easeInOut' };
+  if (named[e]) return "'" + named[e] + "'";
+  var m = /cubic-bezier\(([^)]+)\)/.exec(e);
+  if (m) return '[' + m[1].split(',').map(function (n) { return parseFloat(n); }).join(', ') + ']';
+  return "'easeOut'";
+}
+function _repeat(iters, lib) { if (iters === Infinity) return lib === 'gsap' ? -1 : 'Infinity'; return Math.max(0, iters - 1); }
+function _spring(spec) { var s = spec.spring || {}; return 'stiffness: ' + (s.stiffness != null ? s.stiffness : 100) + ', damping: ' + (s.damping != null ? s.damping : 10) + ', mass: ' + (s.mass != null ? s.mass : 1); }
+// Which frameworks do a real (or near-real) spring; CSS/WAAPI only approximate.
+var ANIM_SPRING_NATIVE = ['gsap', 'framer', 'motion'];
+
+function gsapSnippet(spec, selector) {
+  var r = animKeyframes(spec), o = r.options, kfs = r.keyframes;
+  var rep = _repeat(o.iterations, 'gsap');
+  var isSpring = spec.easing === 'spring';
+  var ez = isSpring ? 'elastic.out(1, 0.5)' : gsapEase(o.easing);   // GSAP core has no spring — elastic is the closest built-in
+  var opt = 'duration: ' + +(o.duration / 1000).toFixed(3) + ", ease: '" + ez + "'" + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+  var call;
+  if (kfs.length > 2) {
+    var kv = kfs.map(function (kf) { return kfToVars(kf, 'gsap'); });
+    var uk = {}; kv.forEach(function (v) { Object.keys(v).forEach(function (k) { uk[k] = 1; }); });
+    kv.forEach(function (v) { Object.keys(uk).forEach(function (k) { if (!(k in v) && k in _IDENT) v[k] = _IDENT[k]; }); });
+    call = 'gsap.to(' + _q(selector) + ', { keyframes: [' + kv.map(function (v) { return '{ ' + serVars(v) + ' }'; }).join(', ') + '], ' + opt + ' });';
+  } else if (kfs.length === 2) {
+    var gf = kfToVars(kfs[0], 'gsap'), gt = kfToVars(kfs[kfs.length - 1], 'gsap'); balance(gf, gt);
+    var from = serVars(gf), to = serVars(gt);
+    call = 'gsap.fromTo(' + _q(selector) + ', { ' + from + ' }, { ' + to + (to ? ', ' : '') + opt + ' });';
+  } else {
+    var v = serVars(kfToVars(kfs[0], 'gsap'));
+    call = 'gsap.to(' + _q(selector) + ', { ' + v + (v ? ', ' : '') + opt + ' });';
+  }
+  var t = spec.trigger || 'load', head = "import gsap from 'gsap';\n" + (isSpring ? "// GSAP core has no spring — 'elastic' approximates it; for a true spring add the Physics2/CustomBounce plugin.\n" : '');
+  if (t === 'scroll') return head + "import { ScrollTrigger } from 'gsap/ScrollTrigger';\ngsap.registerPlugin(ScrollTrigger);\n" + call.replace(/\}\);$/, ", scrollTrigger: { trigger: " + _q(selector) + ", start: 'top 80%' } });");
+  if (t === 'hover' || t === 'click') return head + "document.querySelector(" + _q(selector) + ").addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + call + "\n});";
+  return head + call;
+}
+function motionOneSnippet(spec, selector) {
+  var r = animKeyframes(spec), o = r.options, kfs = r.keyframes, props = {};
+  kfs.forEach(function (kf) { Object.keys(kf).forEach(function (k) { if (k !== 'offset') (props[k] = props[k] || []).push(kf[k]); }); });
+  var kfStr = Object.keys(props).map(function (k) { return k + ': [' + props[k].map(function (v) { return typeof v === 'number' ? v : "'" + v + "'"; }).join(', ') + ']'; }).join(', ');
+  var rep = _repeat(o.iterations, 'motion');
+  var opt = spec.easing === 'spring'
+    ? "type: 'spring', " + _spring(spec) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '')
+    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ", easing: '" + o.easing + "'" + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+  var play = 'animate(' + _q(selector) + ', { ' + kfStr + ' }, { ' + opt + ' });';
+  var t = spec.trigger || 'load';
+  if (t === 'scroll') return "import { animate, inView } from 'motion';\ninView(" + _q(selector) + ", () => { " + play + " });";
+  if (t === 'hover' || t === 'click') return "import { animate } from 'motion';\ndocument.querySelector(" + _q(selector) + ").addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + play + "\n});";
+  return "import { animate } from 'motion';\n" + play;
+}
+function framerSnippet(spec, selector) {
+  var r = animKeyframes(spec), o = r.options, kfs = r.keyframes;
+  var rep = _repeat(o.iterations, 'framer');
+  var trans = spec.easing === 'spring'
+    ? "type: 'spring', " + _spring(spec) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '')
+    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ', ease: ' + framerEase(o.easing) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+  var head = "import { motion } from 'framer-motion';\n\n";
+  var t = spec.trigger || 'load';
+  var animProp = t === 'scroll' ? 'whileInView' : t === 'hover' ? 'whileHover' : t === 'click' ? 'whileTap' : 'animate';
+  if (kfs.length > 2) {
+    var pa = perPropArrays(kfs, 'framer');
+    var animObj = Object.keys(pa).map(function (k) { return k + ': ' + serArr(pa[k]); }).join(', ');
+    return head + '<motion.div\n  ' + animProp + '={{ ' + animObj + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+  }
+  if (kfs.length === 2) {
+    var ff = kfToVars(kfs[0], 'framer'), ft = kfToVars(kfs[kfs.length - 1], 'framer'); balance(ff, ft);
+    return head + '<motion.div\n  initial={{ ' + serVars(ff) + ' }}\n  ' + animProp + '={{ ' + serVars(ft) + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+  }
+  return head + '<motion.div\n  ' + animProp + '={{ ' + serVars(kfToVars(kfs[kfs.length - 1], 'framer')) + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+}
+// framework key → { label, lang (for highlighting), emit }
+var ANIM_FRAMEWORKS = [
+  ['css',    'CSS',            'css',        cssSnippet,       'CSS'],
+  ['waapi',  'Web Animations', 'javascript', jsSnippet,        'WAAPI'],
+  ['gsap',   'GSAP',           'javascript', gsapSnippet,      'GSAP'],
+  ['framer', 'Framer Motion',  'javascript', framerSnippet,    'Framer'],
+  ['motion', 'Motion One',     'javascript', motionOneSnippet, 'Motion'],
+];
+function emitCode(framework, spec, selector) {
+  var f = ANIM_FRAMEWORKS.find(function (x) { return x[0] === framework; }) || ANIM_FRAMEWORKS[0];
+  return { lang: f[2], code: f[3](spec, selector) };
+}
+
 function labelForType(type) {
   for (const g of ANIM_TYPES) for (const it of g.items) if (it[0] === type) return it[1];
   return type;
@@ -166,5 +307,6 @@ function summaryFor(spec) {
 module.exports = {
   ANIM_TYPES, EASINGS, DIRECTIONS, TRIGGERS, fieldsFor, amountMeta, labelForType, summaryFor,
   animKeyframes, cssSnippet, jsSnippet,
+  gsapSnippet, framerSnippet, motionOneSnippet, ANIM_FRAMEWORKS, emitCode, ANIM_SPRING_NATIVE,
   KEYFRAMES_FN_SRC: animKeyframes.toString(),
 };

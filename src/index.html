@@ -114,6 +114,7 @@
       </div>
       <div id="terminal-header">
         <div id="pty-tabs-container"></div>
+        <div id="terminal-actions">
         <div id="new-pty-wrap">
           <button id="btn-new-pty" title="New session">&#xff0b;</button>
           <div id="profile-menu"></div>
@@ -142,6 +143,7 @@
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><polyline points="2.75 14.25 8 9 2.75 3.75"></polyline><line x1="9.5" y1="14.25" x2="15.25" y2="14.25" data-color="color-2"></line></g></svg>
             </button>
           </div>
+        </div>
         </div>
       </div>
       <div id="pty-sessions"></div>
@@ -293,6 +295,11 @@
           <button id="animation-panel-new" class="pp-new-sel">New Selection</button>
         </div>
         <div id="animation-panel-body">
+          <div id="anim-fw-section">
+            <div class="anim-fw-title">Output framework</div>
+            <div id="anim-fw-toggle" class="anim-fw-toggle"><span class="anim-fw-thumb"></span></div>
+            <div id="anim-fw-note" class="anim-fw-note" hidden></div>
+          </div>
           <div class="pp-field"><span class="pp-field-label">Animate</span><div class="pp-field-ctrl"><select id="anim-type" class="anim-select pp-ct"></select></div></div>
           <div class="pp-field"><span class="pp-field-label">Easing</span><div class="pp-field-ctrl"><select id="anim-easing" class="anim-select pp-ct"></select></div></div>
           <div class="anim-bezier-block" id="anim-row-bezier" hidden>
@@ -308,6 +315,11 @@
               <circle id="bz-h2" class="bz-handle" cx="52" cy="50" r="7" />
             </svg>
             <div id="anim-bezier-readout" class="anim-bezier-readout">cubic-bezier(0.4, 0, 0.2, 1)</div>
+          </div>
+          <div class="anim-spring-block" id="anim-row-spring" hidden>
+            <div class="pp-field"><span class="pp-field-label">Stiffness</span><div class="pp-field-ctrl"><input id="anim-spring-stiffness-slider" class="rz-slider" type="range" min="1" max="500" step="1" value="180" /><input id="anim-spring-stiffness" class="pp-ctrl-input anim-num" type="number" min="1" max="1000" step="1" value="180" /></div></div>
+            <div class="pp-field"><span class="pp-field-label">Damping</span><div class="pp-field-ctrl"><input id="anim-spring-damping-slider" class="rz-slider" type="range" min="0" max="50" step="1" value="12" /><input id="anim-spring-damping" class="pp-ctrl-input anim-num" type="number" min="0" max="200" step="1" value="12" /></div></div>
+            <div class="pp-field"><span class="pp-field-label">Mass</span><div class="pp-field-ctrl"><input id="anim-spring-mass-slider" class="rz-slider" type="range" min="0.1" max="5" step="0.1" value="1" /><input id="anim-spring-mass" class="pp-ctrl-input anim-num" type="number" min="0.1" max="20" step="0.1" value="1" /></div></div>
           </div>
           <div class="pp-field"><span class="pp-field-label">Duration</span><div class="pp-field-ctrl"><input id="anim-duration-slider" class="rz-slider" type="range" min="0" max="3000" step="50" value="1000" /><input id="anim-duration" class="pp-ctrl-input anim-num" type="number" min="0" max="20000" step="50" value="1000" /></div></div>
           <div class="pp-field"><span class="pp-field-label">Delay</span><div class="pp-field-ctrl"><input id="anim-delay" class="pp-ctrl-input anim-num" type="number" min="0" max="20000" step="10" value="0" /></div></div>

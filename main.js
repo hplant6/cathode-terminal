@@ -21,7 +21,8 @@ const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
 const { getResizeScript }         = require('./src/resize-inject');
 const { getAnimationScript }      = require('./src/animation-inject');
-const { cssSnippet: animCss, jsSnippet: animJs, summaryFor: animSummary } = require('./src/animation-spec');
+const { cssSnippet: animCss, jsSnippet: animJs, summaryFor: animSummary, emitCode: animEmit, ANIM_FRAMEWORKS } = require('./src/animation-spec');
+const ANIM_FW_LABEL = Object.fromEntries(ANIM_FRAMEWORKS.map(f => [f[0], f[1]]));
 const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
@@ -3525,7 +3526,7 @@ ipcMain.on(IPC.STATES_CLEAR, async () => {
   } catch (_) {}
   resetStatesCache();
 });
-ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '' } = {}) => {
+ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '', framework = 'css' } = {}) => {
   const p = pendingAnim;
   pendingAnim = null;
   if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
@@ -3537,13 +3538,13 @@ ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '' } = {}) 
   const selector = res.selector;
   const instr = (instruction || '').trim();
   const anUrl = activePageUrl();
-  const detailLines = ['───── Animation Request ─────', res.snippet, '', 'Selector: ' + selector, 'Animation: ' + animSummary(spec)];
+  const detailLines = ['───── Animation Request ─────', 'Selector: ' + selector, 'Animation: ' + animSummary(spec)];
   const detail = (anUrl ? `From ${pageSource()} — ${anUrl}\n\n` : '') + detailLines.join('\n');
-  let css = '', js = '';
-  try { css = animCss(spec, selector); js = animJs(spec, selector); } catch (_) {}
+  let out = { lang: 'css', code: '' };
+  try { out = animEmit(framework, spec, selector); } catch (_) {}
   const body = (instr ? instr + '\n\n' : '')
-    + "Add this animation to the element. Starter code below — adapt to the project's stack (vanilla / React / Tailwind / framer-motion / GSAP):\n\n"
-    + '/* CSS */\n' + css + '\n\n// JS (Web Animations API)\n' + js;
+    + `Add this animation to the element using ${ANIM_FW_LABEL[framework] || framework}:\n\n`
+    + '```' + out.lang + '\n' + out.code + '\n```';
   uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Animation request' });
 });
 ipcMain.on(IPC.ANIM_PANEL_CANCEL, async () => {

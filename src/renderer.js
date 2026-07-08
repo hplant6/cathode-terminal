@@ -5157,11 +5157,50 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   const opts = (entries) => entries.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
   typeSel.innerHTML = ANIM.ANIM_TYPES.map(g => `<optgroup label="${g.group}">${opts(g.items)}</optgroup>`).join('');
-  easingSel.innerHTML = opts(ANIM.EASINGS.concat([['custom', 'Custom cubic-bézier…']]));
+  easingSel.innerHTML = opts(ANIM.EASINGS.concat([['spring', 'Spring (physics)'], ['custom', 'Custom cubic-bézier…']]));
   dirSel.innerHTML = opts(ANIM.DIRECTIONS);
   repeatSel.innerHTML = opts([['1', 'Once'], ['2', '2×'], ['3', '3×'], ['5', '5×'], ['infinite', 'Loop']]);
   triggerSel.innerHTML = opts(ANIM.TRIGGERS);
   [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(sel => { enhanceSelect(sel); sel.parentNode.classList.add('pp-ct'); });   // pp-ct on the wrap → lasso-panel dropdown styling
+
+  // ── Framework code output: pick a target library, see its code live ──
+  const fwToggle = $('anim-fw-toggle'), fwNote = $('anim-fw-note');
+  const springRow = $('anim-row-spring');
+  const stiffSlider = $('anim-spring-stiffness-slider'), stiffNum = $('anim-spring-stiffness');
+  const dampSlider = $('anim-spring-damping-slider'), dampNum = $('anim-spring-damping');
+  const massSlider = $('anim-spring-mass-slider'), massNum = $('anim-spring-mass');
+  const fwLabelFor = (fw) => { const f = ANIM.ANIM_FRAMEWORKS.find(x => x[0] === fw); return f ? f[1] : fw; };
+  let selectedFw = 'css', currentSelector = '';
+  const fwThumb = fwToggle.querySelector('.anim-fw-thumb');
+  function positionThumb() {   // design-system sliding thumb → slide it under the active segment
+    const active = fwToggle.querySelector('.anim-fw-chip.on');
+    if (active && fwThumb && active.offsetWidth) { fwThumb.style.left = active.offsetLeft + 'px'; fwThumb.style.width = active.offsetWidth + 'px'; }
+  }
+  ANIM.ANIM_FRAMEWORKS.forEach((fw) => {
+    const key = fw[0], short = fw[4] || fw[1];
+    const chip = document.createElement('button');
+    chip.className = 'anim-fw-chip' + (key === selectedFw ? ' on' : '');
+    chip.dataset.fw = key; chip.textContent = short;
+    chip.addEventListener('click', () => {
+      selectedFw = key;
+      fwToggle.querySelectorAll('.anim-fw-chip').forEach(c => c.classList.toggle('on', c.dataset.fw === key));
+      positionThumb(); updateCode();
+    });
+    fwToggle.appendChild(chip);
+  });
+  // The code preview was removed — this now just drives the framework-adaptive note
+  // (spring support differs by library). The actual code is emitted on Send, in main.
+  function updateCode() {
+    if (!fwNote) return;
+    const spring = easingSel.value === 'spring';
+    if (spring && ANIM.ANIM_SPRING_NATIVE.indexOf(selectedFw) === -1) {
+      fwNote.textContent = `Spring isn't native to ${fwLabelFor(selectedFw)} — approximated with a bezier. GSAP, Framer Motion, or Motion One give a real spring.`;
+      fwNote.hidden = false;
+    } else if (spring && selectedFw === 'gsap') {
+      fwNote.textContent = 'GSAP core approximates spring with elastic; add a physics plugin for a true spring.';
+      fwNote.hidden = false;
+    } else { fwNote.hidden = true; }
+  }
 
   function easingValue() {
     if (easingSel.value !== 'custom') return easingSel.value;
@@ -5175,6 +5214,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (f.distance) spec.distance = +distNum.value || 0;
     if (f.amount) spec.amount = +amtNum.value;
     if (f.color) spec.targetColor = targetColor;
+    if (easingSel.value === 'spring') spec.spring = { stiffness: +stiffNum.value || 100, damping: +dampNum.value || 10, mass: +massNum.value || 1 };
     return spec;
   }
 
@@ -5182,6 +5222,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function previewSpec() { const s = currentSpec(); if (loopPreview) s.repeat = 'infinite'; return s; }   // loop only the preview, not the sent spec
   let previewTimer = null;
   function schedulePreview() {
+    updateCode();   // keep the framework code in sync with every control change
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => { if (!panel.hidden) ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: previewSpec() }); }, 130);
   }
@@ -5201,8 +5242,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     num.addEventListener('input', () => { slider.value = num.value; schedulePreview(); });
   }
   wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
+  wirePair(stiffSlider, stiffNum); wirePair(dampSlider, dampNum); wirePair(massSlider, massNum);
   // Custom number spinner: click the top/bottom half of the icon zone to step.
-  [durNum, distNum, amtNum, delayNum].forEach(num => num.addEventListener('click', (e) => {
+  [durNum, distNum, amtNum, delayNum, stiffNum, dampNum, massNum].forEach(num => num.addEventListener('click', (e) => {
     const rect = num.getBoundingClientRect();
     if (e.clientX < rect.right - 16) return;   // only the right-edge icon zone steps
     (e.clientY < rect.top + rect.height / 2) ? num.stepUp() : num.stepDown();
@@ -5211,15 +5253,16 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   delayNum.addEventListener('input', schedulePreview);
   colorSwatch.addEventListener('click', () => sharedColorPicker && sharedColorPicker.open(colorSwatch, targetColor, (hex) => { targetColor = hex; schedulePreview(); }));
   [dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
-  easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; if (!bezierRow.hidden) bzRender(); schedulePreview(); });
+  easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; springRow.hidden = easingSel.value !== 'spring'; if (!bezierRow.hidden) bzRender(); schedulePreview(); });
   typeSel.addEventListener('change', () => { syncFields(true); schedulePreview(); });
   replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: previewSpec() }));
   loopBtn?.addEventListener('click', () => { loopPreview = !loopPreview; loopBtn.classList.toggle('on', loopPreview); schedulePreview(); });
 
-  function open({ label } = {}) {
+  function open({ label, selector } = {}) {
     clearPickMode();
+    currentSelector = selector || '';
     if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
-    typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true;
+    typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true; springRow.hidden = true;
     loopPreview = false; loopBtn?.classList.remove('on');
     BZ.x1 = 0.4; BZ.y1 = 0; BZ.x2 = 0.2; BZ.y2 = 1; bzRender();
     durSlider.value = durNum.value = 1000; delayNum.value = 0;
@@ -5227,10 +5270,11 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     syncFields(true);
     textarea.value = '';
     panel.hidden = false;
+    requestAnimationFrame(positionThumb);   // offsets are only real once the panel is visible
     schedulePreview();
   }
   function close()  { panel.hidden = true; textarea.value = ''; clearTimeout(previewTimer); }
-  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: textarea.value.trim() }); close(); }
+  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: textarea.value.trim(), framework: selectedFw }); close(); }
   function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
 
   sendBtn?.addEventListener('click', send);
