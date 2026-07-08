@@ -3201,6 +3201,7 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'chat-font':     openChatFontModal?.(); break;
     case 'new-window':    ipcRenderer.send(IPC.NEW_WINDOW); break;
     case 'about':         openAboutModal();      break;
+    case 'perf-report':   openPerfReportModal?.(); break;
   }
 });
 
@@ -3215,6 +3216,42 @@ async function openAboutModal() {
   } catch (_) {}
   aboutModalCtl.open();
 }
+
+// ── Report a Performance Issue modal (Settings → Report a Performance Issue) ──
+let openPerfReportModal = null;
+(function initPerfReport() {
+  const modal = document.getElementById('perf-report-modal');
+  if (!modal) return;
+  const perfModalCtl  = wireModal(modal);
+  const preview       = document.getElementById('perf-preview');
+  const descEl        = document.getElementById('perf-desc');
+  const captureBtn    = document.getElementById('perf-capture');
+  const captureStatus = document.getElementById('perf-capture-status');
+  const openBtn       = document.getElementById('perf-open');
+  let summary = '', busy = false;
+
+  async function collect(sampleMs) {
+    if (busy) return;
+    busy = true;
+    if (sampleMs) { captureBtn.disabled = true; captureStatus.textContent = 'Sampling for 5s…'; }
+    try { summary = await ipcRenderer.invoke(IPC.PERF_REPORT_COLLECT, { sampleMs }); preview.textContent = summary; }
+    catch (_) { preview.textContent = 'Could not collect diagnostics.'; }
+    finally { busy = false; captureBtn.disabled = false; if (sampleMs) captureStatus.textContent = 'Captured ✓'; }
+  }
+  captureBtn?.addEventListener('click', () => collect(5000));
+  openBtn?.addEventListener('click', () => {
+    ipcRenderer.send(IPC.PERF_REPORT_OPEN, { description: descEl.value, summary });
+    perfModalCtl.close();
+  });
+  document.getElementById('perf-close')?.addEventListener('click', perfModalCtl.close);
+  document.getElementById('perf-cancel')?.addEventListener('click', perfModalCtl.close);
+
+  openPerfReportModal = function() {
+    descEl.value = ''; captureStatus.textContent = ''; preview.textContent = 'Collecting…';
+    perfModalCtl.open();
+    collect(0);   // quick snapshot on open; user can run the 5s sample for sustained CPU
+  };
+})();
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
 const closeApiKeyModal = apiKeyModalCtl.close;

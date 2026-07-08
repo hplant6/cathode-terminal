@@ -1334,6 +1334,25 @@
     </div>
   </div>
 
+  <div id="perf-report-modal" class="modal-backdrop">
+    <div class="modal-box perf-box">
+      <button id="perf-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Report a Performance Issue</div>
+      <p class="modal-desc">Describe what's slow, then open a pre-filled GitHub issue with diagnostics attached. Nothing is sent until you review and submit it on GitHub.</p>
+      <textarea id="perf-desc" class="modal-input" placeholder="What's slow, and when? (typing lag, scrolling, high fan, gets worse over time…)" rows="3" spellcheck="true"></textarea>
+      <div class="perf-actions-row">
+        <button id="perf-capture" class="modal-btn-cancel">Run 5-second capture</button>
+        <span id="perf-capture-status" class="perf-status"></span>
+      </div>
+      <div class="perf-preview-label">Diagnostics attached <span class="perf-preview-hint">— auto-captured, review before submitting</span></div>
+      <pre id="perf-preview" class="perf-preview">Collecting…</pre>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="perf-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="perf-open">Open GitHub Issue</button>
+      </div>
+    </div>
+  </div>
+
   <div id="onboarding" class="modal-backdrop">
     <div id="onb-panel">
       <div id="onb-header">

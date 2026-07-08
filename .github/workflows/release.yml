@@ -46,16 +46,17 @@ jobs:
       - name: Build (${{ matrix.script }})
         run: npm run ${{ matrix.script }}
         env:
-          # electron-builder's own signing is off here (an empty CSC_LINK made it
-          # choke); scripts/adhoc-sign.js ad-hoc signs the .app instead so it runs on
-          # Apple Silicon (users just clear quarantine with `xattr -cr`). To sign for
-          # real later: add the Developer ID cert as a secret, set CSC_LINK +
-          # CSC_KEY_PASSWORD here, and drop this CSC_IDENTITY_AUTO_DISCOVERY line.
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Real Developer ID signing on macOS only. CSC_LINK (base64 .p12) is a mac
+          # cert, so it must NOT reach the Windows/Linux builds — scope it to macOS and
+          # leave the others with signing disabled (adhoc-sign.js stands down when
+          # CSC_LINK is set; notarize.js notarizes via the APPLE_* secrets).
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && 'true' || 'false' }}
           # macOS notarization — read by scripts/notarize.js (skipped when unset).
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

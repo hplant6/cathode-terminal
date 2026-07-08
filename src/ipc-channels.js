@@ -14,6 +14,8 @@ const IPC = Object.freeze({
   DRIFT_PREVIEW: 'drift-preview',
   DRIFT_SEND: 'drift-send',
   DRIFT_CANCEL: 'drift-cancel',
+  PERF_REPORT_COLLECT: 'perf-report-collect',
+  PERF_REPORT_OPEN: 'perf-report-open',
   ACP_CANCEL: 'acp-cancel',
   ACP_CLOSED: 'acp-closed',
   ACP_DONE: 'acp-done',

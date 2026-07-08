@@ -2843,11 +2843,76 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },
     { type: 'separator' },
+    { label: 'Report a Performance Issue…', click: act('perf-report') },
     { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
     { label: 'About Cathode',      click: act('about') },
   ]);
   const p = pos || {};   // a missing pos → popup at the default (cursor) position
   menu.popup({ window: mainWindow, x: p.x, y: p.y });
+});
+
+// ── Performance report: gather diagnostics → pre-filled GitHub issue ──────
+// Everything here is main-only (getAppMetrics / GPU status / os), so the renderer
+// invokes for a summary, previews it, then asks main to open the issue URL.
+async function macOSVersion() {
+  if (process.platform !== 'darwin') return '';
+  return new Promise(res => { try { execFile('sw_vers', ['-productVersion'], { timeout: 3000 }, (e, out) => res(e ? '' : String(out).trim())); } catch (_) { res(''); } });
+}
+async function collectPerfDiagnostics(sampleMs) {
+  const kb2mb = kb => Math.round((kb || 0) / 1024);
+  const snap = () => app.getAppMetrics().map(m => ({
+    type: m.type, name: m.name || '', cpu: (m.cpu && m.cpu.percentCPUUsage) || 0, memMB: kb2mb(m.memory && m.memory.workingSetSize),
+  }));
+  let metrics = snap();
+  if (sampleMs > 0) {
+    const acc = new Map(); const start = Date.now();
+    while (Date.now() - start < sampleMs) {
+      await new Promise(r => setTimeout(r, 500));
+      for (const m of snap()) { const k = m.type + '|' + m.name; const a = acc.get(k) || { type: m.type, name: m.name, cpuSum: 0, n: 0, memMB: 0 }; a.cpuSum += m.cpu; a.n++; a.memMB = m.memMB; acc.set(k, a); }
+    }
+    metrics = [...acc.values()].map(a => ({ type: a.type, name: a.name, cpu: a.cpuSum / a.n, memMB: a.memMB }));
+  }
+  metrics.sort((a, b) => b.cpu - a.cpu);
+  let gpu = {}; try { gpu = app.getGPUFeatureStatus() || {}; } catch (_) {}
+  const cpus = os.cpus();
+  return {
+    version: app.getVersion(),
+    electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node,
+    platform: process.platform, arch: process.arch, osRelease: os.release(), osVersion: await macOSVersion(),
+    cpuModel: (cpus[0] && cpus[0].model) || '?', cpuCount: cpus.length, totalMemGB: (os.totalmem() / 1073741824).toFixed(1),
+    uptimeMin: Math.round(process.uptime() / 60), sampled: sampleMs > 0,
+    live: { cpu: cpuPercent(), ram: ramPercent(), gpu: platform.gpuPercent() },
+    sessions: acpSessions.size, storybooks: sbServers.size,
+    metrics: metrics.slice(0, 12), gpuStatus: gpu,
+    errors: consoleLog.filter(e => e.kind === 'console' && e.level === 'error').slice(-8).map(e => e.text),
+  };
+}
+function perfSummaryMarkdown(d) {
+  const L = [];
+  L.push('### Environment');
+  L.push(`- **Cathode** ${d.version} · Electron ${d.electron} / Chrome ${d.chrome} / Node ${d.node}`);
+  L.push(`- **OS** ${d.platform}${d.osVersion ? ' ' + d.osVersion : ''} (${d.arch}, kernel ${d.osRelease})`);
+  L.push(`- **CPU** ${d.cpuModel} ×${d.cpuCount} · **RAM** ${d.totalMemGB} GB · uptime ${d.uptimeMin}m`);
+  L.push(`- **Live load** CPU ${d.live.cpu}% · RAM ${d.live.ram}% · GPU ${d.live.gpu}%`);
+  L.push(`- **Open** ${d.sessions} agent session(s), ${d.storybooks} Storybook(s)`);
+  L.push('', '### Hardware acceleration');
+  L.push('```', Object.keys(d.gpuStatus).map(k => `${k}: ${d.gpuStatus[k]}`).join('\n') || '(unavailable)', '```');
+  L.push('', `### Process metrics${d.sampled ? ' — 5s average' : ' — snapshot'}`);
+  L.push('| Process | CPU % | Mem MB |', '| --- | ---: | ---: |');
+  for (const m of d.metrics) L.push(`| ${m.type}${m.name ? ' — ' + m.name : ''} | ${m.cpu.toFixed(1)} | ${m.memMB} |`);
+  if (d.errors.length) { L.push('', '### Recent console errors', '```'); d.errors.forEach(e => L.push(String(e).slice(0, 200))); L.push('```'); }
+  return L.join('\n');
+}
+ipcMain.handle(IPC.PERF_REPORT_COLLECT, async (_, { sampleMs } = {}) => {
+  const d = await collectPerfDiagnostics(Number(sampleMs) || 0);
+  return perfSummaryMarkdown(d);
+});
+ipcMain.on(IPC.PERF_REPORT_OPEN, (_, { description = '', summary = '' } = {}) => {
+  const title = 'Performance: ' + (description.split('\n')[0] || 'macOS slowdown').slice(0, 70);
+  const body = `### What's slow\n${description.trim() || '_(add detail: when it happens, what you were doing)_'}\n\n${summary}`;
+  const url = 'https://github.com/hplant6/cathode-terminal/issues/new?labels=performance'
+    + '&title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+  shell.openExternal(url).catch(() => {});
 });
 
 ipcMain.on(IPC.SHOW_SB_BAR_MENU, (_, { x, y } = {}) => {

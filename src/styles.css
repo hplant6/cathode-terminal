@@ -407,6 +407,18 @@ html, body {
 .about-logo svg path { fill: var(--spec-text); }
 .about-version { font-size: 12px; font-family: var(--font-mono); color: var(--text-dim); letter-spacing: 0.03em; }
 .about-by { font-size: 12px; color: var(--text-dim); opacity: 0.8; margin-top: 7px; }
+/* Report a Performance Issue modal */
+.perf-box { width: 560px; max-width: 94vw; }
+#perf-desc { min-height: 58px; resize: vertical; margin-bottom: 12px; }
+.perf-actions-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.perf-status { font: 11px var(--font-mono); color: var(--spec-text-dim); }
+.perf-preview-label { font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); margin-bottom: 6px; }
+.perf-preview-hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--spec-text-faint); }
+.perf-preview {
+  max-height: 240px; overflow: auto; margin: 0 0 18px;
+  background: var(--spec-black); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
+  padding: 10px 12px; font: 11px/1.5 var(--font-mono); color: var(--spec-text-dim); white-space: pre-wrap;
+}
 /* App buttons: Zalando SemiExpanded uppercase (matches the title / tabs / PanelFooter), fixed md height, radius-md */
 .modal-btn-cancel, .modal-btn-confirm {
   box-sizing: border-box;

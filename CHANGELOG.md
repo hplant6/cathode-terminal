@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.28] - 2026-07-08
+
+### Added
+- **Signed & notarized macOS builds** — the DMG/zip are now signed with a Developer ID certificate and notarized by Apple, so macOS opens them without the "damaged / unidentified developer" warning and no more `xattr -cr` dance. (Windows/Linux builds unchanged.)
+- **Report a Performance Issue** (Settings menu) — captures diagnostics (per-process CPU/memory via `getAppMetrics`, GPU hardware-acceleration status, OS/CPU/RAM, live load, open sessions, recent console errors), with an optional 5-second sustained-CPU capture, and opens a pre-filled GitHub issue you review before submitting.
+
 ## [1.0.27] - 2026-07-07
 
 ### Added
