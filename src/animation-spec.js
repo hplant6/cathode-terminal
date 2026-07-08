@@ -131,15 +131,30 @@ function cssSnippet(spec, selector) {
     return '  ' + pct + '% { ' + decls + '; }';
   }).join('\n');
   const iters = o.iterations === Infinity ? 'infinite' : o.iterations;
+  if (spec.stagger) {   // CSS has no native stagger — animate children with a per-index delay
+    const st = spec.stagger;
+    const delayCalc = 'calc(var(--i, 0) * ' + st + 'ms' + (o.delay ? ' + ' + o.delay + 'ms' : '') + ')';
+    const srule = selector + ' > * {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + iters + ' ' + o.fill + ';\n  animation-delay: ' + delayCalc + ';\n}';
+    return '@keyframes ' + name + ' {\n' + body + '\n}\n' + srule + '\n/* stagger: give each child an incrementing --i (0, 1, 2 …), e.g. style="--i:0" or set it in a small loop */' + triggerCss(spec, selector + ' > *');
+  }
   const rule = selector + ' {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + o.delay + 'ms ' + iters + ' ' + o.fill + ';\n}';
   return '@keyframes ' + name + ' {\n' + body + '\n}\n' + rule + triggerCss(spec, selector);
 }
 function jsSnippet(spec, selector) {
   const r = animKeyframes(spec), o = r.options;
   const iters = o.iterations === Infinity ? 'Infinity' : o.iterations;
+  const q = String(selector).replace(/'/g, "\\'");
+  if (spec.stagger) {   // WAAPI: loop the children, offset each element's delay by its index
+    const opts = '{ duration: ' + o.duration + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "', delay: " + (o.delay || 0) + ' + i * ' + spec.stagger + ' }';
+    const loop = "document.querySelectorAll('" + q + " > *').forEach((el, i) => {\n  el.animate(" + JSON.stringify(r.keyframes) + ', ' + opts + ');\n});';
+    const t = spec.trigger || 'load';
+    if (t === 'scroll') return "new IntersectionObserver((es, ob) => es.forEach(e => { if (e.isIntersecting) {\n  " + loop.split('\n').join('\n  ') + "\n  ob.unobserve(e.target);\n} })).observe(document.querySelector('" + q + "'));";
+    if (t === 'hover' || t === 'click') return "document.querySelector('" + q + "').addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + loop.split('\n').join('\n  ') + "\n});";
+    return loop;
+  }
   const opts = '{ duration: ' + o.duration + ', delay: ' + o.delay + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "' }";
   const play = 'el.animate(' + JSON.stringify(r.keyframes) + ', ' + opts + ');';
-  return "const el = document.querySelector('" + String(selector).replace(/'/g, "\\'") + "');\n" + triggerJs(spec, play);
+  return "const el = document.querySelector('" + q + "');\n" + triggerJs(spec, play);
 }
 
 // ── Framework emitters ─────────────────────────────────────────────────────
@@ -216,19 +231,22 @@ function gsapSnippet(spec, selector) {
   var isSpring = spec.easing === 'spring';
   var ez = isSpring ? 'elastic.out(1, 0.5)' : gsapEase(o.easing);   // GSAP core has no spring — elastic is the closest built-in
   var opt = 'duration: ' + +(o.duration / 1000).toFixed(3) + ", ease: '" + ez + "'" + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+  var stag = spec.stagger ? +(spec.stagger / 1000).toFixed(3) : 0;   // GSAP has native stagger
+  if (stag) opt += ', stagger: ' + stag;
+  var sel = stag ? selector + ' > *' : selector;   // stagger animates the children
   var call;
   if (kfs.length > 2) {
     var kv = kfs.map(function (kf) { return kfToVars(kf, 'gsap'); });
     var uk = {}; kv.forEach(function (v) { Object.keys(v).forEach(function (k) { uk[k] = 1; }); });
     kv.forEach(function (v) { Object.keys(uk).forEach(function (k) { if (!(k in v) && k in _IDENT) v[k] = _IDENT[k]; }); });
-    call = 'gsap.to(' + _q(selector) + ', { keyframes: [' + kv.map(function (v) { return '{ ' + serVars(v) + ' }'; }).join(', ') + '], ' + opt + ' });';
+    call = 'gsap.to(' + _q(sel) + ', { keyframes: [' + kv.map(function (v) { return '{ ' + serVars(v) + ' }'; }).join(', ') + '], ' + opt + ' });';
   } else if (kfs.length === 2) {
     var gf = kfToVars(kfs[0], 'gsap'), gt = kfToVars(kfs[kfs.length - 1], 'gsap'); balance(gf, gt);
     var from = serVars(gf), to = serVars(gt);
-    call = 'gsap.fromTo(' + _q(selector) + ', { ' + from + ' }, { ' + to + (to ? ', ' : '') + opt + ' });';
+    call = 'gsap.fromTo(' + _q(sel) + ', { ' + from + ' }, { ' + to + (to ? ', ' : '') + opt + ' });';
   } else {
     var v = serVars(kfToVars(kfs[0], 'gsap'));
-    call = 'gsap.to(' + _q(selector) + ', { ' + v + (v ? ', ' : '') + opt + ' });';
+    call = 'gsap.to(' + _q(sel) + ', { ' + v + (v ? ', ' : '') + opt + ' });';
   }
   var t = spec.trigger || 'load', head = "import gsap from 'gsap';\n" + (isSpring ? "// GSAP core has no spring — 'elastic' approximates it; for a true spring add the Physics2/CustomBounce plugin.\n" : '');
   if (t === 'scroll') return head + "import { ScrollTrigger } from 'gsap/ScrollTrigger';\ngsap.registerPlugin(ScrollTrigger);\n" + call.replace(/\}\);$/, ", scrollTrigger: { trigger: " + _q(selector) + ", start: 'top 80%' } });");
@@ -240,14 +258,21 @@ function motionOneSnippet(spec, selector) {
   kfs.forEach(function (kf) { Object.keys(kf).forEach(function (k) { if (k !== 'offset') (props[k] = props[k] || []).push(kf[k]); }); });
   var kfStr = Object.keys(props).map(function (k) { return k + ': [' + props[k].map(function (v) { return typeof v === 'number' ? v : "'" + v + "'"; }).join(', ') + ']'; }).join(', ');
   var rep = _repeat(o.iterations, 'motion');
+  var dSec = +(o.delay / 1000).toFixed(3);
+  var stag = spec.stagger ? +(spec.stagger / 1000).toFixed(3) : 0;   // Motion One has a stagger() helper
+  var delayStr = stag
+    ? ', delay: stagger(' + stag + (o.delay ? ', { startDelay: ' + dSec + ' }' : '') + ')'
+    : (o.delay ? ', delay: ' + dSec : '');
   var opt = spec.easing === 'spring'
-    ? "type: 'spring', " + _spring(spec) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '')
-    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ", easing: '" + o.easing + "'" + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
-  var play = 'animate(' + _q(selector) + ', { ' + kfStr + ' }, { ' + opt + ' });';
+    ? "type: 'spring', " + _spring(spec) + delayStr + (rep ? ', repeat: ' + rep : '')
+    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ", easing: '" + o.easing + "'" + delayStr + (rep ? ', repeat: ' + rep : '');
+  var sel = stag ? selector + ' > *' : selector;
+  var imp = stag ? 'animate, stagger' : 'animate';
+  var play = 'animate(' + _q(sel) + ', { ' + kfStr + ' }, { ' + opt + ' });';
   var t = spec.trigger || 'load';
-  if (t === 'scroll') return "import { animate, inView } from 'motion';\ninView(" + _q(selector) + ", () => { " + play + " });";
-  if (t === 'hover' || t === 'click') return "import { animate } from 'motion';\ndocument.querySelector(" + _q(selector) + ").addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + play + "\n});";
-  return "import { animate } from 'motion';\n" + play;
+  if (t === 'scroll') return "import { " + imp + ", inView } from 'motion';\ninView(" + _q(selector) + ", () => { " + play + " });";
+  if (t === 'hover' || t === 'click') return "import { " + imp + " } from 'motion';\ndocument.querySelector(" + _q(selector) + ").addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + play + "\n});";
+  return "import { " + imp + " } from 'motion';\n" + play;
 }
 function framerSnippet(spec, selector) {
   var r = animKeyframes(spec), o = r.options, kfs = r.keyframes;
@@ -258,6 +283,25 @@ function framerSnippet(spec, selector) {
   var head = "import { motion } from 'framer-motion';\n\n";
   var t = spec.trigger || 'load';
   var animProp = t === 'scroll' ? 'whileInView' : t === 'hover' ? 'whileHover' : t === 'click' ? 'whileTap' : 'animate';
+  var stag = spec.stagger ? +(spec.stagger / 1000).toFixed(3) : 0;
+  if (stag) {   // Framer staggers via parent/child variants + staggerChildren
+    var hiddenVars = '', showVars = '';
+    if (kfs.length === 2) {
+      var sf = kfToVars(kfs[0], 'framer'), st = kfToVars(kfs[kfs.length - 1], 'framer'); balance(sf, st);
+      hiddenVars = serVars(sf); showVars = serVars(st);
+    } else if (kfs.length > 2) {
+      var spa = perPropArrays(kfs, 'framer');
+      showVars = Object.keys(spa).map(function (k) { return k + ': ' + serArr(spa[k]); }).join(', ');
+    } else {
+      showVars = serVars(kfToVars(kfs[kfs.length - 1], 'framer'));
+    }
+    return head
+      + 'const container = {\n  hidden: {},\n  show: { transition: { staggerChildren: ' + stag + ' } },\n};\n'
+      + 'const item = {\n  hidden: { ' + hiddenVars + ' },\n  show: { ' + showVars + ', transition: { ' + trans + ' } },\n};\n\n'
+      + '<motion.div variants={container} initial="hidden" ' + animProp + '="show">\n'
+      + '  {items.map((it, i) => (\n    <motion.div key={i} variants={item} />\n  ))}\n'
+      + '</motion.div>';
+  }
   if (kfs.length > 2) {
     var pa = perPropArrays(kfs, 'framer');
     var animObj = Object.keys(pa).map(function (k) { return k + ': ' + serArr(pa[k]); }).join(', ');

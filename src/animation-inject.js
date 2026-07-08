@@ -22,11 +22,13 @@ function getAnimationScript() {
   return new Promise(function(resolve) {
     var phase = 'hover';
     var selEl = null;
-    var curAnim = null;
+    var curAnims = [];
+    function cancelAll(){ curAnims.forEach(function(a){ try{a.cancel();}catch(e){} }); curAnims = []; }
+    function finiteRevert(a, o){ if (o.iterations !== Infinity && a.finished) { a.finished.then(function(){ var i = curAnims.indexOf(a); if (i>=0) { try{a.cancel();}catch(e){} curAnims.splice(i,1); } }).catch(function(){}); } }
     var resolved = false;
     function resolveOnce(val){ if (resolved) return; resolved = true; resolve(val); }
     function teardown() {
-      try { if (curAnim) curAnim.cancel(); } catch(e){}
+      cancelAll();
       document.removeEventListener('keydown', onKey, true);
       ['__ca_ov','__ca_hv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
       window.__cathodeAnim = null;
@@ -82,17 +84,21 @@ function getAnimationScript() {
           return { selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl), snippet: snip };
         },
         preview: function(spec) {
-          try { if (curAnim) curAnim.cancel(); } catch(e){}
+          try { cancelAll(); } catch(e){}
           try {
             var r = __animKeyframes(spec), o = r.options;
-            var a = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
-            curAnim = a;
-            // Finite previews revert to the element's natural state when done, so it
-            // never gets stuck faded-out / transformed while the user keeps tweaking.
-            if (o.iterations !== Infinity && a.finished) {
-              a.finished.then(function(){ if (curAnim === a) { try { a.cancel(); } catch(e){} curAnim = null; } }).catch(function(){});
+            // Stagger previews the target's children cascading; otherwise the element itself.
+            // Finite previews revert when done so nothing gets stuck faded-out mid-tweak.
+            if (spec.stagger && selEl.children && selEl.children.length) {
+              for (var i = 0; i < selEl.children.length; i++) {
+                var ca = selEl.children[i].animate(r.keyframes, { duration: o.duration, delay: o.delay + i * spec.stagger, easing: o.easing, iterations: o.iterations, fill: o.fill });
+                curAnims.push(ca); finiteRevert(ca, o);
+              }
+            } else {
+              var a = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
+              curAnims.push(a); finiteRevert(a, o);
             }
-          } catch(e) { curAnim = null; }
+          } catch(e) { curAnims = []; }
         },
         clear: function(){ teardown(); },
       };

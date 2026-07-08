@@ -296,7 +296,6 @@
         </div>
         <div id="animation-panel-body">
           <div id="anim-fw-section">
-            <div class="anim-fw-title">Output framework</div>
             <div id="anim-fw-toggle" class="anim-fw-toggle"><span class="anim-fw-thumb"></span></div>
             <div id="anim-fw-note" class="anim-fw-note" hidden></div>
           </div>
@@ -329,6 +328,8 @@
           <div class="pp-field" id="anim-row-color" hidden><span class="pp-field-label">Target color</span><div class="pp-field-ctrl"><button id="anim-color" class="anim-swatch" type="button" title="Pick the target color"></button></div></div>
           <div class="pp-field"><span class="pp-field-label">Repeat</span><div class="pp-field-ctrl"><select id="anim-repeat" class="anim-select pp-ct"></select></div></div>
           <div class="pp-field"><span class="pp-field-label">Trigger</span><div class="pp-field-ctrl"><select id="anim-trigger" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Stagger children</span><div class="pp-field-ctrl"><label id="anim-stagger" class="ct-checkbox" title="Cascade the animation across the target's direct children"><span class="ct-checkbox-box"><svg class="ct-checkbox-check" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3" /></svg></span></label></div></div>
+          <div class="pp-field" id="anim-row-stagger-by" hidden><span class="pp-field-label">Stagger by</span><div class="pp-field-ctrl"><input id="anim-stagger-slider" class="rz-slider" type="range" min="10" max="300" step="5" value="80" /><input id="anim-stagger-amt" class="pp-ctrl-input anim-num" type="number" min="0" max="2000" step="5" value="80" /></div></div>
           <div class="anim-replay-row">
             <label id="anim-loop" class="ct-checkbox" title="Loop the preview so you can tune it while it plays (doesn't change the Repeat value sent to chat)"><span class="ct-checkbox-box"><svg class="ct-checkbox-check" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3" /></svg></span>Loop</label>
             <button id="anim-replay" class="rz-reset-btn">▶ Replay</button>
