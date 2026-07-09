@@ -2471,6 +2471,39 @@ function fenceToLang(fence) {
   const f = String(fence || '').toLowerCase().trim();
   return f ? (EXT_LANG[f] || f) : 'plaintext';
 }
+// Append text, turning bare http(s) URLs into clickable links that load in the
+// embedded browser (BROWSER_NAVIGATE) — not the OS default browser — and stop the
+// bubble's copy-on-click. Trailing sentence punctuation / markdown emphasis
+// (e.g. a **bolded** URL's closing "**", or a sentence-final ".") is kept as text.
+const CHAT_URL_RE = /https?:\/\/[^\s<>]+/g;
+function appendLinkified(container, plain) {
+  let last = 0, m;
+  CHAT_URL_RE.lastIndex = 0;
+  while ((m = CHAT_URL_RE.exec(plain)) !== null) {
+    let url = m[0], trail = '';
+    const t = url.match(/[)\]}.,;:!?'"*_]+$/);
+    if (t) { trail = t[0]; url = url.slice(0, -trail.length); }
+    if (!url) continue;   // whole match was punctuation (can't happen for https?:// but be safe)
+    if (m.index > last) container.appendChild(document.createTextNode(plain.slice(last, m.index)));
+    const a = document.createElement('a');
+    a.className = 'acp-link';
+    a.href = url;
+    a.textContent = url;
+    a.title = 'Open in the browser — ' + url;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();                          // don't trigger the bubble's copy-on-click
+      ipcRenderer.send(IPC.BROWSER_NAVIGATE, url);
+      // If the chat is filling the view (single-pane chat), the browser is off-screen —
+      // restore the split so the freshly-loaded page is actually visible.
+      if (panelCollapsed && activePane === 'chat') setSinglePane(null);
+    });
+    container.appendChild(a);
+    if (trail) container.appendChild(document.createTextNode(trail));
+    last = m.index + m[0].length;
+  }
+  if (last < plain.length) container.appendChild(document.createTextNode(plain.slice(last)));
+}
 // Append escaped text with `inline code` spans as child nodes (parent is pre-wrap).
 function appendInline(container, plain) {
   for (const part of plain.split(/(`[^`\n]+`)/g)) {
@@ -2480,7 +2513,7 @@ function appendInline(container, plain) {
       c.textContent = part.slice(1, -1);
       container.appendChild(c);
     } else if (part) {
-      container.appendChild(document.createTextNode(part));
+      appendLinkified(container, part);
     }
   }
 }
@@ -2522,8 +2555,9 @@ function acpFinalizeStream(s) {
     const text = (s.streamTextEl ? s.streamTextEl.textContent : '').trim();
     if (text) {
       addReplyMeta(s, bubble, text);
-      // Re-render with highlighting only when there's something to format.
-      if (s.streamTextEl && /```|`[^`\n]+`/.test(text)) renderRichText(s.streamTextEl, text);
+      // Re-render when there's something to format: code fences, inline code, or a
+      // bare URL (linkified into a clickable browser link).
+      if (s.streamTextEl && /```|`[^`\n]+`|https?:\/\//.test(text)) renderRichText(s.streamTextEl, text);
       const isLimit = /\blimit (reached|exceeded|hit)\b|\b(usage|rate|session|message|weekly|hourly) limit\b|reached your .{0,25}\blimit\b/i.test(text);
       // Defer to turn end (ACP_DONE) — finalize also fires mid-turn on tool-call
       // boundaries, which played several "done" chimes per turn.
@@ -4019,7 +4053,11 @@ function dodgeToolbar() {
   const toolbar = document.getElementById('toolbar');
   const els = [];
   DODGE_SELECTORS.forEach(sel => document.querySelectorAll(sel).forEach(el => els.push(el)));
-  els.forEach(el => { el.style.transform = ''; });            // reset → measure natural position
+  // NOTE: shift via position:relative + left, NOT transform. A transform creates a
+  // stacking context, which traps descendant dropdowns (#audit-menu / #profile-menu,
+  // z-index:200) *inside* the shifted cluster so they paint below the chat banner.
+  // position:relative with z-index:auto offsets identically but creates no context.
+  els.forEach(el => { el.style.left = ''; });                 // reset → measure natural position
   if (!toolbar || !toolbar.offsetParent) return;              // rail hidden
   const tb = toolbar.getBoundingClientRect();
   if (!tb.width) return;
@@ -4030,7 +4068,9 @@ function dodgeToolbar() {
     const past = r.right - tb.left;                           // px the element reaches under the rail
     return (vOverlap && past > 0) ? Math.ceil(past + 6) : 0;  // clear it + 6px gap
   });
-  els.forEach((el, i) => { if (shifts[i] > 0) el.style.transform = `translateX(${-shifts[i]}px)`; });
+  els.forEach((el, i) => {
+    if (shifts[i] > 0) { el.style.position = 'relative'; el.style.left = `${-shifts[i]}px`; }
+  });
 }
 let _dodgeRaf = null;
 function scheduleDodge() { if (_dodgeRaf) return; _dodgeRaf = requestAnimationFrame(() => { _dodgeRaf = null; dodgeToolbar(); }); }
@@ -4673,6 +4713,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
   let activeChip = null;
   let hovered = null;     // index of the drawer currently hovered
+  let structuralExpanded = false;   // "Layout containers" group starts collapsed (see render)
 
   // Highlight on the page = every open drawer + the hovered one.
   function highlightSet() {
@@ -4927,29 +4968,117 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   // Build a drawer's fields lazily (on first expand) — avoids enhancing the
   // dropdowns of every collapsed element up front.
   let fieldBodies = [];   // [{ row, i, body, caret }]
+  // ── default / no-op detection (drives the collapsible "Defaults" strip) ─────
+  // A property is demoted to Defaults when its value equals the CSS initial/no-op
+  // value, OR when it's irrelevant in this element's context (flex/grid container
+  // props on a non-flex/grid box). Keeps the drawer on properties that change the look.
+  const DEFAULT_VALS = {
+    'flex-direction': ['row'], 'flex-wrap': ['nowrap'],
+    'justify-content': ['flex-start', 'start'], 'align-items': ['stretch'],
+    'align-self': ['auto'], 'justify-self': ['auto'],
+    'gap': ['0px', '0px 0px'], 'row-gap': ['0px'], 'column-gap': ['0px'],
+    'width': ['auto'], 'height': ['auto'], 'min-width': ['auto', '0px'], 'min-height': ['auto', '0px'],
+    'max-width': ['none'], 'max-height': ['none'],
+    'padding-top': ['0px'], 'padding-right': ['0px'], 'padding-bottom': ['0px'], 'padding-left': ['0px'],
+    'margin-top': ['0px'], 'margin-right': ['0px'], 'margin-bottom': ['0px'], 'margin-left': ['0px'],
+    'position': ['static'], 'top': ['auto'], 'right': ['auto'], 'bottom': ['auto'], 'left': ['auto'], 'z-index': ['auto'],
+    'letter-spacing': ['normal'], 'word-spacing': ['0px'], 'text-align': ['start'], 'font-weight': ['400'], 'font-style': ['normal'],
+    'white-space': ['normal'], 'float': ['none'], 'clear': ['none'], 'text-decoration-line': ['none'],
+    'background-size': ['auto', 'auto auto'], 'background-repeat': ['repeat'], 'background-position': ['0% 0%', 'left top'],
+    'border-radius': ['0px'], 'border-top-width': ['0px'], 'border-top-style': ['none'],
+    'opacity': ['1'], 'overflow': ['visible'], 'overflow-x': ['visible'], 'overflow-y': ['visible'],
+    'cursor': ['auto', 'default'], 'transition': ['all 0s ease 0s'], 'visibility': ['visible'], 'outline-width': ['0px'],
+  };
+  function isDefaultVal(name, value) {
+    const v = (value || '').trim();
+    const defs = DEFAULT_VALS[name];
+    if (defs && defs.includes(v)) return true;
+    if (name !== 'display' && (v === 'none' || v === 'normal')) return true;   // universal no-ops (display's none/inline are meaningful)
+    return false;
+  }
+  const _CONTAINER_PROPS = new Set(['flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-content', 'place-items', 'place-content', 'gap', 'row-gap', 'column-gap', 'grid-template-columns', 'grid-template-rows', 'grid-auto-flow', 'grid-auto-columns', 'grid-auto-rows', 'grid-template-areas']);
+  const _GRID_ONLY = new Set(['grid-template-columns', 'grid-template-rows', 'grid-auto-flow', 'grid-auto-columns', 'grid-auto-rows', 'grid-template-areas']);
+  function isIrrelevantProp(name, display) {
+    const d = display || '';
+    if (_CONTAINER_PROPS.has(name) && !/flex|grid/.test(d)) return true;   // container align/gap only matter on a flex/grid box
+    if (_GRID_ONLY.has(name) && !/grid/.test(d)) return true;
+    return false;
+  }
+
   function buildBody(row, i, body) {
     if (body.dataset.built) return;
     body.dataset.built = '1';
     const props = row.item.cssProps || [];
     if (!props.length) { body.appendChild(el('div', 'pp-no-css', 'no CSS properties')); return; }
-    const bySection = {};
-    props.forEach(p => { const s = sectionOf(p.name); (bySection[s] = bySection[s] || []).push(p); });
-    SECTION_ORDER.forEach(secName => {
-      const list = bySection[secName]; if (!list) return;
-      const sec = el('div', 'pp-section'); sec.dataset.section = secName;
-      sec.appendChild(el('div', 'pp-section-title', secName));
-      list.forEach(p => sec.appendChild(buildField(row, i, p)));
-      body.appendChild(sec);
-    });
+    const disp = (props.find(p => p.name === 'display') || {}).value || '';
+    // A zero-width / styleless border makes its style + color irrelevant too.
+    const _bw = props.find(p => p.name === 'border-top-width');
+    const _bs = props.find(p => p.name === 'border-top-style');
+    const borderOff = (!_bw || parseFloat(_bw.value) === 0) || (_bs && _bs.value === 'none');
+    const meaningful = (p) => {
+      if (isIrrelevantProp(p.name, disp)) return false;
+      if (borderOff && /^border-top-(style|color|width)$/.test(p.name)) return false;
+      return !isDefaultVal(p.name, p.value);
+    };
+    const renderSections = (list, container) => {
+      const bySection = {};
+      list.forEach(p => { const s = sectionOf(p.name); (bySection[s] = bySection[s] || []).push(p); });
+      SECTION_ORDER.forEach(secName => {
+        const sl = bySection[secName]; if (!sl) return;
+        const sec = el('div', 'pp-section'); sec.dataset.section = secName;
+        sec.appendChild(el('div', 'pp-section-title', secName));
+        sl.forEach(p => sec.appendChild(buildField(row, i, p)));
+        container.appendChild(sec);
+      });
+    };
+
+    const primary = props.filter(meaningful);
+    const defaults = props.filter(p => !meaningful(p));
+    renderSections(primary, body);
+
+    if (defaults.length) {
+      // Collapsible strip for default/irrelevant props — same escape-hatch pattern as
+      // the "Layout containers" element group. Collapsed by default; a filter opens it.
+      const wrap = el('div', 'pp-defaults-wrap'); wrap.dataset.open = '0';
+      const head = el('div', 'pp-defaults-head');
+      head.appendChild(el('span', 'pp-defaults-caret'));
+      head.appendChild(el('span', 'pp-defaults-label', 'Defaults'));
+      head.appendChild(el('span', 'pp-defaults-count', String(defaults.length)));
+      head.title = 'Properties at their default / no-op value, or not applicable to this element — expand to see the full computed set.';
+      const dbody = el('div', 'pp-defaults-body'); dbody.style.display = 'none';
+      renderSections(defaults, dbody);
+      head.addEventListener('click', () => { wrap.dataset.open = wrap.dataset.open === '1' ? '0' : '1'; applyFilter(); });
+      wrap.append(head, dbody);
+      body.appendChild(wrap);
+    }
   }
 
   // ── full drawer list ──────────────────────────────────────────
   function render() {
     listEl.innerHTML = '';
     fieldBodies = [];
+    // Items arrive paint-y-first, then structural (layout containers). When there's a
+    // mix, the containers collapse under one "Layout containers (N)" header so they
+    // don't bury the elements you can actually restyle. A live filter forces them open.
+    const filterActive = !!(activeChip || (filterInput.value || '').trim());
+    const grouping = rows.some(r => !r.removed && r.item.structural) && rows.some(r => !r.removed && !r.item.structural);
+    const showStruct = !grouping || structuralExpanded || filterActive;
+    let groupHeaderDone = false;
     rows.forEach((row, i) => {
       if (row.removed) return;
-      const drawer = el('div', 'pp-drawer');
+      if (grouping && row.item.structural && !groupHeaderDone) {
+        groupHeaderDone = true;
+        const n = rows.filter(r => !r.removed && r.item.structural).length;
+        const gh = el('div', 'pp-group-head' + ((structuralExpanded || filterActive) ? ' open' : ''));
+        gh.appendChild(el('span', 'pp-group-caret'));
+        gh.appendChild(el('span', 'pp-group-label', 'Layout containers'));
+        gh.appendChild(el('span', 'pp-group-count', String(n)));
+        gh.title = 'Wrappers with no visual styling of their own — expand to edit their layout (padding, gap, alignment).';
+        gh.addEventListener('click', () => { structuralExpanded = !structuralExpanded; render(); });
+        listEl.appendChild(gh);
+      }
+      const drawer = el('div', 'pp-drawer' + (row.item.structural ? ' pp-structural' : ''));
+      if (grouping && row.item.structural && !showStruct) drawer.style.display = 'none';
 
       const head  = el('div', 'pp-drawer-head');
       const caret = el('span', 'pp-caret' + (row.expanded ? ' open' : ''));   // chevron via CSS mask (icons/chevron.svg)
@@ -5012,9 +5141,22 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const okText = !q  || f.dataset.name.includes(q) || f.dataset.val.toLowerCase().includes(q);
       f.style.display = (okChip && okText) ? '' : 'none';
     });
+    // Defaults strip: open while searching (so matches surface), else honor its toggle.
+    const filtering = !!(kw || q);
+    listEl.querySelectorAll('.pp-defaults-wrap').forEach(w => {
+      const open = filtering || w.dataset.open === '1';
+      const dbody = w.querySelector('.pp-defaults-body');
+      if (dbody) dbody.style.display = open ? '' : 'none';
+      w.querySelector('.pp-defaults-head')?.classList.toggle('open', open);
+    });
     listEl.querySelectorAll('.pp-section').forEach(sec => {
       const any = [...sec.querySelectorAll('.pp-field')].some(f => f.style.display !== 'none');
       sec.style.display = any ? '' : 'none';
+    });
+    // Hide the whole Defaults strip when a search filters every property out of it.
+    listEl.querySelectorAll('.pp-defaults-wrap').forEach(w => {
+      const any = [...w.querySelectorAll('.pp-field')].some(f => f.style.display !== 'none');
+      w.style.display = any ? '' : 'none';
     });
   }
   if (filterSelect) {
@@ -5126,6 +5268,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     clearPickMode();
     if (tool) titleEl.textContent = tool;
     rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {}, states: new Set() }));   // single selection → open by default
+    structuralExpanded = !rows.some(r => !r.item.structural);   // if nothing paint-y was found, show the containers by default
     clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
     hovered = null;

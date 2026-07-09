@@ -1488,6 +1488,16 @@ html, body {
   border-radius: 4px;
   padding: 0 4px;
 }
+/* Bare URLs in chat → clickable links that open in the embedded browser. */
+.acp-link {
+  color: var(--spec-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--accent-border);
+  cursor: pointer;
+  word-break: break-all;                     /* long localhost URLs shouldn't blow out the bubble */
+}
+.acp-link:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
 .acp-msg.user {
   align-self: flex-end;
   background: transparent;
@@ -1692,6 +1702,9 @@ html, body {
   background: var(--spec-input-bg);
   border: 1px solid var(--spec-accent);
   border-radius: var(--radius-md);
+  /* Orange glow — this prompt pauses the agent, so it should pull the eye. */
+  box-shadow: 0 0 10px color-mix(in srgb, var(--spec-accent) 40%, transparent),
+              0 0 26px color-mix(in srgb, var(--spec-accent) 18%, transparent);
 }
 .acp-perm-head { font-size: 12.5px; color: var(--spec-text); margin-bottom: 4px; }
 .acp-perm-head b { color: var(--spec-accent); font-weight: 600; }
@@ -1710,16 +1723,16 @@ html, body {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 16px; height: 16px; padding: 0 3px; border-radius: 4px;
   font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none;
+  background: rgba(255,255,255,0.1); color: #fff;   /* uniform across all 3 buttons: white-10% cap, white number */
 }
-.acp-perm-deny   .perm-key { background: var(--spec-structural); color: var(--spec-text); }
-.acp-perm-always .perm-key { background: var(--spec-black); color: var(--spec-text-dim); }
-.acp-perm-allow  .perm-key { background: rgba(255,255,255,0.85); color: var(--spec-accent); }
-.acp-perm-deny   { background: var(--spec-toolbar-bg); color: var(--spec-text-dim); }
-.acp-perm-deny:hover   { background: var(--spec-toolbar-bg); color: var(--spec-text); }
-.acp-perm-always { background: var(--spec-header-bg); color: var(--spec-text); }
-.acp-perm-always:hover { background: var(--spec-header-bg); filter: brightness(1.15); }
+.acp-perm-deny   { background: var(--spec-dropdown-bg); color: #fff; }                              /* shade 4, white text */
+.acp-perm-deny:hover   { background: var(--spec-structural); color: var(--spec-text); }             /* shade 3 on hover */
+/* Outlined (not filled) — a real secondary action, no longer looks disabled. inset
+   box-shadow draws the orange ring without adding to the 28px height (keeps buttons aligned). */
+.acp-perm-always { background: transparent; color: var(--spec-text); box-shadow: inset 0 0 0 1.5px var(--spec-accent); }
+.acp-perm-always:hover { background: var(--spec-accent-dark); box-shadow: inset 0 0 0 1.5px var(--spec-accent-dark); color: #fff; }  /* accent 2 border + fill */
 .acp-perm-allow  { background: var(--spec-accent); color: #fff; }
-.acp-perm-allow:hover  { background: var(--spec-accent); filter: brightness(1.1); }
+.acp-perm-allow:hover  { background: var(--spec-accent-dark); }                                     /* accent 2 */
 /* Status bar */
 .acp-status {
   position: relative;
@@ -2822,7 +2835,7 @@ html, body {
 /* Drawer list */
 #pick-panel-list { flex: 1; overflow-y: auto; scrollbar-gutter: stable; padding: 0; min-height: 0; }
 #pick-panel-list::-webkit-scrollbar-thumb { background: var(--spec-text-faint); }   /* shade 2 grab handle */
-.pp-drawer { border-bottom: 1px solid var(--spec-header-bg); }
+.pp-drawer { border-bottom: 1px solid var(--spec-toolbar-bg); }   /* shade 5 */
 .pp-drawer:last-child { border-bottom: none; }
 /* Head + states row stick together as one unit (see .pp-drawer-sticky) */
 .pp-drawer-sticky { position: sticky; top: 0; z-index: 2; background: var(--spec-header-bg); }
@@ -2839,6 +2852,30 @@ html, body {
   transform: rotate(-90deg); transition: transform 0.12s;   /* closed → points right; .open → down */
 }
 .pp-caret.open { transform: rotate(0deg); }
+/* "Layout containers (N)" — collapsible group header for structural wrappers. */
+.pp-group-head {
+  display: flex; align-items: center; gap: 10px;
+  height: 55px; padding: 0 12px; cursor: pointer; transition: background 0.1s;   /* same height as .pp-drawer-head element rows */
+  background: var(--spec-header-bg);   /* shade 6 */
+  border-bottom: 1px solid var(--spec-structural);
+}
+.pp-group-head:hover { background: var(--spec-toolbar-bg); }
+.pp-group-caret {
+  width: 9px; height: 9px; flex-shrink: 0; background: var(--spec-text-dim);
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / contain;
+          mask: url('icons/chevron.svg') no-repeat center / contain;
+  transform: rotate(-90deg); transition: transform 0.12s;
+}
+.pp-group-head.open .pp-group-caret { transform: rotate(0deg); }
+.pp-group-label { flex: 1; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text); }
+.pp-group-count { flex-shrink: 0; margin-right: 4px; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--spec-structural); color: var(--spec-text); font: 700 10px/16px var(--font-mono); text-align: center; }
+/* Container drawers read as secondary — dim their title, and sit on black with
+   shade-7 separators so the group is visually distinct from the paint-y elements above. */
+.pp-structural .pp-el-name { color: var(--spec-text-dim); }
+.pp-structural { border-bottom: 1px solid var(--spec-input-bg); }   /* shade-7 border between container rows */
+.pp-structural .pp-drawer-sticky,
+.pp-structural .pp-drawer-head { background: var(--spec-black); }
+.pp-structural .pp-drawer-head:hover { background: var(--spec-header-bg); }   /* keep a hover lift */
 .pp-el-name { flex: 1; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-el-desc { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0; color: var(--spec-text-dim); }   /* descriptor prefix in Geist Mono, shade 1 */
 .pp-el-count { flex-shrink: 0; margin-right: 6px; font: 11px var(--font-mono); color: var(--spec-text-dim); }   /* per-element selected-property count */
@@ -2874,6 +2911,28 @@ html, body {
   padding: 0 3px; outline: none; min-width: 40px; max-width: 160px;
 }
 .pp-no-css { padding: 7px 24px; font: italic 11px var(--font-ui); color: var(--text-dim); }
+
+/* Collapsible "Defaults (N)" strip inside a drawer — default/no-op & irrelevant props.
+   No top divider: it's just the last row of the list, not a sticky/section container. */
+.pp-defaults-head {
+  display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 12px; cursor: pointer; transition: background 0.12s;   /* same height as .pp-field rows */
+  background: var(--spec-input-bg);                    /* shade 7 — matches the drawer body / rows */
+  border-bottom: 1px solid var(--spec-header-bg);      /* same separator as .pp-field */
+}
+.pp-defaults-head:hover { background: var(--spec-header-bg); }
+.pp-defaults-caret {
+  /* Occupy the same 24px slot (+3px) as .pp-field-sel's checkbox so the "Defaults"
+     label lines up exactly with the property titles; chevron itself stays 10px. */
+  width: 24px; height: 24px; flex-shrink: 0; margin-right: 3px; background: var(--spec-text-dim);
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / 10px;
+          mask: url('icons/chevron.svg') no-repeat center / 10px;
+  transform: rotate(-90deg); transition: transform 0.12s;
+}
+.pp-defaults-head.open .pp-defaults-caret { transform: rotate(0deg); }
+.pp-defaults-label { flex: 1; font: 600 16px var(--font-mono); color: var(--spec-text-dim); }   /* match .pp-field-label */
+.pp-defaults-count { flex-shrink: 0; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--spec-structural); color: var(--spec-text-dim); font: 700 10px/16px var(--font-mono); text-align: center; }
+.pp-defaults-body { background: var(--spec-black); }   /* slightly recessed vs the drawer body */
 
 /* Sectioned, typed-control property fields (Claude-design inspector style) */
 .pp-section { padding: 2px 0 8px; }

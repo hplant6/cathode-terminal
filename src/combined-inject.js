@@ -90,6 +90,44 @@ function cathodeCombinedPage(OPTS) {
     return 'Container';
   }
 
+  // Does the element directly own a non-whitespace text node? (as opposed to only
+  // delegating text to descendants — the signal that distinguishes a text element
+  // from a wrapper, whatever its tag.)
+  function ownsDirectText(el) {
+    for (const n of el.childNodes) if (n.nodeType === 3 && n.nodeValue && n.nodeValue.trim()) return true;
+    return false;
+  }
+  function _clipLabel(s) {
+    s = (s || '').replace(/\s+/g, ' ').trim();
+    return s.length > 42 ? s.slice(0, 41) + '…' : s;
+  }
+  // Human-readable title for a drawer. Tag-agnostic: anything that shows text of its
+  // own is titled by that text; images by alt/filename; controls by placeholder/value;
+  // icon-only / empty / pure containers fall back to aria-label then the CSS selector.
+  function bestLabel(el, tag, cssSelector) {
+    if (tag === 'img' || tag === 'picture' || tag === 'image') {
+      // Alt text and CDN hash filenames are both noisy — just state the format.
+      const src = el.currentSrc || el.src || el.getAttribute('href') || el.getAttribute('xlink:href') || '';
+      const ext = String(src).split(/[?#]/)[0].match(/\.([a-z0-9]{2,5})$/i);
+      if (ext) return ext[1].toLowerCase() === 'jpeg' ? 'JPG' : ext[1].toUpperCase();
+      const data = String(src).match(/^data:image\/([a-z0-9.+-]+)/i);
+      if (data) return data[1].toUpperCase();
+      return 'Image';
+    }
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      const t = _clipLabel(el.getAttribute('placeholder') || el.value || el.getAttribute('aria-label'));
+      if (t) return t;
+    }
+    // General rule: show the element's own visible text when it either directly owns a
+    // text node, or its entire visible text is short enough to be a real label (which
+    // excludes containers whose text is paragraphs of concatenated descendant text).
+    const raw = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (raw && (ownsDirectText(el) || raw.length <= 60)) return raw.length > 42 ? raw.slice(0, 41) + '…' : raw;
+    const aria = _clipLabel(el.getAttribute('aria-label') || el.getAttribute('title'));
+    if (aria) return aria;
+    return cssSelector;
+  }
+
   function getInfo(el) {
     if (!el) return null;
     const tag = el.tagName.toLowerCase();
@@ -119,7 +157,7 @@ function cathodeCombinedPage(OPTS) {
       }
     }
     const cssSelector = tag + id + (cls ? '.' + cls : '');
-    return { el, label: reactName || cssSelector, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
+    return { el, label: reactName || bestLabel(el, tag, cssSelector), descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
   }
 
   let items;
@@ -134,9 +172,48 @@ function cathodeCombinedPage(OPTS) {
   } else {
     const _b = bounds;
     const _seen = new Set();
-    items = [];
+    // "Does this element paint anything of its own?" — direct text, a real background,
+    // a visible border/shadow, or being a leaf/media/control. Pure layout wrappers
+    // (divs that only position children) fail all of these, so they get flagged
+    // structural and the panel tucks them under a collapsed "Layout containers" group
+    // instead of burying the elements you can actually restyle.
+    const _LEAF = /^(img|svg|canvas|video|audio|picture|iframe|input|button|select|textarea|a|label|use|path|image|source|hr)$/;
+    function _ownsText(el) {
+      for (const n of el.childNodes) if (n.nodeType === 3 && n.nodeValue && n.nodeValue.trim()) return true;
+      return false;
+    }
+    function _ownsPaint(el, cs) {
+      const t = el.tagName.toLowerCase();
+      if (_LEAF.test(t)) return true;
+      if (_ownsText(el)) return true;
+      const bg = cs.backgroundColor;
+      if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') return true;
+      if (cs.backgroundImage && cs.backgroundImage !== 'none') return true;
+      if (cs.boxShadow && cs.boxShadow !== 'none') return true;
+      for (const side of ['top', 'right', 'bottom', 'left']) {
+        if (parseFloat(cs.getPropertyValue('border-' + side + '-width')) > 0 &&
+            cs.getPropertyValue('border-' + side + '-style') !== 'none') return true;
+      }
+      return false;
+    }
+    function _impact(el, r, cs, structural) {
+      let s = structural ? 0 : 20;   // any paint-y element outranks any container
+      const t = el.tagName.toLowerCase();
+      if (_ownsText(el)) s += 30;
+      if (/^(img|svg|video|canvas|picture)$/.test(t)) s += 40;
+      if (/^(button|a|input|select|textarea|label)$/.test(t)) s += 25;
+      if (/^h[1-6]$/.test(t)) s += 22;
+      const bg = cs.backgroundColor;
+      if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') s += 14;
+      if (cs.backgroundImage && cs.backgroundImage !== 'none') s += 14;
+      if (cs.boxShadow && cs.boxShadow !== 'none') s += 8;
+      const frac = (r.width * r.height) / (window.innerWidth * window.innerHeight || 1);
+      if (frac > 0.004 && frac < 0.5) s += 8;   // sensibly sized, not a hairline or the whole page
+      return s;
+    }
+    const _cands = [];
     for (const _el of document.querySelectorAll('*')) {
-      if (items.length >= 24) break;
+      if (_cands.length >= 240) break;   // bound cost on huge pages; we rank & trim below
       if (_el.id && /^__(cathode|cr|ed|a11y)/.test(_el.id)) continue;   // skip ALL our tool overlays, not just __cathode (resize/eyedropper/a11y use other prefixes)
       const _r = _el.getBoundingClientRect();
       if (_r.width < 2 || _r.height < 2) continue;
@@ -151,7 +228,22 @@ function cathodeCombinedPage(OPTS) {
       const _key = _info.label + '@' + Math.round(_r.left) + ',' + Math.round(_r.top);
       if (_seen.has(_key)) continue;
       _seen.add(_key);
-      items.push(_info);
+      _cands.push({ info: _info, el: _el, r: _r });
+    }
+    if (aiDevMode) {
+      // Extract tool: keep the original first-24-in-DOM-order behavior untouched.
+      items = _cands.slice(0, 24).map(c => c.info);
+    } else {
+      // Box/Lasso: classify + rank. Paint-y elements first (by impact), then the
+      // layout containers (flagged structural, capped) so the panel can collapse them.
+      for (const c of _cands) {
+        const cs = getComputedStyle(c.el);
+        c.info.structural = !_ownsPaint(c.el, cs);
+        c.info.impact = _impact(c.el, c.r, cs, c.info.structural);
+      }
+      const _ed = _cands.filter(c => !c.info.structural).sort((a, b) => b.info.impact - a.info.impact).slice(0, 24);
+      const _st = _cands.filter(c =>  c.info.structural).sort((a, b) => b.info.impact - a.info.impact).slice(0, 24);
+      items = _ed.concat(_st).map(c => c.info);
     }
   }
 
@@ -499,8 +591,8 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps }) =>
-      ({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [] }));
+    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps, structural }) =>
+      ({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [], structural: !!structural }));
     return Promise.resolve({ panel: true, items: serial });
   }
 
