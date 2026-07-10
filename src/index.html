@@ -121,17 +121,13 @@
         </div>
         <button id="btn-restart" title="Restart session">&#x21BA;</button>
         <div id="terminal-header-right">
-          <div id="audit-wrap">
-            <button id="btn-audit" title="Run code audit">
-              <svg class="audit-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14.25 11.75V14.25C14.25 15.355 13.355 16.25 12.25 16.25H5.75C4.645 16.25 3.75 15.355 3.75 14.25V12.25"/>
-                <path d="M3.75 6.25V3.75C3.75 2.645 4.645 1.75 5.75 1.75H12.25C13.355 1.75 14.25 2.645 14.25 3.75V5.75"/>
-                <path d="M1.75 9.25H5.51C5.95 9.25 6.338 8.963 6.466 8.542L7.465 5.272C7.514 5.111 7.741 5.109 7.793 5.269L10.207 12.729C10.259 12.889 10.486 12.887 10.535 12.726L11.534 9.456C11.662 9.035 12.051 8.748 12.49 8.748H16.25"/>
-              </svg>
-              Audit
-              <span class="ui-chev audit-caret"></span>
+          <div id="resume-wrap">
+            <button id="btn-resume" title="Resume a past session">
+              <svg class="resume-icon" viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.302 7.1762C2.82667 7.1762 3.2522 6.75067 3.2522 6.226C3.2522 5.70133 2.82667 5.27581 2.302 5.27581C1.77733 5.27581 1.35181 5.70133 1.35181 6.226C1.35181 6.75067 1.77733 7.1762 2.302 7.1762Z"/><path d="M4.8232 3.873C4.8232 4.39767 4.39767 4.8232 3.873 4.8232C3.34833 4.8232 2.92281 4.39767 2.92281 3.873C2.92281 3.34833 3.34833 2.92281 3.873 2.92281C4.39767 2.92281 4.8232 3.34833 4.8232 3.873Z"/><path d="M7.1762 2.302C7.1762 2.82667 6.75067 3.2522 6.226 3.2522C5.70133 3.2522 5.27581 2.82667 5.27581 2.302C5.27581 1.77733 5.70133 1.35181 6.226 1.35181C6.75067 1.35181 7.1762 1.77733 7.1762 2.302Z"/><path d="M8.9996 8.2998C9.3862 8.2998 9.6998 8.6134 9.6998 9C9.6998 9.3866 9.3862 9.7002 8.9996 9.7002H4.75742C4.37082 9.7002 4.05722 9.3866 4.05722 9C4.05722 8.6134 4.37082 8.2998 4.75742 8.2998H8.9996Z"/><path d="M1.0498 9C1.0498 8.6134 1.3634 8.2998 1.75 8.2998C2.1366 8.2998 2.4502 8.6134 2.4502 9C2.4502 12.6175 5.3825 15.5498 9 15.5498C12.6175 15.5498 15.5498 12.6175 15.5498 9C15.5498 5.3825 12.6175 2.4502 9 2.4502C8.6134 2.4502 8.2998 2.1366 8.2998 1.75C8.2998 1.3634 8.6134 1.0498 9 1.0498C13.3907 1.0498 16.9502 4.6093 16.9502 9C16.9502 13.3907 13.3907 16.9502 9 16.9502C4.6093 16.9502 1.0498 13.3907 1.0498 9Z"/></svg>
+              Resume
+              <span class="ui-chev resume-caret"></span>
             </button>
-            <div id="audit-menu"></div>
+            <div id="resume-menu"></div>
           </div>
           <!-- Session view toggle: Chat ↔ Terminal -->
           <div id="session-view-toggle" style="display:none">
@@ -156,15 +152,6 @@
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.75V4.75"></path><path d="M14.127 4.87299L12.712 6.28799"></path><path d="M16.25 10H14.25"></path><path d="M3.87305 4.87299L8.29305 9.293"></path><path d="M1.75 10H3.75"></path><path d="M6.45264 3.2103C7.24504 2.9128 8.10363 2.75 9.00003 2.75C13.004 2.75 16.25 5.996 16.25 10C16.25 12.002 15.439 13.815 14.127 15.127L12.713 13.713"></path><path d="M5.28799 13.712L3.87399 15.126C2.56199 13.814 1.75 12.002 1.75 9.99899C1.75 9.10279 1.91271 8.2445 2.21001 7.4523"></path><path d="M9 11.25C9.69 11.25 10.25 10.69 10.25 10C10.25 9.31 9.69 8.75 9 8.75C8.31 8.75 7.75 9.31 7.75 10C7.75 10.69 8.31 11.25 9 11.25Z" fill="currentColor" stroke="none"></path></svg>
           </button>
           <button id="btn-ui-attach" title="Attach file"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg></button>
-          <button id="btn-ui-attach-folder" title="Attach folder"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></g></svg></button>
-          <div id="persona-wrap">
-            <button id="btn-persona" title="Agent persona — focuses the agent's perspective on the next message">
-              <svg class="persona-glyph" viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9.79973 16.25V13.75C9.79986 13.3635 10.1134 13.0498 10.4999 13.0498H12.1386C12.8202 13.0498 13.3859 12.5241 13.4355 11.8438L13.5478 10.3008L13.5615 10.2022C13.6104 9.97724 13.7685 9.7882 13.9863 9.7012L14.6415 9.43948L13.6894 8.16995C13.5987 8.04885 13.5497 7.90134 13.5497 7.75003C13.5496 4.44988 10.5345 1.85289 7.09954 2.57034C5.10624 2.98649 3.4883 4.60576 3.07122 6.59866C2.5447 9.11728 3.8081 11.3876 5.82219 12.4346C6.05394 12.5551 6.20012 12.7945 6.20012 13.0557V16.25C6.20012 16.6366 5.88643 16.9501 5.49993 16.9502C5.11333 16.9502 4.79973 16.6366 4.79973 16.25V13.4629C2.4869 12.0659 1.07032 9.32402 1.70012 6.31155C2.2311 3.77475 4.27502 1.73021 6.81341 1.20023C11.0503 0.315263 14.7979 3.45251 14.9423 7.50784L16.3095 9.33011C16.4402 9.50436 16.4826 9.72977 16.4238 9.93948C16.3649 10.1491 16.2119 10.3196 16.0097 10.4004L14.912 10.8379L14.832 11.9453C14.7292 13.3567 13.5548 14.4502 12.1386 14.4502H11.2001V16.25C11.2001 16.6366 10.8864 16.9501 10.4999 16.9502C10.1133 16.9502 9.79973 16.6366 9.79973 16.25Z"/><path d="M11.4997 8.00027C11.9139 8.00027 12.2497 7.66449 12.2497 7.25027C12.2497 6.83606 11.9139 6.50027 11.4997 6.50027C11.0855 6.50027 10.7497 6.83606 10.7497 7.25027C10.7497 7.66449 11.0855 8.00027 11.4997 8.00027Z"/></svg>
-              <span id="btn-persona-label">Persona</span>
-              <span class="ui-chev persona-caret"></span>
-            </button>
-            <div id="persona-menu"></div>
-          </div>
           <div id="figma-wrap" style="display:none">
             <button id="btn-figma" title="Figma MCP actions">
               <svg class="figma-glyph" viewBox="0 0 38 57" width="11" height="16" xmlns="http://www.w3.org/2000/svg">
@@ -174,10 +161,29 @@
                 <path fill="#f24e1e" d="M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"/>
                 <path fill="#a259ff" d="M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"/>
               </svg>
-              <span class="figma-label">Figma MCP</span>
-              <span class="ui-chev figma-caret"></span>
             </button>
             <div id="figma-menu"></div>
+          </div>
+          <button id="btn-ui-attach-folder" title="Attach folder"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></g></svg></button>
+          <div id="audit-wrap">
+            <button id="btn-audit" title="Run code audit">
+              <svg class="audit-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.25 11.75V14.25C14.25 15.355 13.355 16.25 12.25 16.25H5.75C4.645 16.25 3.75 15.355 3.75 14.25V12.25"/>
+                <path d="M3.75 6.25V3.75C3.75 2.645 4.645 1.75 5.75 1.75H12.25C13.355 1.75 14.25 2.645 14.25 3.75V5.75"/>
+                <path d="M1.75 9.25H5.51C5.95 9.25 6.338 8.963 6.466 8.542L7.465 5.272C7.514 5.111 7.741 5.109 7.793 5.269L10.207 12.729C10.259 12.889 10.486 12.887 10.535 12.726L11.534 9.456C11.662 9.035 12.051 8.748 12.49 8.748H16.25"/>
+              </svg>
+              Audit
+              <span class="ui-chev audit-caret"></span>
+            </button>
+            <div id="audit-menu"></div>
+          </div>
+          <div id="persona-wrap">
+            <button id="btn-persona" title="Agent persona — focuses the agent's perspective on the next message">
+              <svg class="persona-glyph" viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9.79973 16.25V13.75C9.79986 13.3635 10.1134 13.0498 10.4999 13.0498H12.1386C12.8202 13.0498 13.3859 12.5241 13.4355 11.8438L13.5478 10.3008L13.5615 10.2022C13.6104 9.97724 13.7685 9.7882 13.9863 9.7012L14.6415 9.43948L13.6894 8.16995C13.5987 8.04885 13.5497 7.90134 13.5497 7.75003C13.5496 4.44988 10.5345 1.85289 7.09954 2.57034C5.10624 2.98649 3.4883 4.60576 3.07122 6.59866C2.5447 9.11728 3.8081 11.3876 5.82219 12.4346C6.05394 12.5551 6.20012 12.7945 6.20012 13.0557V16.25C6.20012 16.6366 5.88643 16.9501 5.49993 16.9502C5.11333 16.9502 4.79973 16.6366 4.79973 16.25V13.4629C2.4869 12.0659 1.07032 9.32402 1.70012 6.31155C2.2311 3.77475 4.27502 1.73021 6.81341 1.20023C11.0503 0.315263 14.7979 3.45251 14.9423 7.50784L16.3095 9.33011C16.4402 9.50436 16.4826 9.72977 16.4238 9.93948C16.3649 10.1491 16.2119 10.3196 16.0097 10.4004L14.912 10.8379L14.832 11.9453C14.7292 13.3567 13.5548 14.4502 12.1386 14.4502H11.2001V16.25C11.2001 16.6366 10.8864 16.9501 10.4999 16.9502C10.1133 16.9502 9.79973 16.6366 9.79973 16.25Z"/><path d="M11.4997 8.00027C11.9139 8.00027 12.2497 7.66449 12.2497 7.25027C12.2497 6.83606 11.9139 6.50027 11.4997 6.50027C11.0855 6.50027 10.7497 6.83606 10.7497 7.25027C10.7497 7.66449 11.0855 8.00027 11.4997 8.00027Z"/></svg>
+              <span id="btn-persona-label">Persona</span>
+              <span class="ui-chev persona-caret"></span>
+            </button>
+            <div id="persona-menu"></div>
           </div>
           <span id="ui-char-count"></span>
           <button id="btn-ui-resize" title="Drag to resize input (double-click to reset)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>

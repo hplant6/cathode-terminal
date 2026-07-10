@@ -1689,7 +1689,7 @@ const ACP_LAUNCH = {
   hermes: { launch: () => launchAcpAgent('hermes', ['acp'], 'hermes', { bridgeStdio: true }) },
 };
 
-async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
+async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resume = null) {
   const acp = await requireAcp();
   const { Readable, Writable } = require('stream');
   const cfg = ACP_LAUNCH[agentKey] || ACP_LAUNCH.claude;
@@ -1845,7 +1845,24 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
     }
     // WSL-side agents (Claude/Gemini/Codex/Hermes on Windows) chdir into this cwd
     // and fail to launch on a raw `C:\…` path — hand them the /mnt path.
-    const { sessionId } = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] });
+    let sessionId;
+    const caps = (initResult && initResult.agentCapabilities) || {};
+    if (resume && resume.sessionId) {
+      // Resume a past conversation. cwd MUST match the session's original project;
+      // resume.cwd comes straight from the transcript (already a WSL path).
+      const rcwd = resume.cwd || platform.toWslPath(sessionCwd());
+      if (caps.loadSession) {
+        // loadSession replays the prior turns via session/update — the chat repopulates.
+        await conn.loadSession({ sessionId: resume.sessionId, cwd: rcwd, mcpServers: [] });
+        sessionId = resume.sessionId;
+      } else {
+        // Adapter can't replay — start fresh in that project (can't restore history).
+        ({ sessionId } = await conn.newSession({ cwd: rcwd, mcpServers: [] }));
+        send(IPC.APP_TOAST, { message: "This agent can't replay history — started a fresh session in that project." });
+      }
+    } else {
+      ({ sessionId } = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] }));
+    }
     clearTimeout(connectTimer);
     connected = true;
     const entry = { proc, conn, sessionId };
@@ -1873,8 +1890,8 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude') {
   }
 }
 
-ipcMain.on(IPC.ACP_SPAWN, (_, { id, model, agent } = {}) => {
-  spawnAcpSession(id, model || '', agent || 'claude').catch(err => {
+ipcMain.on(IPC.ACP_SPAWN, (_, { id, model, agent, resume } = {}) => {
+  spawnAcpSession(id, model || '', agent || 'claude', resume || null).catch(err => {
     console.error('[acp] spawn error:', err);
     uiSend(IPC.ACP_ERROR, { id, message: acpErrText(err) });
   });
@@ -2130,6 +2147,76 @@ ipcMain.handle(IPC.SPEND_REPORT, async () => {
     const byDay = Object.entries(byDayAll).map(([date, cost]) => ({ date, cost })).sort((a, b) => (a.date < b.date ? -1 : 1));
     const byModel = Object.entries(byModelAll).map(([model, v]) => ({ model, cost: v.cost, tokens: v.tokens })).sort((a, b) => b.cost - a.cost);
     return { ok: true, totalCost, totalTokens, byProject, byDay, byModel, scannedFiles, scannedAt: Date.now() };
+  } catch (e) {
+    return { ok: false, reason: e.message };
+  }
+});
+
+// ── Resume: enumerate past Claude sessions from the transcripts ────────────
+// Each ~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl is one conversation; the
+// filename is the session UUID that ACP loadSession / `claude --resume` accepts.
+// Per-file cache keyed on mtime+size (same slow \\wsl.localhost FS as spend).
+function _firstText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter(c => c && c.type === 'text').map(c => c.text || '').join(' ');
+  return '';
+}
+const _sessCache = new Map();   // filepath -> { mtime, size, sessionId, cwd, title, model, lastTs, cost, messages }
+async function scanSessionFile(file) {
+  const st = await fsp.stat(file);
+  const hit = _sessCache.get(file);
+  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit;
+  const raw = await fsp.readFile(file, 'utf8');
+  let cwd = '', title = '', model = '', lastTs = '', cost = 0, messages = 0;
+  for (const line of raw.split('\n')) {
+    const t = line.trim(); if (!t) continue;
+    let ev; try { ev = JSON.parse(t); } catch { continue; }
+    if (!cwd && ev.cwd) cwd = ev.cwd;
+    if (ev.timestamp) lastTs = ev.timestamp;
+    const msg = ev.message || ev;
+    const role = (msg && msg.role) || ev.type;
+    if (role === 'user' || role === 'assistant') messages++;
+    if (!title && role === 'user') {
+      const clean = _firstText(msg && msg.content).replace(/\s+/g, ' ').trim();
+      // skip tool-result / command / meta artifacts ("<command-name>…", "[Request…]")
+      if (clean && !/^[<[]/.test(clean) && !/^Caveat:/.test(clean)) title = clean.slice(0, 80);
+    }
+    const u = msg && msg.usage;
+    if (u) {
+      const m = msg.model || ''; if (m) model = m;
+      const p = usagePricing(m);
+      cost += ((u.input_tokens || 0) * p.in + (u.output_tokens || 0) * p.out + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+    }
+  }
+  const rec = { mtime: st.mtimeMs, size: st.size, sessionId: path.basename(file, '.jsonl'), cwd, title, model, lastTs, cost, messages };
+  _sessCache.set(file, rec);
+  return rec;
+}
+ipcMain.handle(IPC.SESSIONS_LIST, async () => {
+  try {
+    const dir = await claudeProjectsDir();
+    if (!dir) return { ok: false, reason: 'no-projects-dir' };
+    const names = await fsp.readdir(dir);
+    const projects = [];
+    for (const pn of names) {
+      const pdir = path.join(dir, pn);
+      let files;
+      try { if (!(await fsp.stat(pdir)).isDirectory()) continue; files = await fsp.readdir(pdir); } catch { continue; }
+      const jsonls = files.filter(f => f.endsWith('.jsonl'));
+      if (!jsonls.length) continue;
+      const sessions = [];
+      for (const f of jsonls) {
+        let rec; try { rec = await scanSessionFile(path.join(pdir, f)); } catch { continue; }
+        if (!rec.messages) continue;   // skip empty / aborted transcripts
+        sessions.push({ sessionId: rec.sessionId, cwd: rec.cwd, title: rec.title || '(untitled session)', model: rec.model, lastTs: rec.lastTs, cost: rec.cost, messages: rec.messages });
+      }
+      if (!sessions.length) continue;
+      sessions.sort((a, b) => (a.lastTs < b.lastTs ? 1 : -1));   // newest first
+      const pp = prettyProjectName(pn);
+      projects.push({ name: pp.name, path: pp.path, cwd: sessions[0].cwd || pp.path, encoded: pn, lastTs: sessions[0].lastTs, sessions });
+    }
+    projects.sort((a, b) => (a.lastTs < b.lastTs ? 1 : -1));
+    return { ok: true, projects, currentCwd: platform.toWslPath(sessionCwd()) };
   } catch (e) {
     return { ok: false, reason: e.message };
   }
@@ -2910,13 +2997,14 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Chat Font Size…',    click: act('chat-font') },
     { label: 'Audit Prompts',      click: act('audit-prompts') },
     { label: 'Edit Tabs',          click: act('edit-tabs') },
-    { label: 'MCP Tool Tokens',    click: act('mcp-tools') },
+    { label: 'MCP Connections',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
     { label: 'AI Spend…',          click: act('spend') },
     { label: 'Localhost Servers…', click: act('localhost') },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },
+    { label: 'Reload App',         click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reloadIgnoringCache(); } },
     { type: 'separator' },
     { label: 'Report a Performance Issue…', click: act('perf-report') },
     { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
@@ -3481,7 +3569,7 @@ ipcMain.on(IPC.PICK_RESIZE, async () => {
     const sel = await view.webContents.executeJavaScript(getResizeScript());
     if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled before selecting
     pendingResize = { view };
-    uiSend(IPC.RESIZE_PANEL_OPEN, { tool: 'Resize', label: sel.label, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
+    uiSend(IPC.RESIZE_PANEL_OPEN, { tool: 'Resize', label: sel.label, selShort: sel.selShort, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
     startResizePoll();
   } catch (err) {
     console.error('Resize error:', err);

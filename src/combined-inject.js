@@ -157,7 +157,13 @@ function cathodeCombinedPage(OPTS) {
       }
     }
     const cssSelector = tag + id + (cls ? '.' + cls : '');
-    return { el, label: reactName || bestLabel(el, tag, cssSelector), descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
+    const text = bestLabel(el, tag, cssSelector);
+    // A minified React alias ("T", "Kn") is worse than the element's own text, so prefer
+    // real text; use the component name only for text-less elements, and only when it
+    // looks like a genuine name (≥3 chars, mixed-case) rather than a bundler alias.
+    const realReact = reactName && reactName.length >= 3 && /[a-z]/.test(reactName);
+    const label = (text && text !== cssSelector) ? text : (realReact ? reactName : text);
+    return { el, label, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
   }
 
   let items;

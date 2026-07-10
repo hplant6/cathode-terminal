@@ -19,6 +19,7 @@ const IPC = Object.freeze({
   PORTS_LIST: 'ports-list',
   PORTS_KILL: 'ports-kill',
   SPEND_REPORT: 'spend-report',
+  SESSIONS_LIST: 'sessions-list',
   ACP_CANCEL: 'acp-cancel',
   ACP_CLOSED: 'acp-closed',
   ACP_DONE: 'acp-done',

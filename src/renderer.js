@@ -463,7 +463,7 @@ function saveOpenSessions() {
   } catch (_) {}
 }
 
-function createSession(name, command, acp, transient) {
+function createSession(name, command, acp, transient, resume) {
   const profile = getDefaultProfile();
   const cmd     = command != null ? command : profile.command;
   const wantAcp = acp != null ? (acp === true) : (command == null && profile.acp === true);
@@ -473,7 +473,7 @@ function createSession(name, command, acp, transient) {
   const sName   = name || profile.name;
 
   if (isAcp) {
-    createAcpSession(id, sName, agent, cmd);
+    createAcpSession(id, sName, agent, cmd, resume);
     if (transient) sessions.get(id).transient = true;
     saveOpenSessions();
     return id;
@@ -511,7 +511,7 @@ function createSession(name, command, acp, transient) {
 }
 
 
-function createAcpSession(id, name, agent = 'claude', command = 'claude') {
+function createAcpSession(id, name, agent = 'claude', command = 'claude', resume = null) {
   const el = document.createElement('div');
   el.className = 'pty-session';
   ptySessionsEl.appendChild(el);
@@ -575,8 +575,10 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude') {
     viewMode: 'chat',
     toolCards: new Map(),
     streamEl: null, streamTextEl: null, streamMsgId: null,
+    _replaying: !!(resume && resume.sessionId),   // suppress chimes while history replays
   });
-  ipcRenderer.send(IPC.ACP_SPAWN, { id, agent });
+  if (resume && resume.sessionId) statusTextEl.textContent = 'Resuming…';
+  ipcRenderer.send(IPC.ACP_SPAWN, { id, agent, resume: resume || null });
   switchSession(id);
 }
 
@@ -2902,7 +2904,7 @@ ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
       acpScrollEnd(s);
     }
     s._sentSlash = null;
-    if (s._pendingNotif) { Notif.play(s._pendingNotif); s._pendingNotif = null; }   // one chime per turn
+    if (s._pendingNotif) { if (!s._replaying) Notif.play(s._pendingNotif); s._pendingNotif = null; }   // one chime per turn (silent while replaying resumed history)
     // Total session tokens across turns (agents like Hermes report per-turn usage).
     const t = usage && typeof usage.totalTokens === 'number' ? usage.totalTokens
       : usage ? (usage.inputTokens || 0) + (usage.outputTokens || 0) : 0;
@@ -3208,6 +3210,13 @@ gearBtn?.addEventListener('click', e => {
   ipcRenderer.send(IPC.SHOW_SETTINGS_MENU, { x: Math.round(rect.left), y: Math.round(rect.bottom) });
 });
 
+// Clicking the Cathode logo opens the same settings menu (anchored to the logo seat).
+document.querySelector('#app-bar-logo img')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const rect = document.getElementById('app-bar-logo').getBoundingClientRect();
+  ipcRenderer.send(IPC.SHOW_SETTINGS_MENU, { x: Math.round(rect.left), y: Math.round(rect.bottom) });
+});
+
 let openAuditPromptsModal      = null;
 let openEditTabsModal          = null;
 let openMcpToolsModal          = null;
@@ -3447,6 +3456,88 @@ let openSpendModal = null;
   document.getElementById('spend-done')?.addEventListener('click', ctl.close);
   openSpendModal = function() { ctl.open(); report ? render() : scan(); };
 })();
+
+// ── Resume a past session — drop-up menu on the composer toolbar ──────────
+(function initResume() {
+  const wrap = document.getElementById('resume-wrap');
+  const btn  = document.getElementById('btn-resume');
+  const menu = document.getElementById('resume-menu');
+  if (!btn || !menu) return;
+  let data = null, busy = false;
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const usd = n => '$' + (n < 0.01 ? n.toFixed(4) : n < 1 ? n.toFixed(3) : n.toFixed(2));
+  function relTime(ts) {
+    const then = Date.parse(ts || ''); if (isNaN(then)) return '';
+    const s = Math.max(0, (Date.now() - then) / 1000);
+    if (s < 90) return 'just now';
+    const m = s / 60; if (m < 60) return Math.round(m) + 'm ago';
+    const h = m / 60; if (h < 24) return Math.round(h) + 'h ago';
+    const d = h / 24; if (d < 30) return Math.round(d) + 'd ago';
+    return Math.round(d / 30) + 'mo ago';
+  }
+  function modelShort(m) {
+    m = (m || '').toLowerCase();
+    if (m.includes('opus')) return 'Opus';
+    if (m.includes('sonnet')) return 'Sonnet';
+    if (m.includes('haiku')) return 'Haiku';
+    if (m.includes('fable')) return 'Fable';
+    return '';
+  }
+
+  // Scrollable list (no filter for now — the whole grouped list is shown).
+  const listEl = el('div', 'rs-list');
+  menu.append(listEl);
+
+  function renderList() {
+    const q = '';
+    listEl.innerHTML = '';
+    if (busy && !data) { listEl.appendChild(el('div', 'lh-empty', 'Scanning…')); return; }
+    if (!data || !data.ok) { listEl.appendChild(el('div', 'lh-empty', 'Could not read transcripts.')); return; }
+    const projects = data.projects
+      .map(p => ({ ...p, sessions: p.sessions.filter(s => !q || (s.title || '').toLowerCase().includes(q) || (p.name || '').toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q)) }))
+      .filter(p => p.sessions.length);
+    if (!projects.length) { listEl.appendChild(el('div', 'lh-empty', q ? 'No matches.' : 'No past sessions found.')); return; }
+    projects.forEach(p => {
+      const grp = el('div', 'rs-group');
+      const head = el('div', 'rs-group-head');
+      head.append(el('span', 'rs-group-name', p.name), el('span', 'rs-group-path', p.path), el('span', 'rs-group-count', String(p.sessions.length)));
+      grp.appendChild(head);
+      p.sessions.forEach(s => {
+        const row = el('div', 'rs-row');
+        const info = el('div', 'rs-info');
+        info.appendChild(el('div', 'rs-title', s.title));
+        const bits = [relTime(s.lastTs), s.messages + ' msg', usd(s.cost)];
+        if (modelShort(s.model)) bits.push(modelShort(s.model));
+        info.appendChild(el('div', 'rs-sub', bits.filter(Boolean).join('  ·  ')));
+        row.title = 'Resume: ' + s.title;
+        row.addEventListener('click', () => { close(); resumeSession(s); });
+        row.append(info, el('span', 'rs-go', 'Resume'));
+        grp.appendChild(row);
+      });
+      listEl.appendChild(grp);
+    });
+  }
+
+  async function scan() {
+    busy = true; renderList();
+    try { data = await ipcRenderer.invoke(IPC.SESSIONS_LIST); }
+    catch (_) { data = { ok: false }; }
+    finally { busy = false; renderList(); }
+  }
+  function open()  { menu.classList.add('open'); btn.classList.add('active'); data = null; scan(); }
+  function close() { menu.classList.remove('open'); btn.classList.remove('active'); }
+  btn.addEventListener('click', e => { e.stopPropagation(); menu.classList.contains('open') ? close() : open(); });
+  document.addEventListener('click', e => { if (menu.classList.contains('open') && !wrap.contains(e.target)) close(); });
+})();
+
+// Resume a past Claude session in a new chat tab. The session's own cwd is passed
+// straight to loadSession, so it reopens in the right project folder.
+function resumeSession(sess) {
+  if (!sess || !sess.sessionId) return;
+  const name = (sess.title || 'Resumed').slice(0, 22);
+  createSession(name, 'claude', true, false, { sessionId: sess.sessionId, cwd: sess.cwd });
+}
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
 const closeApiKeyModal = apiKeyModalCtl.close;
@@ -5368,10 +5459,19 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (sliding !== 'w') { if (d.nW > +wSlider.max) wSlider.max = d.nW; wSlider.value = d.nW; }
     if (sliding !== 'h') { if (d.nH > +hSlider.max) hSlider.max = d.nH; hSlider.value = d.nH; }
   }
-  function open({ tool, label, oW, oH, vw, vh }) {
+  function open({ tool, label, selShort, oW, oH, vw, vh }) {
     clearPickMode();
     titleEl.textContent = tool || 'Resize';
-    elEl.textContent = label || '';
+    // Readable name (bright) + the tag.class selector after it (dimmed). If there's no
+    // readable name, show the selector alone.
+    elEl.textContent = '';
+    elEl.appendChild(document.createTextNode(label || selShort || ''));
+    if (label && selShort && selShort !== label) {
+      const s = document.createElement('span');
+      s.className = 'rz-el-sel';
+      s.textContent = selShort;
+      elEl.appendChild(s);
+    }
     wSlider.max = Math.max(oW * 2, vw || 2000);
     hSlider.max = Math.max(oH * 2, vh || 2000);
     setDims({ oW, oH, nW: oW, nH: oH });
@@ -6319,6 +6419,7 @@ function routeToActiveSession(text, display = text, images = [], chips = null) {
   const s = sessions.get(activeId);
   if (!s) return false;
   if (s.type === 'acp') {
+    s._replaying = false;   // a real user turn — history replay (if any) is over; chimes resume
     acpAddUserMsg(s, display, images, chips);
     clearTimeout(s._trailingTimer); s._trailingWork = false;   // a real new turn — ACP_DONE will govern the banner
     // Track slash-command turns so a command that returns no chat output (e.g. /usage

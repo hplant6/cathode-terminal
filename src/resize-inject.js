@@ -5,7 +5,7 @@ const SHARED = require('./inject-shared');
 const { iconB64 } = require('./read-icon');
 
 const RESIZE_B64 = iconB64(path.join(__dirname, 'icons', 'resize-cursor.svg'));
-const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 24 24, move`;
+const RESIZE_CURSOR = `url("data:image/svg+xml;base64,${RESIZE_B64}") 16 16, move`;
 
 // Panel mode: the user hovers + clicks an element, then drags the on-page
 // handles to resize it live. Instead of an in-page toolbar, the instructions /
@@ -118,18 +118,49 @@ function getResizeScript() {
       };
 
       resolveOnce({
-        selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl),
+        selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(),
+        label: labelFor(selEl), selShort: shortSel(selEl),
         oW: Math.round(origRect.width), oH: Math.round(origRect.height),
         vw: window.innerWidth, vh: window.innerHeight,
       });
     }
 
-    function labelFor(el) {
+    // The pretty tag.class shown after the readable name (matches the old title).
+    function shortSel(el) {
       var t = el.tagName.toLowerCase();
       var id = el.id ? '#' + el.id : '';
       var cls = (typeof el.className === 'string' && el.className.trim())
         ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
       return t + id + cls;
+    }
+    // Same naming mechanism as the box/lasso panel (combined-inject bestLabel):
+    // the element's own text; images by format; controls by placeholder/value;
+    // aria-label; else '' so the panel shows the selector alone.
+    function labelFor(el) {
+      var t = el.tagName.toLowerCase();
+      function clip(s) { s = (s || '').replace(/\\s+/g, ' ').trim(); return s.length > 42 ? s.slice(0, 41) + '…' : s; }
+      if (t === 'img' || t === 'picture' || t === 'image') {
+        var src = el.currentSrc || el.src || el.getAttribute('href') || el.getAttribute('xlink:href') || '';
+        var ext = String(src).split(/[?#]/)[0].match(/\\.([a-z0-9]{2,5})$/i);
+        if (ext) return ext[1].toLowerCase() === 'jpeg' ? 'JPG' : ext[1].toUpperCase();
+        var data = String(src).match(/^data:image\\/([a-z0-9.+-]+)/i);
+        if (data) return data[1].toUpperCase();
+        return 'Image';
+      }
+      if (t === 'input' || t === 'textarea' || t === 'select') {
+        var cv = clip(el.getAttribute('placeholder') || el.value || el.getAttribute('aria-label'));
+        if (cv) return cv;
+      }
+      var ownsText = false;
+      for (var i = 0; i < el.childNodes.length; i++) {
+        var nd = el.childNodes[i];
+        if (nd.nodeType === 3 && nd.nodeValue && nd.nodeValue.trim()) { ownsText = true; break; }
+      }
+      var raw = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+      if (raw && (ownsText || raw.length <= 60)) return raw.length > 42 ? raw.slice(0, 41) + '…' : raw;
+      var aria = clip(el.getAttribute('aria-label') || el.getAttribute('title'));
+      if (aria) return aria;
+      return '';
     }
 
     // ── Handles UI (no toolbar — just box + 8 handles + size label) ───

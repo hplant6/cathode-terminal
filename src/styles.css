@@ -225,7 +225,7 @@ html, body {
   border-radius: 0 0 var(--r-blob) 0; /* bottom-right blob */
   flex-shrink: 0;
 }
-#app-bar-logo img { height: 28px; width: auto; display: block; -webkit-app-region: drag; }
+#app-bar-logo img { height: 28px; width: auto; display: block; -webkit-app-region: no-drag; cursor: pointer; }   /* clickable → opens settings menu (window still draggable via the spacer) */
 #app-bar-logo #btn-settings { color: var(--spec-text-dim); margin-left: 0; width: 22px; min-width: 22px; height: 22px; border-radius: 3px; }   /* square hover seat, 3px corners */
 #app-bar-logo #btn-settings:hover { color: var(--spec-text); background: rgba(255,255,255,0.08); }
 #app-bar-logo img {
@@ -437,6 +437,47 @@ html, body {
 .lh-open:hover { border-color: var(--spec-accent); color: var(--spec-accent); }
 .lh-kill:hover { border-color: var(--danger); color: var(--danger); }
 .lh-kill.lh-arm { background: var(--danger); border-color: var(--danger); color: #fff; }
+/* Resume-session dropdown (header — took the old Audit slot) */
+#resume-wrap { position: relative; flex-shrink: 0; }
+#btn-resume {
+  flex-shrink: 0; display: flex; align-items: center; gap: 8px;
+  width: 130px; height: 34px; padding: 0 14px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;   /* shade 4, signature blob corner */
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--spec-text-dim); cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+#btn-resume:hover, #btn-resume.active { background: var(--spec-structural); color: var(--spec-text); }
+.resume-icon { flex-shrink: 0; }
+.resume-caret { flex-shrink: 0; margin-left: auto; transition: transform 0.18s ease; }
+#btn-resume.active .resume-caret { transform: rotate(180deg); }
+#resume-menu {
+  display: none; position: absolute; top: calc(100% + 5px); right: 0;   /* drop-DOWN from the header */
+  width: 340px; max-width: 90vw;
+  background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-md);   /* shade 7 */
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 6000; padding: 6px;
+}
+#resume-menu.open { display: block; }
+.rs-list { max-height: 340px; overflow-y: auto; }
+.rs-group + .rs-group { margin-top: 2px; }
+.rs-group-head {
+  display: flex; align-items: baseline; gap: 8px; padding: 8px 8px 4px;
+  position: sticky; top: 0; background: var(--spec-input-bg); z-index: 1;   /* match the shade-7 menu */
+}
+.rs-group-name { flex-shrink: 0; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
+.rs-group-path { flex: 1; min-width: 0; font: 9px var(--font-mono); color: var(--spec-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-group-count { flex-shrink: 0; min-width: 16px; height: 15px; padding: 0 4px; border-radius: 8px; background: var(--spec-structural); color: var(--spec-text-dim); font: 700 9px/15px var(--font-mono); text-align: center; }
+.rs-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; transition: background 0.1s; }
+.rs-row:hover { background: rgba(255,255,255,0.07); }
+.rs-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rs-title { font-size: 12px; color: var(--spec-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-sub { font: 10px var(--font-mono); color: var(--spec-text-faint); }
+.rs-go {
+  flex-shrink: 0; padding: 4px 10px; border-radius: 4px;
+  background: var(--spec-accent); color: #fff;   /* accent-1 filled button */
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 9px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  opacity: 0; transition: opacity 0.1s;
+}
+.rs-row:hover .rs-go { opacity: 1; }
 .lh-btn:disabled { opacity: 0.4; cursor: default; }
 
 /* AI Spend dashboard modal */
@@ -1879,7 +1920,7 @@ html, body {
   align-items: center;
   gap: 8px;
   width: 130px;
-  height: 36px;
+  height: 34px;   /* match the persona/figma pills in the composer toolbar */
   padding: 0 14px;
   background: var(--spec-dropdown-bg);   /* shade 4 */
   border: none;
@@ -2033,7 +2074,14 @@ html, body {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 .im-btn:hover:not(:disabled) { background: var(--spec-accent); border-color: var(--spec-accent); color: #fff; }   /* solid orange on hover */
-.im-btn.added    { color: var(--success); border-color: var(--success); cursor: default; }
+/* "Added ✓" is a terminal state — style it as a muted gray ghost button (matches
+   .pp-btn-ghost): shade-4 fill, gray text/icon, no border. No green. */
+.im-btn.added, .im-btn.added:hover {
+  background: var(--spec-dropdown-bg);   /* shade-4 gray fill */
+  border-color: transparent;             /* no border */
+  color: var(--spec-text-dim);           /* gray text + ✓ icon */
+  cursor: default;
+}
 .im-btn:disabled { opacity: 0.4; cursor: default; }
 /* Installing state → juggler spinner (orange, glowing, slow-pulsing) in place of the button */
 .im-btn.im-btn-loading {
@@ -2083,14 +2131,14 @@ html, body {
 #audit-menu {
   display: none;
   position: absolute;
-  top: calc(100% + 4px);
+  bottom: calc(100% + 4px);   /* drop-UP — audit now lives in the bottom composer toolbar */
   right: 0;
   min-width: 178px;
   background: var(--bg-toolbar);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-  z-index: 200;
+  z-index: 6000;
   overflow: hidden;
 }
 #audit-menu.open { display: block; }
@@ -2116,22 +2164,20 @@ html, body {
 /* ── Figma quick actions (composer toolbar) ── */
 #figma-wrap { position: relative; flex-shrink: 0; }
 #btn-figma {
-  display: flex; align-items: center; gap: 10px;
-  width: auto; height: 34px; padding: 0 18px;   /* spec: 14px 18px */
-  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
-  color: var(--spec-text-dim); cursor: pointer; font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; gap: 0;
+  background: transparent; border: none; border-radius: var(--radius-sm);
+  color: var(--spec-text-dim); cursor: pointer;
   transition: background 0.12s;
 }
-#btn-figma:hover { border-color: var(--text-dim); background: var(--spec-structural); }   /* shade 3 */
-#btn-figma.active { border-color: var(--accent); }
-#btn-figma .figma-label { font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text-dim); white-space: nowrap; }
-#btn-figma:hover .figma-label { color: var(--spec-text); }
-#btn-figma .figma-glyph { width: 8.25px; height: 12px; }   /* 25% smaller */
+#btn-figma:hover  { background: var(--spec-structural); }   /* shade 3 */
+#btn-figma.active { background: var(--spec-structural); box-shadow: inset 0 0 0 1px var(--spec-accent); }
+#btn-figma .figma-glyph { width: 10px; height: 15px; }   /* full figma logo, aspect preserved */
 .figma-glyph { flex-shrink: 0; display: block; }
 .figma-caret { flex-shrink: 0; width: 9px; height: 9px; color: var(--text-dim); transition: transform 0.15s; }
 #btn-figma.active .figma-caret { transform: rotate(180deg); }
 #figma-menu {
-  display: none; position: absolute; bottom: calc(100% + 5px); right: 0;
+  display: none; position: absolute; bottom: calc(100% + 5px); left: 0;   /* left-anchored: button now sits near the toolbar's left */
   min-width: 230px; max-height: 340px; overflow-y: auto;
   background: var(--bg-toolbar); border: 1px solid var(--border); border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 6000; padding: 6px;
@@ -2531,7 +2577,7 @@ html, body {
 .ext-row:has(.ext-cb:checked) .ext-label { color: var(--spec-accent); }   /* orange when checked */
 /* segmented toggle (Send to chat / Download) */
 .ext-media-dest { padding: 8px 12px 12px; }
-.ext-seg { display: flex; width: 100%; background: var(--spec-input-bg); border: none; border-radius: 5px; padding: 2px; gap: 2px; }   /* shade-7 track */
+.ext-seg { display: flex; width: 100%; background: var(--spec-black); border: none; border-radius: 5px; padding: 2px; gap: 2px; }   /* shade-8 track — one darker than the shade-7 drawer body so the toggle reads */
 #extract-panel .ext-seg-btn {
   flex: 1; width: auto; height: 30px; background: transparent; border: none; box-shadow: none;
   color: var(--spec-text-dim); font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
@@ -3151,6 +3197,7 @@ html, body {
 }
 .rz-caret-off { visibility: hidden; }   /* chevron hidden + non-interactive (drawer can't close) */
 .rz-drawer-title { flex: 1; min-width: 0; font: 600 12px var(--font-mono); color: var(--spec-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rz-el-sel { margin-left: 8px; font-weight: 400; color: var(--spec-text-dim); }   /* dimmed tag.class after the readable name */
 .rz-drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; background: var(--spec-input-bg); }   /* shade 7 */
 /* Width/Height as property rows (shared .pp-field + box-select slider look) */
 .rz-dims { display: flex; flex-direction: column; gap: 0; margin: -14px -16px 0; }   /* full-bleed past the body padding */
@@ -4522,16 +4569,21 @@ button:active { background: var(--btn-active); }
   transition: background 0.12s, color 0.12s;
 }
 .mcp-modal-close:hover { background: var(--btn-hover); color: var(--text); }
-#mcp-modal-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+#mcp-modal-list {
+  max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; flex-shrink: 0;
+  background: var(--spec-black); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
+  padding: 4px;   /* solid container — connected tools sit inside it as flush rows */
+}
 #mcp-modal-list::-webkit-scrollbar { width: 4px; }
 #mcp-modal-list::-webkit-scrollbar-track { background: transparent; }
 #mcp-modal-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 .mcp-list-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: var(--radius-md);
-  background: var(--bg-input); border: 1px solid var(--border);
-  flex-shrink: 0;
+  padding: 8px 10px; border-radius: 6px;
+  background: transparent; border: none;   /* the container is the card, not each row */
+  flex-shrink: 0; transition: background 0.1s;
 }
+.mcp-list-row:hover { background: var(--spec-toolbar-bg); }
 .mcp-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; flex-shrink: 0; }
 .mcp-list-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcp-conn-label { font-size: 11px; font-weight: 500; color: #34c759; flex-shrink: 0; }
@@ -4744,14 +4796,14 @@ select.tabs-add-select-field { display: none; }
 .kb-plus { font-size: 10px; color: var(--text-dim); padding: 0 1px; }
 
 /* ── Pick-mode cursors ───────────────────────────────────────────── */
-:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 24 24, crosshair  !important; }
+:root[data-pick="box"]        { cursor: url('./icons/box-select-cursor.svg') 16 16, crosshair  !important; }
 :root[data-pick="lasso"]      { cursor: url('./icons/lasso-cursor.svg') 9 2, crosshair !important; }
 :root[data-pick="screenshot"] { cursor: crosshair !important; }
-:root[data-pick="resize"]     { cursor: url('./icons/resize-cursor.svg') 24 24, move !important; }
-:root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 24 24, crosshair !important; }
-:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 24 24, crosshair !important; }
+:root[data-pick="resize"]     { cursor: url('./icons/resize-cursor.svg') 16 16, move !important; }
+:root[data-pick="component"]  { cursor: url('./icons/storybook-cursor.svg') 16 16, crosshair !important; }
+:root[data-pick="aidev"]      { cursor: url('./icons/extract-cursor.svg') 16 16, crosshair !important; }
 :root[data-pick="draw"]       { cursor: url('./icons/marker-cursor.svg') 2 16, crosshair !important; }
-:root[data-pick="animate"]    { cursor: url('./icons/animation-cursor.svg') 24 24, crosshair !important; }
+:root[data-pick="animate"]    { cursor: url('./icons/animation-cursor.svg') 16 16, crosshair !important; }
 
 /* ════════════════════════════════════════════════════════════════
    ONBOARDING

@@ -6,7 +6,7 @@ const { iconB64 } = require('./read-icon');
 const { KEYFRAMES_FN_SRC } = require('./animation-spec');
 
 const ANIM_B64 = iconB64(path.join(__dirname, 'icons', 'animation-cursor.svg'));
-const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 24 24, crosshair`;
+const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 16 16, crosshair`;
 
 // Phase 1: hover + click to target an element; the script resolves with its
 // selector/label. Animation controls, live preview, and the composed request live
