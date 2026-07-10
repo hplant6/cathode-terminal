@@ -163,7 +163,10 @@ function cathodeCombinedPage(OPTS) {
     // looks like a genuine name (≥3 chars, mixed-case) rather than a bundler alias.
     const realReact = reactName && reactName.length >= 3 && /[a-z]/.test(reactName);
     const label = (text && text !== cssSelector) ? text : (realReact ? reactName : text);
-    return { el, label, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, debugSource };
+    // Page-absolute box so the message can tell the agent WHERE on the page it is.
+    const _r = el.getBoundingClientRect();
+    const rect = { x: Math.round(_r.left + window.scrollX), y: Math.round(_r.top + window.scrollY), w: Math.round(_r.width), h: Math.round(_r.height) };
+    return { el, label, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, rect, debugSource };
   }
 
   let items;
@@ -597,8 +600,8 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps, structural }) =>
-      ({ label, descriptor, cssSelector, reactComponent, tag, debugSource, cssProps: cssProps || [], structural: !!structural }));
+    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, rect, debugSource, cssProps, structural }) =>
+      ({ label, descriptor, cssSelector, reactComponent, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural }));
     return Promise.resolve({ panel: true, items: serial });
   }
 

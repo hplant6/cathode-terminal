@@ -2648,6 +2648,11 @@ function openImgLightbox(src, alt) {
 (function initImgLightbox() {
   const lb = document.getElementById('img-lightbox');
   if (!lb) return;
+  // Scope the lightbox to the chat column: as a full-window overlay its centred image
+  // landed over the right panel, where the native browser view composites above HTML
+  // and hid it. Re-parenting into #left-panel keeps the zoomed image inside the chat.
+  const leftPanel = document.getElementById('left-panel');
+  if (leftPanel && lb.parentElement !== leftPanel) leftPanel.appendChild(lb);
   const close = () => { lb.classList.remove('open'); };
   const closeBtn = document.getElementById('img-lightbox-close');
   if (closeBtn) closeBtn.addEventListener('click', close);
@@ -2754,13 +2759,85 @@ function makeToolCard(name) {
   return { card, header, statusEl, bodyEl };
 }
 
+// ── Tool-call content → inline body (text output + code diffs) ────
+// LCS line diff (bounded); returns [{t:' '|'+'|'-', text}]. Big files skip the
+// O(n·m) DP and fall back to a plain removed-then-added block.
+function lineDiff(oldText, newText) {
+  const a = String(oldText == null ? '' : oldText).split('\n');
+  const b = String(newText == null ? '' : newText).split('\n');
+  if (a.length > 800 || b.length > 800) {
+    return a.map(t => ({ t: '-', text: t })).concat(b.map(t => ({ t: '+', text: t })));
+  }
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: ' ', text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: '-', text: a[i] }); i++; }
+    else { out.push({ t: '+', text: b[j] }); j++; }
+  }
+  while (i < n) out.push({ t: '-', text: a[i++] });
+  while (j < m) out.push({ t: '+', text: b[j++] });
+  return out;
+}
+// Collapse long unchanged runs to a single "⋯" (CLI-style hunks, `ctx` lines around edits).
+function collapseHunks(rows, ctx = 3) {
+  const keep = new Array(rows.length).fill(false);
+  rows.forEach((r, i) => { if (r.t !== ' ') for (let k = Math.max(0, i - ctx); k <= Math.min(rows.length - 1, i + ctx); k++) keep[k] = true; });
+  const out = []; let gapped = false;
+  rows.forEach((r, i) => { if (keep[i]) { out.push(r); gapped = false; } else if (!gapped) { out.push({ t: '…', text: '' }); gapped = true; } });
+  return out;
+}
+function appendToolDiff(body, path, oldText, newText) {
+  let block = body.querySelector('.acp-tool-diff');
+  if (!block) { block = document.createElement('div'); block.className = 'acp-tool-diff'; body.appendChild(block); }
+  block.innerHTML = '';
+  const rows = lineDiff(oldText, newText);
+  const add = rows.filter(r => r.t === '+').length, del = rows.filter(r => r.t === '-').length;
+  const head = document.createElement('div'); head.className = 'acp-tool-diff-path';
+  head.textContent = (path || '') + (add ? `  +${add}` : '') + (del ? ` −${del}` : '');
+  block.appendChild(head);
+  const pre = document.createElement('div'); pre.className = 'acp-tool-diff-body';
+  collapseHunks(rows).forEach(r => {
+    const line = document.createElement('div');
+    const cls = r.t === '+' ? 'add' : r.t === '-' ? 'del' : r.t === '…' ? 'gap' : 'ctx';
+    line.className = 'acp-diff-line ' + cls;
+    line.textContent = r.t === '…' ? '⋯' : (r.t === ' ' ? '  ' : r.t + ' ') + r.text;
+    pre.appendChild(line);
+  });
+  block.appendChild(pre);
+}
+// Render one tool-call `content` payload into a card body. Handles ACP's array or
+// single-object forms, diff blocks (edits) and text blocks (output). Returns true if
+// anything rendered.
+function renderToolContent(body, content) {
+  if (!content) return false;
+  const items = Array.isArray(content) ? content : [content];
+  let did = false;
+  for (const it of items) {
+    if (!it) continue;
+    if (it.type === 'diff' || it.oldText != null || it.newText != null) {
+      appendToolDiff(body, it.path || '', it.oldText || '', it.newText || '');
+      did = true; continue;
+    }
+    const block = it.type === 'content' ? it.content : it;   // {type:'content', content:{…}} | {type:'text', text}
+    if (block && block.type === 'text' && block.text) {
+      body.appendChild(document.createTextNode(stripAnsi(block.text)));
+      did = true;
+    }
+  }
+  return did;
+}
+
 function acpAddToolCard(s, update) {
   s._turnHadOutput = true;   // a tool card is visible output
   acpFinalizeStream(s);
   const name = update.title || update.toolCallId || 'tool';
   const { card, header, statusEl, bodyEl } = makeToolCard(name);
   if (update.toolCallId) card.dataset.toolKey = update.toolCallId;   // lets acpTrim drop the toolCards entry
-  if (update.content?.type === 'text') bodyEl.textContent = stripAnsi(update.content.text);
+  renderToolContent(bodyEl, update.content);
 
   let collapsed = false;
   header.addEventListener('click', () => {
@@ -2782,11 +2859,7 @@ function acpUpdateToolCard(s, update) {
     tc.statusEl.className = `acp-tool-status ${done ? 'done' : err ? 'error' : 'running'}`;
     tc.statusEl.textContent = done ? 'Done' : err ? 'Error' : 'Running';
   }
-  if (update.content?.type === 'text') {
-    const text = stripAnsi(update.content.text);
-    tc.bodyEl.appendChild(document.createTextNode(text));   // append, don't reassign (O(n²))
-    scrollCardEnd(tc.bodyEl);
-  }
+  if (update.content && renderToolContent(tc.bodyEl, update.content)) scrollCardEnd(tc.bodyEl);
 }
 
 
@@ -5386,11 +5459,13 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function resolvedItems() {
     return rows.filter(r => !r.removed).map(r => {
       const it = r.item;
+      // Modified props read as a change ("prop: was → now"); selected-but-unchanged
+      // props are marked current-value context so the agent doesn't "apply" them.
       const selectedCSS = (it.cssProps || []).filter(p => r.checked.has(p.name)).map(p => {
         const nv = r.mods[p.name];
-        return nv !== undefined ? `${p.name}: ${nv}  /* was: ${p.value} */` : `${p.name}: ${p.value}`;
+        return nv !== undefined ? `${p.name}: ${p.value} → ${nv}` : `${p.name}: ${p.value}   (current)`;
       });
-      return { label: it.label, cssSelector: it.cssSelector, reactComponent: it.reactComponent, tag: it.tag, debugSource: it.debugSource, selectedCSS };
+      return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector, reactComponent: it.reactComponent, tag: it.tag, rect: it.rect, debugSource: it.debugSource, selectedCSS };
     });
   }
   function send() {
@@ -7955,6 +8030,30 @@ document.getElementById('btn-ui-attach-folder')?.addEventListener('click', async
   const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
   if (dir) addAttachChips([dir], 'folder');
 });
+
+// ── Drag & drop files onto the composer → attach (same pipeline as the paperclip) ──
+(function initInputDrop() {
+  const zone = document.getElementById('ui-input-area');
+  if (!zone) return;
+  // Electron 41 removed File.path — resolve the real path via webUtils.getPathForFile.
+  const pathOf = (f) => { try { return require('electron').webUtils.getPathForFile(f) || ''; } catch (_) { return f.path || ''; } };
+  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  let depth = 0;   // dragenter/leave fire per descendant — count so the highlight doesn't flicker
+  zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add('drag-over'); });
+  zone.addEventListener('dragover',  (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  zone.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    depth = 0; zone.classList.remove('drag-over');
+    const paths = Array.from(e.dataTransfer.files || []).map(pathOf).filter(Boolean);
+    if (paths.length) addAttachChips(paths, 'file');
+  });
+})();
+// A file dropped anywhere else would navigate the whole window to file://… (Chromium's
+// default, which our will-navigate guard permits for file://) — swallow those drops.
+window.addEventListener('dragover', (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });
+window.addEventListener('drop',     (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });
 
 // Drag the corner handle to make the composer taller/shorter (up = taller).
 // Double-click resets to automatic content-based sizing.

@@ -2248,9 +2248,16 @@ function httpsGetJson(host, reqPath, headers) {
 }
 
 // Live subscription rate-limit usage — same data Claude Code's /usage shows
+// The /usage endpoint blips (timeouts, 429/5xx, momentary token-read misses). A bare
+// {ok:false} makes the renderer drop the session/weekly meters entirely, so they'd
+// flicker away on any transient failure. Cache the last-good numbers and serve them
+// (flagged stale) on failure, up to 30 min old, so the meters stay put.
+let _rateLimitCache = null;   // { data, at }
 ipcMain.handle(IPC.GET_RATE_LIMITS, async () => {
+  const fresh = () => (_rateLimitCache && Date.now() - _rateLimitCache.at < 30 * 60 * 1000);
+  const fail = (reason) => (fresh() ? { ..._rateLimitCache.data, stale: true } : { ok: false, reason });
   const tok = await claudeOauthToken();
-  if (!tok) return { ok: false, reason: 'no-token' };
+  if (!tok) return fail('no-token');
   try {
     const { status, body } = await httpsGetJson('api.anthropic.com', '/api/oauth/usage', {
       'Authorization': 'Bearer ' + tok,
@@ -2258,19 +2265,21 @@ ipcMain.handle(IPC.GET_RATE_LIMITS, async () => {
       'anthropic-version': '2023-06-01',
       'User-Agent': 'claude-cli',
     });
-    if (status === 401 || status === 403) return { ok: false, reason: 'auth' };
-    if (status !== 200) return { ok: false, reason: `http-${status}` };
+    if (status === 401 || status === 403) return fail('auth');
+    if (status !== 200) return fail(`http-${status}`);
     const d = JSON.parse(body);
-    if (!d || !d.five_hour) return { ok: false, reason: 'no-data' };
-    return {
+    if (!d || !d.five_hour) return fail('no-data');
+    const result = {
       ok: true,
       fiveHour: { utilization: d.five_hour.utilization, resetsAt: d.five_hour.resets_at },
       sevenDay: d.seven_day
         ? { utilization: d.seven_day.utilization, resetsAt: d.seven_day.resets_at }
         : null,
     };
+    _rateLimitCache = { data: result, at: Date.now() };
+    return result;
   } catch (e) {
-    return { ok: false, reason: e.message };
+    return fail(e.message);
   }
 });
 
@@ -4123,16 +4132,20 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
   }
 
   // ── Standard pick mode format ─────────────────────────────────────
-  const lines = ['───── Element Context ─────'];
-  lines.push(`These are live elements from ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}.`);
+  const lines = ['───── Selected Elements ─────'];
+  lines.push(`Live elements I picked in ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}. Find each element below by its selector and update it in the source code. A value shown as "prop: A → B" means change that property from A to B; lines marked "(current)" are context, not changes to make.`);
 
   for (const item of items) {
-    if (item.debugSource) {
-      const file = shortPath(item.debugSource.file);
-      lines.push(`${file}:${item.debugSource.line}  →  ${item.reactComponent || item.label}`);
-    } else {
-      lines.push(`• ${item.label}`);
-    }
+    lines.push('');
+    // Identity line: the CSS selector (tag#id.class) is the primary handle.
+    lines.push(`• ${item.cssSelector || item.label || 'element'}`);
+    const meta = [];
+    if (item.descriptor) meta.push(item.descriptor);
+    if (item.label && item.label !== item.cssSelector) meta.push(`“${item.label}”`);
+    if (item.reactComponent) meta.push(`<${item.reactComponent}>`);
+    if (item.rect) meta.push(`at (${item.rect.x}, ${item.rect.y}) on the page, ${item.rect.w}×${item.rect.h}px`);
+    if (item.debugSource) meta.push(`source ${shortPath(item.debugSource.file)}:${item.debugSource.line}`);
+    if (meta.length) lines.push(`    ${meta.join('  ·  ')}`);
     if (item.selectedCSS && item.selectedCSS.length > 0) {
       for (const css of item.selectedCSS) lines.push(`    ${css}`);
     }

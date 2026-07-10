@@ -1719,12 +1719,23 @@ html, body {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--spec-text-dim);
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
 }
-.acp-tool:has(.acp-tool-body:empty) { display: none; }   /* no output → hide the whole card (was squishing to a thin line) */
+/* Keep the card header (tool name + Running/Done) visible for live feedback; only
+   the body collapses when there's nothing in it (avoids a thin empty box). */
+.acp-tool-body:empty { display: none; }
+/* ── Inline code diffs inside a tool card (CLI-style edit preview) ── */
+.acp-tool-diff { margin-top: 2px; }
+.acp-tool-diff-path { font: 10px var(--font-mono); color: var(--spec-text-dim); padding: 2px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acp-tool-diff-body { background: var(--spec-black); border-radius: 4px; overflow-x: auto; padding: 4px 0; }
+.acp-diff-line { white-space: pre; padding: 0 8px; line-height: 1.55; font-size: 11px; }
+.acp-diff-line.add { background: rgba(78,201,176,0.13); color: #86e0c9; }   /* additions — green */
+.acp-diff-line.del { background: rgba(244,71,71,0.13);  color: #f79999; }   /* removals — red */
+.acp-diff-line.ctx { color: var(--spec-text-faint); }
+.acp-diff-line.gap { color: var(--spec-text-faint); text-align: center; padding: 1px 0; }
 /* Auto-approved tool badge */
 .acp-approved {
   display: none;   /* redundant "▶ Tool" approval line — the styled tool card already shows it */
@@ -2417,6 +2428,16 @@ html, body {
   background: var(--spec-input-bg);   /* shade 7 */
   border-radius: 0 0 var(--r-blob) var(--r-blob);   /* match footer so its bg doesn't fill the rounded corners */
 }
+/* Drag a file over the composer → dashed accent overlay + "Drop to attach" hint. */
+#ui-input-area.drag-over::after {
+  content: 'Drop to attach';
+  position: absolute; inset: 0; z-index: 5; pointer-events: none;   /* let drag events reach the composer beneath */
+  display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--spec-accent); border-radius: inherit;
+  background: color-mix(in srgb, var(--spec-accent) 10%, var(--spec-input-bg));
+  color: var(--spec-accent); font-family: var(--font-title); font-stretch: 112.5%;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+}
 
 /* ════════════════════════════════════════════════════════════════
    CHAT LOG
@@ -2735,14 +2756,14 @@ html, body {
 }
 .chat-img-thumb:hover { border-color: var(--accent-border); transform: translateY(-1px); }
 #img-lightbox {
-  position: fixed; inset: 0; z-index: 100; display: none;
-  align-items: center; justify-content: center; padding: 32px;
+  position: absolute; inset: 0; z-index: 500; display: none;   /* scoped to #left-panel (chat column) */
+  align-items: center; justify-content: center; padding: 24px;
   background: rgba(0,0,0,0.85); backdrop-filter: blur(2px);
 }
 #img-lightbox.open { display: flex; }
-#img-lightbox-img { max-width: 92vw; max-height: 88vh; border-radius: var(--radius-md); box-shadow: 0 16px 56px rgba(0,0,0,0.7); }
+#img-lightbox-img { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: var(--radius-md); box-shadow: 0 16px 56px rgba(0,0,0,0.7); }
 #img-lightbox-close {
-  position: fixed; top: 16px; right: 16px; width: 36px; height: 36px;
+  position: absolute; top: 12px; right: 12px; width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255,255,255,0.08); border: none; border-radius: 50%;
   color: #fff; font-size: 16px; cursor: pointer; transition: background 0.12s;
