@@ -1068,7 +1068,7 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: text;
+  cursor: default;   /* no I-beam over the title */
   user-select: none;
 }
 .pty-tab.active .pty-tab-name { color: var(--spec-text); }   /* shade 0 (active) */
@@ -1539,6 +1539,13 @@ html, body {
   word-break: break-all;                     /* long localhost URLs shouldn't blow out the bubble */
 }
 .acp-link:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
+/* GFM tables rendered from the agent's markdown. */
+.acp-table-wrap { overflow-x: auto; margin: 8px 0; max-width: 100%; }
+.acp-table { border-collapse: collapse; font-size: 0.92em; width: max-content; max-width: 100%; }
+.acp-table th, .acp-table td { border: 1px solid var(--spec-structural); padding: 5px 10px; text-align: left; vertical-align: top; }
+.acp-table th { background: var(--spec-input-bg); font-weight: 600; color: var(--spec-text); white-space: nowrap; }   /* shade 7 header */
+.acp-table td { color: var(--spec-text); }
+.acp-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.03); }   /* zebra */
 .acp-msg.user {
   align-self: flex-end;
   background: transparent;
@@ -1677,6 +1684,10 @@ html, body {
 /* Tool / status row (Figma "status msg") — stays on screen after completion */
 .acp-tool {
   align-self: stretch;
+  flex: 0 0 auto;   /* grow:0 shrink:0 basis:auto — a flex item with overflow:hidden gets
+                       min-height:0, so under the column's shrink the card would otherwise
+                       collapse to a border-only bar (or all the way to 0). Never shrink. */
+  min-height: min-content;   /* belt-and-suspenders: floor the card at its content height */
   background: transparent;
   border: 2px solid var(--spec-structural);   /* shade 3 */
   border-radius: 7px;
@@ -5115,6 +5126,13 @@ select.tabs-add-select-field { display: none; }
   color: var(--text-dim); cursor: pointer; transition: color 0.12s;
 }
 #diff-refresh:hover { color: var(--accent); }   /* ghost icon, orange on hover */
+#diff-folder {
+  min-width: 0; width: 24px; height: 24px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: var(--radius-md);
+  color: var(--text-dim); cursor: pointer; transition: color 0.12s;
+}
+#diff-folder:hover { color: var(--accent); }
 #diff-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0; }
 .diff-file {
   display: flex; align-items: center; gap: 7px;
@@ -5152,10 +5170,17 @@ select.tabs-add-select-field { display: none; }
 #diff-editor { position: absolute; inset: 0; }
 #diff-empty {
   position: absolute; inset: 0;
-  display: none; align-items: center; justify-content: center;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   text-align: center; padding: 0 40px;
   color: var(--text-dim); font-size: 12.5px; line-height: 1.6;
 }
+.diff-empty-btn {
+  width: auto; height: auto; padding: 7px 16px; cursor: pointer;
+  background: var(--spec-accent); border: none; border-radius: var(--radius-sm);
+  color: #fff; font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; transition: background 0.12s;
+}
+.diff-empty-btn:hover { background: var(--spec-accent-dark); }
 #code-empty {
   position: absolute; inset: 0;
   display: none;            /* JS toggles to flex */

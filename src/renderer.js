@@ -571,6 +571,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
 
   sessions.set(id, {
     id, name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
+    resumeTitle: (resume && resume.title) || null,   // original session title, shown as the tab tooltip
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
     toolCards: new Map(),
@@ -1481,7 +1482,7 @@ function renderPtyTabs() {
     const nameEl = document.createElement('span');
     nameEl.className = 'pty-tab-name';
     nameEl.textContent = s.name;
-    nameEl.title = s.name;
+    nameEl.title = s.resumeTitle || s.name;
     nameEl.addEventListener('click', e => {
       e.stopPropagation();
       if (id !== activeId) switchSession(id);
@@ -2519,13 +2520,52 @@ function appendInline(container, plain) {
     }
   }
 }
+// ── GFM tables ─── a header row of |cells|, a --- separator, then body rows. ──
+const TABLE_SEP_RE   = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/;
+const HAS_TABLE_RE   = /(^|\n)[^\n]*\|[^\n]*\n[ \t]*\|?[ \t]*:?-{1,}:?[ \t]*\|/;
+function tableCells(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map(c => c.replace(/\\\|/g, '|').trim());
+}
+function tableAligns(sep) {
+  return tableCells(sep).map(c => { const l = c.startsWith(':'), r = c.endsWith(':'); return (l && r) ? 'center' : r ? 'right' : l ? 'left' : ''; });
+}
+function appendMdTable(container, header, sep, rows) {
+  const heads = tableCells(header), al = tableAligns(sep);
+  const wrap = document.createElement('div'); wrap.className = 'acp-table-wrap';
+  const table = document.createElement('table'); table.className = 'acp-table';
+  const thead = document.createElement('thead'), htr = document.createElement('tr');
+  heads.forEach((h, k) => { const th = document.createElement('th'); if (al[k]) th.style.textAlign = al[k]; appendInline(th, h); htr.appendChild(th); });
+  thead.appendChild(htr); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const cells = tableCells(r), tr = document.createElement('tr');
+    for (let k = 0; k < heads.length; k++) { const td = document.createElement('td'); if (al[k]) td.style.textAlign = al[k]; appendInline(td, cells[k] || ''); tr.appendChild(td); }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); wrap.appendChild(table); container.appendChild(wrap);
+}
+// Split a (non-fenced) text block into GFM tables + everything else (→ appendInline).
+function appendBlocks(container, text) {
+  const lines = text.split('\n');
+  let buf = [];
+  const flush = () => { if (buf.length) { appendInline(container, buf.join('\n')); buf = []; } };
+  for (let i = 0; i < lines.length; ) {
+    const next = lines[i + 1];
+    if (lines[i].includes('|') && next != null && TABLE_SEP_RE.test(next)) {
+      const header = lines[i], sep = next; let j = i + 2; const rows = [];
+      while (j < lines.length && lines[j].includes('|') && lines[j].trim()) rows.push(lines[j++]);
+      flush(); appendMdTable(container, header, sep, rows); i = j;
+    } else { buf.push(lines[i]); i++; }
+  }
+  flush();
+}
 function renderRichText(container, text) {
   container.innerHTML = '';
   const FENCE = /```([^\n`]*)\n?([\s\S]*?)```/g;
   const jobs = [];
   let last = 0, m;
   while ((m = FENCE.exec(text)) !== null) {
-    if (m.index > last) appendInline(container, text.slice(last, m.index).replace(/\n$/, ''));
+    if (m.index > last) appendBlocks(container, text.slice(last, m.index).replace(/\n$/, ''));
     const pre = document.createElement('pre');
     pre.className = 'acp-code';
     if (m[1].trim()) { const lbl = document.createElement('span'); lbl.className = 'acp-code-lang'; lbl.textContent = m[1].trim(); pre.appendChild(lbl); }
@@ -2537,7 +2577,7 @@ function renderRichText(container, text) {
     jobs.push({ codeEl, code, lang: fenceToLang(m[1]) });
     last = FENCE.lastIndex;
   }
-  if (last < text.length) appendInline(container, text.slice(last).replace(/^\n/, ''));
+  if (last < text.length) appendBlocks(container, text.slice(last).replace(/^\n/, ''));
   if (jobs.length) {
     monacoForHighlight().then(monaco => {
       if (!monaco) return;   // no Monaco → keep the styled plain blocks
@@ -2557,9 +2597,9 @@ function acpFinalizeStream(s) {
     const text = (s.streamTextEl ? s.streamTextEl.textContent : '').trim();
     if (text) {
       addReplyMeta(s, bubble, text);
-      // Re-render when there's something to format: code fences, inline code, or a
-      // bare URL (linkified into a clickable browser link).
-      if (s.streamTextEl && /```|`[^`\n]+`|https?:\/\//.test(text)) renderRichText(s.streamTextEl, text);
+      // Re-render when there's something to format: code fences, inline code, a bare
+      // URL (linkified), or a GFM table.
+      if (s.streamTextEl && (/```|`[^`\n]+`|https?:\/\//.test(text) || HAS_TABLE_RE.test(text))) renderRichText(s.streamTextEl, text);
       const isLimit = /\blimit (reached|exceeded|hit)\b|\b(usage|rate|session|message|weekly|hourly) limit\b|reached your .{0,25}\blimit\b/i.test(text);
       // Defer to turn end (ACP_DONE) — finalize also fires mid-turn on tool-call
       // boundaries, which played several "done" chimes per turn.
@@ -3606,10 +3646,20 @@ let openSpendModal = null;
 
 // Resume a past Claude session in a new chat tab. The session's own cwd is passed
 // straight to loadSession, so it reopens in the right project folder.
+function nextClaudeName() {
+  // Sequential "claude", "claude 2", "claude 3"… — resume tabs get a generic
+  // name; the original session title lives in the tab tooltip instead.
+  const taken = new Set([...sessions.values()].map(s => s.name));
+  let n = 1, name;
+  do { name = n === 1 ? 'claude' : `claude ${n}`; n++; } while (taken.has(name));
+  return name;
+}
+
 function resumeSession(sess) {
   if (!sess || !sess.sessionId) return;
-  const name = (sess.title || 'Resumed').slice(0, 22);
-  createSession(name, 'claude', true, false, { sessionId: sess.sessionId, cwd: sess.cwd });
+  createSession(nextClaudeName(), 'claude', true, false, {
+    sessionId: sess.sessionId, cwd: sess.cwd, title: sess.title,
+  });
 }
 
 const apiKeyModalCtl = wireModal(apiKeyModal);
@@ -6770,14 +6820,34 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
         + '<span class="diff-name" title="' + esc(f.rel) + '">' + esc(f.rel) + '</span>' + st + '</div>';
     }).join('');
   }
+  async function pickFolder() {
+    const dir = await ipcRenderer.invoke(IPC.PICK_PROJECT_DIR).catch(() => null);
+    if (!dir) return;
+    ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
+    try { localStorage.setItem(LS.projectDir, dir); } catch (_) {}
+    refresh();
+  }
+  document.getElementById('diff-folder')?.addEventListener('click', pickFolder);
   function showEmpty(reason) {
     editorEl.style.display = 'none';
     emptyEl.style.display = 'flex';
-    emptyEl.textContent =
-      reason === 'no-folder' ? 'Open a project folder to see its changes.' :
+    emptyEl.innerHTML = '';
+    const msg = document.createElement('div');
+    msg.className = 'diff-empty-msg';
+    msg.textContent =
+      reason === 'no-folder' ? 'No project folder selected.' :
       reason === 'not-git'   ? 'This folder is not a git repository.' :
       reason === 'no-git'    ? 'Git was not found — install it or add it to PATH.' :
       'No uncommitted changes — the working tree is clean.';
+    emptyEl.appendChild(msg);
+    // Folder-related states: offer a picker so Changes can be pointed at the real project.
+    if (reason === 'no-folder' || reason === 'not-git') {
+      const btn = document.createElement('button');
+      btn.className = 'diff-empty-btn';
+      btn.textContent = 'Select project folder…';
+      btn.addEventListener('click', pickFolder);
+      emptyEl.appendChild(btn);
+    }
   }
   async function selectFile(f) {
     const token = ++reqToken;          // captured before any await (matches click order)
