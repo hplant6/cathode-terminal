@@ -2835,6 +2835,60 @@ html, body {
   font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;   /* right clearance for the resize handle */
 }
 .tp-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 */
+
+/* ── Tool-panel composer bar (attach + persona above the instruction input) ── */
+/* Mirrors the main composer's #ui-toolbar so tool inputs look/behave the same. */
+.tp-toolbar {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  min-height: 46px; padding: 6px 40px 6px 8px;   /* right clears the resize handle */
+  background: var(--spec-toolbar-bg);   /* shade 5, same as #ui-toolbar */
+}
+.tp-tool-btn {
+  width: 34px; height: 34px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: var(--radius-sm); box-shadow: none;
+  color: var(--spec-text-dim); cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.tp-tool-btn:hover { color: var(--spec-text); }
+.tp-tool-btn svg { width: 18px; height: 18px; }
+/* Persona dropdown — same look as #btn-persona / #persona-menu */
+.tp-persona-wrap { position: relative; flex-shrink: 0; }
+.tp-persona-btn {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px;
+  width: auto; height: 34px; max-width: 190px; padding: 0 18px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--spec-text-dim);
+  cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.tp-persona-btn:hover { background: var(--spec-structural); color: var(--spec-text); }
+.tp-persona-btn.has-persona { color: var(--spec-accent); }
+.tp-persona-btn.has-persona .persona-glyph { color: var(--spec-accent); }
+.tp-persona-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-persona-btn.open .persona-caret { transform: rotate(180deg); }
+.tp-persona-menu {
+  display: none; position: absolute; bottom: calc(100% + 5px); left: 0;
+  min-width: 200px; max-height: 340px; overflow-y: auto;
+  background: var(--spec-input-bg); border: none;
+  border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 200;
+}
+.tp-persona-menu.open { display: block; }
+/* Attachment chips */
+.tp-attach-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tp-attach-chip {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 190px;
+  height: 24px; padding: 0 4px 0 8px; border-radius: var(--radius-sm);
+  background: var(--spec-dropdown-bg); color: var(--spec-text-dim);
+  font: 11px var(--font-mono);
+}
+.tp-chip-glyph { display: flex; flex-shrink: 0; }
+.tp-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-chip-x {
+  flex-shrink: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 3px; box-shadow: none;
+  color: var(--spec-text-faint); font-size: 10px; cursor: pointer;
+}
+.tp-chip-x:hover { color: var(--spec-text); background: var(--spec-structural); }
 /* Send bar (cancel/send) */
 .tp-inner .pp-btns {
   display: flex; align-items: stretch; gap: 2px; min-height: 40px; margin: 0;
@@ -3121,7 +3175,7 @@ html, body {
 #pick-panel-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 — matches the chat placeholder */
 /* Custom resize handle, upper-right of the input (replaces the native grip) */
 .tp-resize {
-  position: absolute; top: 10px; right: 10px; z-index: 2;
+  position: absolute; top: 16px; right: 12px; z-index: 2;   /* sits in the composer bar, top-right (like the main input) */
   width: auto; height: auto; padding: 0; box-shadow: none;
   background: transparent; border: none; color: var(--spec-text-faint);
   display: flex; align-items: center; justify-content: center; cursor: ns-resize;

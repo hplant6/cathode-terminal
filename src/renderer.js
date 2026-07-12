@@ -1009,43 +1009,52 @@ const personaWrap  = document.getElementById('persona-wrap');
 const btnPersona   = document.getElementById('btn-persona');
 const personaLabel = document.getElementById('btn-persona-label');
 const personaMenu  = document.getElementById('persona-menu');
-function renderPersonaMenu() {
-  if (personaMenu) personaMenu.innerHTML = '';
+// Every persona dropdown (main composer + each tool-panel bar) shares one
+// activePersona. Controls register here so a pick in any of them syncs the rest.
+const personaControls = [];
+function renderPersonaMenuInto(menu) {
+  menu.innerHTML = '';
   const mkItem = (key, label, desc) => {
     const item = document.createElement('div');
     item.className = 'persona-item' + (activePersona === key ? ' selected' : '');
     const l = document.createElement('span'); l.className = 'persona-item-label'; l.textContent = label;
     const d = document.createElement('span'); d.className = 'persona-item-desc';  d.textContent = desc;
     item.append(l, d);
-    item.addEventListener('click', () => {
-      selectPersona(key);
-      personaMenu.classList.remove('open');
-      btnPersona.classList.remove('open');
-    });
-    personaMenu.appendChild(item);
+    item.addEventListener('click', () => { selectPersona(key); closePersonaMenus(); });
+    menu.appendChild(item);
   };
   mkItem(null, 'Default', 'No persona — the agent’s normal behaviour');
   Object.entries(PERSONAS).forEach(([key, p]) => mkItem(key, p.label, p.desc));
 }
+function closePersonaMenus() {
+  personaControls.forEach(c => { c.menu.classList.remove('open'); c.btn.classList.remove('open'); });
+}
 function selectPersona(key) {
   activePersona = (key && PERSONAS[key]) ? key : null;
-  personaLabel.textContent = activePersona ? PERSONAS[activePersona].label : 'Persona';
-  btnPersona.classList.toggle('has-persona', !!activePersona);
-  renderPersonaMenu();
+  personaControls.forEach(c => {
+    c.label.textContent = activePersona ? PERSONAS[activePersona].label : 'Persona';
+    c.btn.classList.toggle('has-persona', !!activePersona);
+    renderPersonaMenuInto(c.menu);
+  });
 }
-btnPersona?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const open = personaMenu.classList.toggle('open');
-  btnPersona.classList.toggle('open', open);
-  if (open) renderPersonaMenu();
-});
+function registerPersonaControl(ctl) {
+  personaControls.push(ctl);
+  ctl.btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const willOpen = !ctl.menu.classList.contains('open');
+    closePersonaMenus();
+    if (willOpen) { ctl.menu.classList.add('open'); ctl.btn.classList.add('open'); renderPersonaMenuInto(ctl.menu); }
+  });
+  renderPersonaMenuInto(ctl.menu);
+}
 document.addEventListener('click', (e) => {
-  if (!personaMenu.classList.contains('open')) return;
-  if (personaWrap.contains(e.target)) return;
-  personaMenu.classList.remove('open');
-  btnPersona.classList.remove('open');
+  personaControls.forEach(c => {
+    if (!c.menu.classList.contains('open')) return;
+    if (c.wrap.contains(e.target)) return;
+    c.menu.classList.remove('open'); c.btn.classList.remove('open');
+  });
 });
-renderPersonaMenu();
+if (btnPersona) registerPersonaControl({ wrap: personaWrap, btn: btnPersona, label: personaLabel, menu: personaMenu });
 
 // ── Figma quick actions (composer) ────────────────────────────────
 // Shown only when a `figma` MCP server is connected. Selecting an action
@@ -1092,6 +1101,91 @@ let attachChips = [];  // [{kind:'file'|'folder', path}]
 // Chip glyphs for attached files / folders (mirror the toolbar button icons).
 const FILE_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" xmlns="http://www.w3.org/2000/svg"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773"/></svg>`;
 const FOLDER_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" xmlns="http://www.w3.org/2000/svg"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"/><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"/></svg>`;
+
+// ── Tool-panel composer bar (attach + persona, above each tool's textarea) ──
+// Mirrors the main composer toolbar so every tool's instruction input can
+// attach files and pick a persona lens. Each bar keeps its own attachment list;
+// the persona dropdown drives the shared activePersona.
+const TOOL_ATTACH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg>`;
+
+// Clone the main persona dropdown (reuses its glyph SVG) as a class-styled copy.
+function makeToolPersonaControl() {
+  const wrap = personaWrap.cloneNode(true);
+  wrap.removeAttribute('id');
+  wrap.classList.add('tp-persona-wrap');
+  const btn = wrap.querySelector('button');
+  btn.removeAttribute('id'); btn.removeAttribute('title');
+  btn.classList.add('tp-persona-btn'); btn.classList.remove('open', 'has-persona');
+  const label = btn.querySelector('span:not(.persona-caret)');
+  label.removeAttribute('id'); label.classList.add('tp-persona-label'); label.textContent = 'Persona';
+  const menu = wrap.querySelector('div');   // the cloned #persona-menu
+  menu.removeAttribute('id'); menu.classList.add('tp-persona-menu'); menu.innerHTML = '';
+  return { wrap, btn, label, menu };
+}
+
+function makeToolComposerBar(foot) {
+  const ta = foot.querySelector('textarea');
+  if (!ta || foot._composerBar) return foot._composerBar || null;
+
+  const bar = document.createElement('div');
+  bar.className = 'tp-toolbar';
+
+  const attachBtn = document.createElement('button');
+  attachBtn.type = 'button';
+  attachBtn.className = 'tp-tool-btn';
+  attachBtn.title = 'Attach file';
+  attachBtn.innerHTML = TOOL_ATTACH_SVG;
+
+  const persona = makeToolPersonaControl();
+
+  const chips = document.createElement('div');
+  chips.className = 'tp-attach-chips';
+
+  bar.append(attachBtn, persona.wrap, chips);
+  foot.insertBefore(bar, foot.firstChild);
+  registerPersonaControl(persona);
+
+  const baseOf = (p) => String(p || '').split(/[\\/]/).pop();
+  let attach = [];   // [{ kind:'file', path }]
+  function renderChips() {
+    chips.innerHTML = '';
+    attach.forEach((a, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'tp-attach-chip';
+      chip.title = a.path;
+      const g = document.createElement('span'); g.className = 'tp-chip-glyph'; g.innerHTML = FILE_GLYPH;
+      const t = document.createElement('span'); t.className = 'tp-chip-name'; t.textContent = baseOf(a.path);
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'tp-chip-x'; x.textContent = '✕';
+      x.addEventListener('click', () => { attach.splice(i, 1); renderChips(); });
+      chip.append(g, t, x);
+      chips.appendChild(chip);
+    });
+    bar.classList.toggle('has-chips', attach.length > 0);
+  }
+  attachBtn.addEventListener('click', async () => {
+    const paths = await ipcRenderer.invoke(IPC.SHOW_FILE_DIALOG);
+    if (!paths || !paths.length) return;
+    paths.forEach(p => { if (p && !attach.some(a => a.path === p)) attach.push({ kind: 'file', path: p }); });
+    renderChips();
+  });
+
+  const api = { attachPaths: () => attach.map(a => a.path), clear: () => { attach = []; renderChips(); } };
+  foot._composerBar = api;
+  return api;
+}
+
+// Prepend the active persona lens and append any attached paths to a tool's
+// instruction, so tool messages carry the same context as the main composer.
+function decorateToolInstruction(instruction, foot) {
+  let text = (instruction || '').trim();
+  const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
+  if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
+  if (activePersona && PERSONAS[activePersona]) text = PERSONAS[activePersona].preamble + '\n\n' + text;
+  return text;
+}
+
+// Inject a composer bar into every tool-panel footer (they exist, hidden, at load).
+document.querySelectorAll('.tp-foot').forEach(makeToolComposerBar);
 
 // Hover tooltip (positioned to the LEFT of the menu so it stays within
 // the HTML panel rather than over a native view on the right).
@@ -5519,7 +5613,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     });
   }
   function send() {
-    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: textarea.value.trim(), items: resolvedItems() });
+    const _foot = textarea.closest('.tp-foot');
+    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), _foot), items: resolvedItems() });
+    _foot?._composerBar?.clear();
     close();
   }
   function cancel() {
@@ -5604,7 +5700,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     panel.hidden = false;
   }
   function close() { panel.hidden = true; textarea.value = ''; sliding = null; }
-  function send()   { ipcRenderer.send(IPC.RESIZE_PANEL_SEND, { instruction: textarea.value.trim() }); close(); }
+  function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.RESIZE_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), f) }); f?._composerBar?.clear(); close(); }
   function cancel() { ipcRenderer.send(IPC.RESIZE_PANEL_CANCEL); close(); }
 
   // Sliders → live-resize the page element; optimistic text update.
@@ -5805,7 +5901,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     schedulePreview();
   }
   function close()  { panel.hidden = true; textarea.value = ''; clearTimeout(previewTimer); }
-  function send()   { ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: textarea.value.trim(), framework: selectedFw }); close(); }
+  function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: decorateToolInstruction(textarea.value.trim(), f), framework: selectedFw }); f?._composerBar?.clear(); close(); }
   function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
 
   sendBtn?.addEventListener('click', send);
@@ -5937,7 +6033,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       mediaTypes: MEDIA.filter(m => r.media.has(m.key)).map(m => m.key),
       mediaDest: r.dest,
     }));
-    ipcRenderer.send(IPC.EXTRACT_PANEL_SEND, { perElement, instruction: instr.value.trim() });
+    const _foot = instr.closest('.tp-foot');
+    ipcRenderer.send(IPC.EXTRACT_PANEL_SEND, { perElement, instruction: decorateToolInstruction(instr.value.trim(), _foot) });
+    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.EXTRACT_PANEL_CANCEL); close(); }
@@ -6012,7 +6110,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     ensureIro(() => { if (!window.iro) return; if (!picker) buildPicker(picked); else setPicker(picked); setNew(picked); hexInput.value = picked; });
   }
   function close() { ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT); panel.hidden = true; instr.value = ''; }
-  function send() { ipcRenderer.send(IPC.EYEDROPPER_SEND, { instruction: instr.value.trim() }); close(); }
+  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.EYEDROPPER_SEND, { instruction: decorateToolInstruction(instr.value.trim(), f) }); f?._composerBar?.clear(); close(); }
   function cancel() { ipcRenderer.send(IPC.EYEDROPPER_CANCEL); close(); }
 
   propSel.addEventListener('change', async () => {
@@ -6133,7 +6231,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const out = issues.filter(i => state[i.idx].checked).map(i => ({
       category: i.label, selector: i.selector, detail: i.detail, instruction: (state[i.idx].instruction || '').trim(), url,
     }));
-    ipcRenderer.send(IPC.A11Y_SEND, { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
+    const _foot = instrEl ? instrEl.closest('.tp-foot') : null;
+    ipcRenderer.send(IPC.A11Y_SEND, { issues: out, instruction: decorateToolInstruction(instrEl ? instrEl.value.trim() : '', _foot) });
+    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.A11Y_CANCEL); close(); }
@@ -6220,7 +6320,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; if (instrEl) instrEl.value = ''; }
   function send() {
     const out = issues.filter(i => state[i.idx].checked).map(i => ({ selector: i.selector, prop: i.prop, hex: i.hex, token: i.token, tokenHex: i.tokenHex, url }));
-    ipcRenderer.send(IPC.DRIFT_SEND, { issues: out, instruction: instrEl ? instrEl.value.trim() : '' });
+    const _foot = instrEl ? instrEl.closest('.tp-foot') : null;
+    ipcRenderer.send(IPC.DRIFT_SEND, { issues: out, instruction: decorateToolInstruction(instrEl ? instrEl.value.trim() : '', _foot) });
+    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.DRIFT_CANCEL); close(); }
@@ -6328,7 +6430,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   function close() { panel.hidden = true; img.removeAttribute('src'); instr.value = ''; ctx.clearRect(0, 0, canvas.width, canvas.height); setMarkerMode(false); }
   function send() {
-    ipcRenderer.send(IPC.SCREENSHOT_PANEL_SEND, { instruction: instr.value.trim(), compositeDataUrl: hasDrawing ? composite() : null });
+    const _foot = instr.closest('.tp-foot');
+    ipcRenderer.send(IPC.SCREENSHOT_PANEL_SEND, { instruction: decorateToolInstruction(instr.value.trim(), _foot), compositeDataUrl: hasDrawing ? composite() : null });
+    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.SCREENSHOT_PANEL_CANCEL); close(); }
@@ -6944,7 +7048,7 @@ let openDrawPanel = null;
     if (drawIro) { try { drawIro.color.set('#ff3b30'); } catch (_) {} }
   }
   function close() { panel.hidden = true; instr.value = ''; }
-  function send() { ipcRenderer.send(IPC.MARKER_SEND, { instructions: instr.value.trim() }); close(); }   // main grabs the marker + composites
+  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.MARKER_SEND, { instructions: decorateToolInstruction(instr.value.trim(), f) }); f?._composerBar?.clear(); close(); }   // main grabs the marker + composites
   function cancel() { ipcRenderer.send(IPC.MARKER_CANCEL); close(); }
   sizeIn?.addEventListener('input', () => { setSwatchSize(+sizeIn.value); ipcRenderer.send(IPC.MARKER_SET_SIZE, +sizeIn.value); });
   clearBtn?.addEventListener('click', () => ipcRenderer.send(IPC.MARKER_CLEAR));
@@ -8549,12 +8653,15 @@ let openComponentPanel = null;
       ? '\nTarget element: ' + targetSig(t) + (t.text ? ` ("${t.text.slice(0, 60)}")` : '') + (t.selector ? '\nSelector: ' + t.selector : '')
       : '';
     const componentName = `${selected.title} / ${selected.name}`;
-    const text = [
+    let text = [
       `[Component Reference] Use the Storybook component "${componentName}" as a reference for this change.`,
       'Story: ' + storyUrl, argsLine, targetDesc,
       instructions ? '\nInstructions: ' + instructions : '',
     ].filter(Boolean).join('\n');
+    const _foot = instr.closest('.tp-foot');
+    text = decorateToolInstruction(text, _foot);   // persona lens + any attached paths
     routeToActiveSession(text, { body: (instructions || '').trim(), badges: [componentName] });
+    _foot?._composerBar?.clear();
     close();
   }
   function close() {
