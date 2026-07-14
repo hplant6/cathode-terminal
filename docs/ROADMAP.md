@@ -44,10 +44,10 @@ tokens, groups the drift, and offers one-click "replace with token" via the agen
 - **Extract/a11y panel UI** for the findings list.
 
 **Build phases.**
-1. Token-source resolution — Storybook `:root` vars + page `:root` scan (colors only).
-2. Inject scanner for **colors** (highest value, cleanest matching via ΔE).
-3. Drift panel + on-page highlight + send-to-agent fix.
-4. Extend to **spacing** (snap to an inferred scale), then **type / radius / shadow**.
+1. Token-source resolution — page `:root` scan + **connected Storybook** preview `:root` (Storybook wins on name conflict, page fills gaps). ✅ *Built*.
+2. Inject scanner for **colors** (highest value, cleanest matching via ΔE). ✅ *Built* (v1.0.27).
+3. Drift panel + on-page highlight + send-to-agent fix. ✅ *Built*.
+4. Extend to **type / radius / shadow**. ✅ *Built* — font-size + border-radius (px distance, name-gated tokens) and box-shadow (structural distance). Only **spacing** (snap to an inferred scale) remains.
 
 **Open questions.**
 - Match threshold: how close is "you meant this token"? (per-category tolerance).
@@ -125,11 +125,15 @@ From hplan:
   Uses the platform layer (`lsof`/`netstat`) + the System panel's process-kill pattern.
 - **f) AI spend management** — a mode / set of tools to see and control model spend. Cathode
   already has the raw signals (context-window fill, 5-hour / weekly usage gauges, per-session
-  token totals), so this is largely surfacing + acting on them: per-session / per-project cost
-  breakdown, spend history & trends, budget thresholds with alerts (warn at N% of a daily/weekly
-  cap), token-saving nudges (auto-`/compact` reminders, context trimming), and a "budget mode"
-  that biases toward cheaper models / tighter context for routine tasks. Pairs with the Usage
-  panel and the model switcher.
+  token totals), so this is largely surfacing + acting on them.
+  - ✅ *Built:* **AI Spend** dashboard (per-project / per-day / per-model cost, monthly budget bar).
+  - ✅ *Built:* **Budget Guard** — a usage-limit threshold slider (% of the 5h/weekly limit) that
+    advises at N%, can auto-open when the limit is reached, and does a **limit-aware handoff**: the
+    current agent writes a self-contained brief to `HANDOFF.md`/`AGENTS.md`, then a fresh session on
+    a budget agent (Hermes/Gemini/Codex) opens primed to read it and continue.
+  - Remaining: **token-saving nudges** (auto-`/compact` reminders when context fills, context
+    trimming), a true **budget mode** that biases model selection toward cheaper models, and
+    surfacing threshold alerts *outside* the modal (Usage-panel chip / sound / OS notification).
 
 From brainstorm (unpicked, parked):
 - **Pixel-overlay compare** — overlay a Figma frame / reference image on the live page at

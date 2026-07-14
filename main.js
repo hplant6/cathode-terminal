@@ -1019,10 +1019,53 @@ function sbBin(dir) {
   // storybook-demo whose node_modules were installed from WSL, so only the
   // extensionless script exists) so detection/spawn resolve to whichever is there.
   const base = path.join(dir, 'node_modules', '.bin', 'storybook');
-  if (process.platform === 'win32') return fs.existsSync(base + '.cmd') ? base + '.cmd' : base;
-  return base;
+  if (process.platform === 'win32') {
+    if (fs.existsSync(base + '.cmd')) return base + '.cmd';
+    return fs.existsSync(base) ? base : null;
+  }
+  return fs.existsSync(base) ? base : null;
 }
-function sbHasStorybook(dir) { return fs.existsSync(path.join(dir, '.storybook')) && fs.existsSync(sbBin(dir)); }
+// Resolve the storybook bin for a config dir: check the dir itself, then walk up
+// toward the search root — monorepos/workspaces hoist node_modules to the root.
+function sbResolveBin(configDir, root) {
+  let d = configDir;
+  while (true) {
+    const b = sbBin(d);
+    if (b) return b;
+    if (d === root) break;
+    const parent = path.dirname(d);
+    if (parent === d || !parent.startsWith(root)) break;
+    d = parent;
+  }
+  return null;
+}
+// Dirs never worth descending into when hunting for a nested Storybook.
+const SB_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '.nuxt', '.svelte-kit', '.cache', 'coverage', '.turbo', 'storybook-static', '.yarn', 'vendor', 'tmp', '.vscode']);
+// Find a Storybook (a `.storybook/` config dir with a resolvable bin) at or below
+// `root`. Breadth-first so the shallowest match wins; the user can point at a repo
+// root or monorepo and we locate the package that actually holds the Storybook —
+// not just the exact folder they picked.
+function sbFindStorybook(root, maxDepth = 4) {
+  if (!root || !fs.existsSync(root)) return null;
+  const queue = [{ dir: root, depth: 0 }];
+  while (queue.length) {
+    const { dir, depth } = queue.shift();
+    if (fs.existsSync(path.join(dir, '.storybook'))) {
+      const bin = sbResolveBin(dir, root);
+      if (bin) return { dir, bin };
+    }
+    if (depth >= maxDepth) continue;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory() && !e.isSymbolicLink()) continue;
+      if (e.name.startsWith('.') || SB_SKIP_DIRS.has(e.name)) continue;
+      queue.push({ dir: path.join(dir, e.name), depth: depth + 1 });
+    }
+  }
+  return null;
+}
+function sbHasStorybook(dir) { return !!sbFindStorybook(dir); }
 
 // App-owned preview styling — written into the project's OWN .storybook/preview-head.html,
 // the only place that can style the (cross-origin) preview iframe. Idempotent managed block.
@@ -1056,12 +1099,21 @@ function ensurePreviewHead(projectDir) {
 
 ipcMain.handle(IPC.STORYBOOK_DETECT, (_, { dir } = {}) => {
   const projectDir = sbResolveDir(dir);
-  return { dir: projectDir, installed: sbHasStorybook(projectDir), isDemo: projectDir === SB_DEMO_DIR };
+  const found = sbFindStorybook(projectDir);
+  return { dir: projectDir, installed: !!found, isDemo: projectDir === SB_DEMO_DIR, found: found ? found.dir : null };
 });
 
 const sbStartingDirs = new Set();   // dirs with a start in flight (pre-registry await window)
 ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
-  const projectDir = sbResolveDir(dir);
+  const rootDir = sbResolveDir(dir);
+  // Search the picked folder (and its subfolders) for the Storybook — the user
+  // may point at a repo/monorepo root while the config lives in a package.
+  const found = sbFindStorybook(rootDir);
+  if (!found) {
+    sbStatus('error', { message: 'No Storybook found in ' + rootDir + ' — build one with your agent first.' });
+    return { ok: false, error: 'no-storybook', dir: rootDir };
+  }
+  const projectDir = found.dir;   // the actual .storybook dir → registry key + cwd
   for (const s of sbServers.values()) {
     if (s.dir !== projectDir) continue;
     // Only a READY instance is "already running" — activating a starting one
@@ -1074,17 +1126,13 @@ ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   if (sbStartingDirs.has(projectDir)) return { ok: true, already: true, starting: true };
   sbStartingDirs.add(projectDir);
   try {
-    return await sbStartServer(projectDir, port);
+    return await sbStartServer(projectDir, found.bin, port);
   } finally {
     sbStartingDirs.delete(projectDir);
   }
 });
 
-async function sbStartServer(projectDir, port) {
-  if (!sbHasStorybook(projectDir)) {
-    sbStatus('error', { message: 'No Storybook found in ' + projectDir + ' — build one with your agent first.' });
-    return { ok: false, error: 'no-storybook', dir: projectDir };
-  }
+async function sbStartServer(projectDir, bin, port) {
   ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
   // Reject a bad caller-supplied port (it ends up in sbUrl → a shell string).
   if (port != null && safePort(port) === null) return { ok: false, error: 'invalid-port' };
@@ -1097,7 +1145,7 @@ async function sbStartServer(projectDir, port) {
   sbStatus('starting', { url, dir: projectDir });
   let proc;
   try {
-    proc = spawn(sbBin(projectDir), ['dev', '-p', String(usePort), '--ci'], {
+    proc = spawn(bin, ['dev', '-p', String(usePort), '--ci'], {
       cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, BROWSER: 'none' },
     });
@@ -3009,6 +3057,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'MCP Connections',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
     { label: 'AI Spend…',          click: act('spend') },
+    { label: 'Budget Guard…',      click: act('budget') },
     { label: 'Localhost Servers…', click: act('localhost') },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
@@ -3842,7 +3891,7 @@ ipcMain.on(IPC.A11Y_CANCEL, async () => {
   pendingA11y = null;
 });
 
-// ── Design-drift scanner (mirror of the a11y flow): flag near-miss colors that
+// ── Design-drift scanner (mirror of the a11y flow): flag near-miss values that
 // should snap to a design token, preview the fix, then hand the list to the agent. ──
 let pendingDrift = null;
 function driftExec(js) {
@@ -3850,15 +3899,43 @@ function driftExec(js) {
   if (!p || !p.view || p.view.webContents.isDestroyed()) return Promise.resolve(null);
   return p.view.webContents.executeJavaScript(js).catch(() => null);
 }
+// Pull the connected Storybook's design tokens (its preview `:root` custom
+// properties) so drift matches against the canonical design system, not just the
+// scanned page's own :root. The manager frame and its preview iframe are same
+// origin (both localhost:port), so we can reach into the iframe's document.
+async function extractStorybookTokens() {
+  if (!storybookView || storybookView.webContents.isDestroyed()) return null;
+  const js = `(function(){
+    try {
+      var doc = document;
+      var pf = document.querySelector('#storybook-preview-iframe, iframe[title="storybook-preview-iframe"], iframe[id*="preview"], iframe');
+      try { if (pf && pf.contentDocument && pf.contentDocument.documentElement) doc = pf.contentDocument; } catch (e) {}
+      var win = doc.defaultView || window, names = {};
+      for (var s = 0; s < doc.styleSheets.length; s++) {
+        var rules; try { rules = doc.styleSheets[s].cssRules; } catch (e) { continue; }
+        if (!rules) continue;
+        for (var r = 0; r < rules.length; r++) { var st = rules[r].style; if (!st) continue; for (var p = 0; p < st.length; p++) { var nm = st[p]; if (nm.indexOf('--') === 0) names[nm] = 1; } }
+      }
+      var cs = win.getComputedStyle(doc.documentElement), out = {};
+      for (var name in names) { var v = (cs.getPropertyValue(name) || '').trim(); if (v) out[name] = v; }
+      return out;
+    } catch (e) { return null; }
+  })()`;
+  try {
+    const out = await storybookView.webContents.executeJavaScript(js);
+    return (out && typeof out === 'object' && Object.keys(out).length) ? out : null;
+  } catch (_) { return null; }
+}
 ipcMain.on(IPC.PICK_DRIFT, async () => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
-    const result = await view.webContents.executeJavaScript(getDriftScript());
+    const sbTokens = await extractStorybookTokens();   // design-system tokens from the connected Storybook (if any)
+    const result = await view.webContents.executeJavaScript(getDriftScript(sbTokens));
     uiSend(IPC.PICK_CANCELLED);
     if (!result) return;
-    pendingDrift = { view };
-    uiSend(IPC.DRIFT_PANEL_OPEN, { tool: 'Design Drift', url: result.url, total: result.total, tokens: result.tokens, issues: result.issues });
+    pendingDrift = { view, sbTokens: result.sbTokens || 0 };
+    uiSend(IPC.DRIFT_PANEL_OPEN, { tool: 'Design Drift', url: result.url, total: result.total, tokens: result.tokens, sbTokens: result.sbTokens || 0, issues: result.issues });
   } catch (err) {
     console.error('Drift scan error:', err);
     uiSend(IPC.PICK_CANCELLED);
@@ -3868,14 +3945,26 @@ ipcMain.on(IPC.DRIFT_FLASH, (_, { idx } = {}) => { driftExec(`window.__cathodeDr
 ipcMain.on(IPC.DRIFT_PREVIEW, (_, { idx, on } = {}) => { driftExec(`window.__cathodeDrift && window.__cathodeDrift.${on ? 'apply' : 'unapply'}(${Number(idx)})`); });
 ipcMain.on(IPC.DRIFT_SEND, async (_, { issues = [], instruction = '' } = {}) => {
   if (!pendingDrift) return;
+  const usedStorybook = (pendingDrift.sbTokens || 0) > 0 || issues.some(it => it.source === 'storybook');
   await driftExec('window.__cathodeDrift && window.__cathodeDrift.clear()');
   pendingDrift = null;
   if (!issues.length && !instruction.trim()) return;
-  const lines = ['───── Design Drift ─────', `${issues.length} hard-coded color${issues.length === 1 ? '' : 's'} that should use a design token:`];
-  for (const it of issues) lines.push(`• ${it.selector} — ${it.prop}: ${it.hex}  →  var(${it.token})  (${it.tokenHex})`);
+  const CAT_LABEL = { color: 'Colors', type: 'Font sizes', radius: 'Border radii', shadow: 'Shadows' };
+  const lines = ['───── Design Drift ─────', `${issues.length} hard-coded value${issues.length === 1 ? '' : 's'} that should use a design token:`];
+  for (const cat of ['color', 'type', 'radius', 'shadow']) {
+    const group = issues.filter(it => (it.cat || 'color') === cat);
+    if (!group.length) continue;
+    lines.push('', `${CAT_LABEL[cat]}:`);
+    for (const it of group) {
+      const from = it.cat === 'color' ? it.hex : it.from;
+      const toVal = it.cat === 'color' ? it.tokenHex : it.toVal;
+      lines.push(`• ${it.selector} — ${it.prop}: ${from}  →  var(${it.token})${toVal ? `  (${toVal})` : ''}`);
+    }
+  }
   const url = activePageUrl();
   const detail = (url ? `From ${pageSource()} — ${url}\n\n` : '') + lines.join('\n');
-  const body = (instruction.trim() ? instruction.trim() + '\n\n' : '') + 'Replace each hard-coded color with the matching design token (CSS custom property) so the UI stays consistent with the design system. Edit the source CSS / components, not inline styles.';
+  const sourceNote = usedStorybook ? ' These tokens are resolved from the connected Storybook design system — treat them as the source of truth.' : '';
+  const body = (instruction.trim() ? instruction.trim() + '\n\n' : '') + 'Replace each hard-coded value with the matching design token (CSS custom property) so the UI stays consistent with the design system.' + sourceNote + ' Edit the source CSS / components, not inline styles.';
   uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Design drift' });
 });
 ipcMain.on(IPC.DRIFT_CANCEL, async () => {

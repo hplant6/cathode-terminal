@@ -482,6 +482,40 @@ html, body {
 
 /* AI Spend dashboard modal */
 .spend-box { width: 560px; max-width: 94vw; }
+
+/* ── Budget Guard modal ── */
+.budget-box { width: 480px; max-width: 94vw; }
+.budget-status { padding: 10px 12px; border-radius: var(--radius-md); font-size: 12px; margin-bottom: 16px; border: 1px solid var(--spec-structural); background: var(--spec-black); color: var(--spec-text-dim); }
+.budget-status[data-state="ok"]    { border-color: color-mix(in srgb, var(--spec-accent) 40%, var(--spec-structural)); color: var(--spec-text); }
+.budget-status[data-state="warn"]  { border-color: var(--spec-accent); background: var(--spec-accent-dark); color: var(--spec-text); }
+.budget-status[data-state="error"] { color: var(--spec-text-faint); }
+.budget-section { padding: 14px 0; border-top: 1px solid var(--spec-header-bg); }
+.budget-section:first-of-type { border-top: none; padding-top: 0; }
+.budget-row-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.budget-label { font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text); }
+.budget-threshold-val { font: 600 15px var(--font-mono); color: var(--spec-accent); }
+/* Design-system slider (mirrors storybook-demo Slider): filled track + accent thumb. */
+.ds-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 4px 0 8px; background: transparent; cursor: pointer; }
+.ds-slider:disabled { opacity: 0.5; cursor: default; }
+.ds-slider::-webkit-slider-runnable-track { height: 7px; border-radius: var(--radius-md); background: linear-gradient(to right, var(--spec-accent) var(--_pct, 0%), var(--spec-input-bg) var(--_pct, 0%)); }
+.ds-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -4.5px; border-radius: 50%; background: var(--spec-text); border: 2px solid var(--spec-accent); box-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: background 0.12s; }
+.ds-slider:hover::-webkit-slider-thumb { background: #fff; }
+.ds-slider:focus { outline: none; }
+.ds-slider:focus::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--spec-accent) 30%, transparent); }
+.budget-hint { font-size: 11px; color: var(--spec-text-faint); line-height: 1.5; }
+.budget-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--spec-text-dim); cursor: pointer; }
+.budget-check input { accent-color: var(--spec-accent); }
+.budget-field { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; }
+.budget-flabel { font-size: 12px; color: var(--spec-text-dim); }
+.budget-select { min-width: 200px; padding: 5px 8px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); color: var(--spec-text); font-size: 12px; }
+.budget-handoff { display: flex; gap: 8px; margin: 16px 0 4px; }
+.budget-handoff .modal-btn-confirm { flex: 1; }
+.budget-continue { background: var(--spec-toolbar-bg); color: var(--spec-text); border: 1px solid var(--spec-structural); }
+.budget-continue:hover:not(:disabled) { background: var(--spec-dropdown-bg); }
+.budget-continue:disabled { opacity: 0.4; cursor: default; }
+/* Lights up as the primary action once the brief has been written (step 1 done). */
+.budget-continue.is-ready { background: var(--spec-accent); color: var(--text-on-accent); border-color: var(--spec-accent); }
+.budget-continue.is-ready:hover:not(:disabled) { background: var(--spec-accent-dark); }
 .spend-body { max-height: 62vh; overflow-y: auto; margin-bottom: 16px; }
 .spend-summary { display: flex; gap: 10px; margin-bottom: 16px; }
 .spend-stat { flex: 1; background: var(--spec-black); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); padding: 12px; text-align: center; }
@@ -490,6 +524,7 @@ html, body {
 .spend-budget { margin-bottom: 18px; }
 .spend-budget-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--spec-text-dim); }
 .spend-budget-input { width: 96px; padding: 4px 8px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 4px; color: var(--spec-text); font: 12px var(--font-mono); text-align: right; }
+.spend-budget-pct { font: 600 14px var(--font-mono); color: var(--spec-accent); }
 .spend-bar { height: 8px; background: var(--spec-black); border-radius: 999px; overflow: hidden; }
 .spend-bar-fill { height: 100%; background: var(--success); border-radius: 999px; transition: width 0.3s; }
 .spend-bar-fill.warn { background: #e0a13a; }
@@ -1446,6 +1481,16 @@ html, body {
 .usage-legend i.seg-out   { background: #44c08a; }
 .usage-sub { font-size: 10px; color: var(--spec-text-dim); }
 .usage-empty { font-size: 11px; color: var(--spec-text-dim); padding: 2px 0; }
+/* Budget Guard nudge chip — shown in the usage panel once over threshold. */
+.usage-budget-chip {
+  display: flex; align-items: center; width: 100%; box-sizing: border-box;
+  margin: 0 0 10px; padding: 7px 10px; gap: 6px;
+  background: var(--spec-accent-dark); border: 1px solid var(--spec-accent); border-radius: var(--radius-md);
+  color: var(--spec-text); font-family: var(--font-title); font-stretch: 112.5%;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  text-align: left; cursor: pointer; transition: background 0.12s;
+}
+.usage-budget-chip:hover { background: var(--spec-accent); color: var(--text-on-accent); }
 #btn-usage.active { color: var(--accent); }
 
 /* ── Toasts (transient, auto-dismiss) ── */
@@ -2679,6 +2724,10 @@ html, body {
 .drift-hex { font: 11px var(--font-mono); color: var(--spec-text-dim); }
 .drift-arrow { color: var(--spec-text-faint); }
 .drift-token { font: 11px var(--font-mono); color: var(--spec-accent); overflow: hidden; text-overflow: ellipsis; }
+/* Category header dividing the drift list (Color / Type / Radius / Shadow). */
+.drift-group { padding: 9px 14px 5px; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--spec-text-faint); background: var(--spec-header-bg); border-bottom: 1px solid var(--spec-input-bg); position: sticky; top: 0; z-index: 1; }
+/* Sample chip on a neutral card so the literal box-shadow reads in any theme. */
+.drift-shadow-prev { width: 26px; height: 16px; border-radius: 4px; background: #d5d5d5; border: 1px solid var(--spec-structural); flex-shrink: 0; }
 .a11y-issue { padding: 16px 14px; background: var(--spec-input-bg); border-bottom: 1px solid var(--spec-header-bg); }   /* shade 7, shade-6 separator */
 .a11y-issue:has(.a11y-cb:checked) { background: var(--spec-header-bg); border-bottom-color: var(--spec-input-bg); }   /* checked → shade-6 fill */
 .a11y-head { display: flex; align-items: center; gap: 12px; }

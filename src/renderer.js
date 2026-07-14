@@ -58,6 +58,16 @@ const LS = {
   codeTabRetired: 'cathode-code-tab-retired',       // one-time code-tab retirement flag
 };
 
+// First-run UI defaults — seeded once, before the panels below read these keys,
+// and only while the app is still un-onboarded (never overrides a returning
+// user who has toggled things). Fresh install opens with: system view OFF and
+// the usage panel in its dial view. (The usage panel itself is opened on every
+// launch by initViewsBar, so "usage on" needs no seed here.)
+if (!localStorage.getItem(LS.onboarded)) {
+  if (localStorage.getItem(LS.sysperf)   == null) localStorage.setItem(LS.sysperf, '0');    // system view off
+  if (localStorage.getItem(LS.usageMini) == null) localStorage.setItem(LS.usageMini, '1');  // usage → dial view
+}
+
 // ── Theme engine ──────────────────────────────────────────────────
 // A theme is just a map of CSS custom-properties (the 8 shades + the
 // accent/semantic colours) written onto :root. Presets are below; the
@@ -907,9 +917,17 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
       ? `<div class="usage-cost-row"><span class="usage-cost-label">Session tokens</span><span class="usage-cost-val">${fmtTokens(agentTokens)}</span></div>`
       : '');
 
-  usageBody.innerHTML = (usageMini
+  // Budget Guard chip — a passive nudge at the top of the panel once usage crosses
+  // the configured threshold (so the guard is visible without the modal popping).
+  const bg = (lim && lim.ok) ? budgetGovern(lim) : null;
+  const chipHtml = (bg && bg.over)
+    ? `<button class="usage-budget-chip" title="Open Budget Guard — hand off to a budget agent">Budget · ${Math.round(bg.pct)}% of your ${bg.label} limit — hand off ›</button>`
+    : '';
+
+  usageBody.innerHTML = chipHtml + (usageMini
     ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub)).join('')}</div>`
     : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow;
+  if (chipHtml) usageBody.querySelector('.usage-budget-chip')?.addEventListener('click', () => openBudgetModal && openBudgetModal());
 }
 
 async function refreshUsage() {
@@ -3454,6 +3472,7 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'perf-report':   openPerfReportModal?.(); break;
     case 'localhost':     openLocalhostModal?.(); break;
     case 'spend':         openSpendModal?.();     break;
+    case 'budget':        openBudgetModal?.();    break;
   }
 });
 
@@ -3586,8 +3605,9 @@ let openSpendModal = null;
   const ctl = wireModal(modal);
   const bodyEl = document.getElementById('spend-body');
   const refreshBtn = document.getElementById('spend-refresh');
-  const BUDGET_KEY = 'cathode-spend-budget';
-  let report = null, busy = false;
+  const handoffBtn = document.getElementById('spend-handoff');
+  let report = null, busy = false, limits = null;
+  const limitPct = (m) => m && typeof m.utilization === 'number' ? (m.utilization > 1 ? m.utilization : m.utilization * 100) : null;
 
   const usd = (n) => { n = n || 0; return n >= 100 ? '$' + Math.round(n).toLocaleString() : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(n < 0.01 ? 4 : 2); };
   const tok = (n) => { n = n || 0; return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); };
@@ -3608,18 +3628,29 @@ let openSpendModal = null;
     });
     bodyEl.appendChild(sum);
 
-    // Monthly budget
-    const budget = parseFloat(localStorage.getItem(BUDGET_KEY)) || 0;
+    // Session budget — hand off before you run out of your Claude session limit.
+    // Shares the threshold with Budget Guard (one setting, settable from either place).
+    const bcfg = budgetConfig();
     const bw = el('div', 'spend-budget');
-    const bh = el('div', 'spend-budget-head'); bh.appendChild(el('span', null, 'Monthly budget'));
-    const bi = document.createElement('input'); bi.type = 'number'; bi.className = 'spend-budget-input'; bi.placeholder = 'Set $…'; bi.min = '0'; bi.step = '10'; if (budget) bi.value = budget;
-    bi.addEventListener('change', () => { const v = parseFloat(bi.value) || 0; v > 0 ? localStorage.setItem(BUDGET_KEY, String(v)) : localStorage.removeItem(BUDGET_KEY); render(); });
-    bh.appendChild(bi); bw.appendChild(bh);
-    if (budget > 0) {
-      const ratio = month / budget;
-      const bar = el('div', 'spend-bar'); const fill = el('div', 'spend-bar-fill' + (ratio >= 1 ? ' over' : ratio >= 0.75 ? ' warn' : ''));
-      fill.style.width = Math.min(100, ratio * 100) + '%'; bar.appendChild(fill); bw.appendChild(bar);
-      bw.appendChild(el('div', 'spend-budget-note', `${usd(month)} of ${usd(budget)} · ${Math.round(ratio * 100)}%` + (ratio >= 1 ? ' — over budget' : ratio >= 0.75 ? ' — approaching limit' : '')));
+    const bh = el('div', 'spend-budget-head');
+    bh.appendChild(el('span', null, 'Session budget'));
+    const pctSpan = el('span', 'spend-budget-pct', bcfg.threshold + '%');
+    bh.appendChild(pctSpan);
+    bw.appendChild(bh);
+    const sl = document.createElement('input'); sl.type = 'range'; sl.min = '50'; sl.max = '95'; sl.step = '5'; sl.value = bcfg.threshold; sl.className = 'ds-slider';
+    // input → update label + fill live (no rebuild, so the drag isn't interrupted);
+    // change (drag end) → one render() so the usage bar/note reflect the new threshold.
+    sl.addEventListener('input', () => { const c = budgetConfig(); c.threshold = parseInt(sl.value, 10) || 80; saveBudgetConfig(c); pctSpan.textContent = c.threshold + '%'; updateDsSlider(sl); });
+    sl.addEventListener('change', () => render());
+    updateDsSlider(sl);
+    bw.appendChild(sl);
+    const cur = limits && limits.ok ? limitPct(limits.fiveHour) : null;
+    if (cur != null) {
+      const bar = el('div', 'spend-bar'); const fill = el('div', 'spend-bar-fill' + (cur >= bcfg.threshold ? ' over' : cur >= bcfg.threshold * 0.9 ? ' warn' : ''));
+      fill.style.width = Math.min(100, cur) + '%'; bar.appendChild(fill); bw.appendChild(bar);
+      bw.appendChild(el('div', 'spend-budget-note', `${Math.round(cur)}% of your session limit used · hand off at ${bcfg.threshold}%`));
+    } else {
+      bw.appendChild(el('div', 'spend-budget-note', 'Hand off at this share of your 5-hour session limit. (Sign in to Claude Code to see live usage.)'));
     }
     bodyEl.appendChild(bw);
 
@@ -3658,10 +3689,194 @@ let openSpendModal = null;
     catch (_) { report = { ok: false }; }
     finally { busy = false; render(); }
   }
-  refreshBtn?.addEventListener('click', () => { report = null; scan(); });
+  async function refreshLimits() {
+    try { limits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); } catch (_) { limits = null; }
+    if (modal.classList.contains('open')) render();
+  }
+  refreshBtn?.addEventListener('click', () => { report = null; scan(); refreshLimits(); });
+  handoffBtn?.addEventListener('click', () => {
+    const r = writeHandoffBriefNow();
+    const orig = handoffBtn.textContent;
+    handoffBtn.textContent = r.ok ? `Brief requested → ${r.dest}` : 'Open an agent chat first';
+    handoffBtn.disabled = true;
+    setTimeout(() => { handoffBtn.textContent = orig; handoffBtn.disabled = false; }, 2600);
+  });
   document.getElementById('spend-close')?.addEventListener('click', ctl.close);
   document.getElementById('spend-done')?.addEventListener('click', ctl.close);
-  openSpendModal = function() { ctl.open(); report ? render() : scan(); };
+  openSpendModal = function() { ctl.open(); report ? render() : scan(); refreshLimits(); };
+})();
+
+// Paint a .ds-slider's accent fill up to its value (Chromium can't do it in pure CSS).
+function updateDsSlider(el) {
+  if (!el) return;
+  const min = parseFloat(el.min) || 0;
+  const max = isFinite(parseFloat(el.max)) ? parseFloat(el.max) : 100;
+  const pct = max > min ? ((parseFloat(el.value) - min) / (max - min)) * 100 : 0;
+  el.style.setProperty('--_pct', pct + '%');
+}
+
+// ── Budget Guard config + handoff (shared by Budget Guard + the AI Spend modal) ──
+const BUDGET_CFG_KEY = 'cathode-budget';
+const BUDGET_AGENT_LABEL = { hermes: 'Hermes', gemini: 'Gemini', codex: 'Codex' };
+const BUDGET_DEFAULTS = { threshold: 80, watchWeekly: false, autoOpen: true, target: 'hermes', dest: 'HANDOFF.md' };
+function budgetConfig() { return Object.assign({}, BUDGET_DEFAULTS, safeParse(localStorage.getItem(BUDGET_CFG_KEY), {})); }
+function saveBudgetConfig(cfg) { localStorage.setItem(BUDGET_CFG_KEY, JSON.stringify(cfg)); }
+// Which usage limit governs the budget (weekly if watched and higher, else the 5h),
+// its %, reset, and whether it's at/over the configured threshold. null if no data.
+// Shared by Budget Guard and the Usage-panel chip so both agree on "over budget".
+function budgetGovern(limits) {
+  if (!limits || !limits.ok) return null;
+  const c = budgetConfig();
+  const p = m => m && typeof m.utilization === 'number' ? (m.utilization > 1 ? m.utilization : m.utilization * 100) : null;
+  const five = p(limits.fiveHour);
+  const week = c.watchWeekly ? p(limits.sevenDay) : null;
+  let pick = { pct: five, label: '5-hour', reset: limits.fiveHour && limits.fiveHour.resetsAt };
+  if (week != null && (five == null || week >= five)) pick = { pct: week, label: 'weekly', reset: limits.sevenDay && limits.sevenDay.resetsAt };
+  if (pick.pct == null) return null;
+  return { pct: pick.pct, label: pick.label, reset: pick.reset, threshold: c.threshold, over: pick.pct >= c.threshold };
+}
+// Ask the current agent to write a self-contained handoff brief to the configured
+// file. Works any time — not just at the limit. Returns { ok, dest, agent } or a reason.
+function writeHandoffBriefNow() {
+  const s = sessions.get(activeId);
+  if (!s || s.type !== 'acp') return { ok: false, reason: 'no-agent' };
+  const c = budgetConfig();
+  const label = BUDGET_AGENT_LABEL[c.target] || c.target;
+  const prompt = `I'm handing this project off to another AI agent (${label}) that has no prior context. Write a thorough, self-contained handoff brief to \`${c.dest}\` in the project root. Include: the overall goal, the current state of the work, key decisions and why, files created or changed, exactly what to do next, and any gotchas or constraints. Write only the file — you don't need to summarize back to me.`;
+  routeToActiveSession(prompt);
+  return { ok: true, dest: c.dest, agent: label };
+}
+
+// ── Budget Guard (Settings → Budget Guard) ───────────────────────
+// Watches the Claude 5h/weekly usage limit and, when it runs low, helps hand the
+// project off to a cheaper agent: the current agent writes a self-contained brief
+// to a file, then a new session on the target agent is opened primed to read it.
+let openBudgetModal = null;
+(function initBudget() {
+  const modal = document.getElementById('budget-modal');
+  if (!modal) return;
+  const ctl = wireModal(modal);
+  const AGENT_LABEL = BUDGET_AGENT_LABEL;
+  const cfg = budgetConfig();
+  const save = () => saveBudgetConfig(cfg);
+
+  const slider   = document.getElementById('budget-threshold');
+  const sliderV  = document.getElementById('budget-threshold-val');
+  const weeklyCb = document.getElementById('budget-watch-weekly');
+  const autoCb   = document.getElementById('budget-autoopen');
+  const targetEl = document.getElementById('budget-target');
+  const destEl   = document.getElementById('budget-dest');
+  const statusEl = document.getElementById('budget-status');
+  const briefBtn = document.getElementById('budget-write-brief');
+  const contBtn  = document.getElementById('budget-continue');
+  const contAgent = document.getElementById('budget-continue-agent');
+
+  let lastLimits = null;          // last GET_RATE_LIMITS result
+  let armedResetAt = null;        // resetsAt we've already auto-alerted for (re-arms each new window)
+  let lastCheck = 0;
+  // Step-2 gate: "Continue" stays inert until a brief has actually been written
+  // for the current project — otherwise the new agent is told to read a file that
+  // doesn't exist yet. Tracked by cwd so a brief written for project A doesn't
+  // green-light a handoff while you're now in project B.
+  let briefWrittenCwd = null;
+
+  function handoffCwd() { const s = sessions.get(activeId); return (s && s.cwd) || ''; }
+  function refreshContinueGate() {
+    const ready = briefWrittenCwd != null && briefWrittenCwd === handoffCwd();
+    contBtn.disabled = !ready;
+    contBtn.classList.toggle('is-ready', ready);
+    contBtn.title = ready ? '' : 'Write the handoff brief first (step 1).';
+  }
+
+  function syncControls() {
+    slider.value = cfg.threshold; sliderV.textContent = cfg.threshold + '%'; updateDsSlider(slider);
+    weeklyCb.checked = !!cfg.watchWeekly;
+    autoCb.checked = !!cfg.autoOpen;
+    targetEl.value = cfg.target;
+    destEl.value = cfg.dest;
+    if (contAgent) contAgent.textContent = AGENT_LABEL[cfg.target] || cfg.target;
+    refreshContinueGate();
+  }
+
+  function fmtReset(iso) {
+    const t = Date.parse(iso || ''); if (isNaN(t)) return '';
+    const mins = Math.max(0, (t - Date.now()) / 60000);
+    if (mins < 60) return `resets in ${Math.round(mins)}m`;
+    const h = mins / 60; return h < 24 ? `resets in ${Math.round(h)}h` : `resets in ${Math.round(h / 24)}d`;
+  }
+  const governing = () => budgetGovern(lastLimits);   // shared with the Usage-panel chip
+  function renderStatus() {
+    if (!lastLimits) { statusEl.textContent = 'Checking your usage limit…'; statusEl.dataset.state = 'idle'; return; }
+    if (!lastLimits.ok) { statusEl.textContent = 'Usage limit unavailable — sign in to Claude Code to enable Budget Guard.'; statusEl.dataset.state = 'error'; return; }
+    const g = governing();
+    if (!g) { statusEl.textContent = 'Usage limit unavailable.'; statusEl.dataset.state = 'error'; return; }
+    const reset = g.reset ? ' · ' + fmtReset(g.reset) : '';
+    statusEl.textContent = `${Math.round(g.pct)}% of your ${g.label} limit used${reset}` + (g.over ? ' — consider handing off.' : '.');
+    statusEl.dataset.state = g.over ? 'warn' : 'ok';
+  }
+
+  async function checkLimits(auto) {
+    const now = Date.now();
+    if (auto && now - lastCheck < 60000) return;   // throttle event-driven checks
+    lastCheck = now;
+    Object.assign(cfg, budgetConfig());   // pick up a threshold changed from the AI Spend modal
+    try { lastLimits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); }
+    catch (_) { lastLimits = { ok: false }; }
+    if (!modal.classList.contains('open')) { /* status refreshes on open */ } else renderStatus();
+    const g = governing();
+    if (auto && cfg.autoOpen && g && g.over) {
+      const resetKey = g.reset || 'none';
+      if (armedResetAt !== resetKey) {   // once per limit window
+        armedResetAt = resetKey;
+        syncControls(); ctl.open(); renderStatus();
+      }
+    }
+  }
+
+  // Handoff step 1 — the current agent writes the brief to the chosen file.
+  function writeBrief() {
+    const r = writeHandoffBriefNow();
+    if (!r.ok) { statusEl.textContent = 'Open an agent chat first, then write the brief.'; statusEl.dataset.state = 'error'; return; }
+    briefWrittenCwd = handoffCwd();     // unlock step 2 for this project
+    refreshContinueGate();
+    statusEl.textContent = `Asked the agent to write ${r.dest} — watch the chat, then click “Continue”.`;
+    statusEl.dataset.state = 'ok';
+  }
+
+  // Handoff step 2 — open a fresh session on the target agent, primed to read the brief.
+  function continueOnTarget() {
+    if (contBtn.disabled) return;   // gated until step 1 has run for this project
+    const target = cfg.target;
+    let id;
+    try { id = createSession(AGENT_LABEL[target] || target, target, true, false); }
+    catch (_) { statusEl.textContent = `Could not start ${AGENT_LABEL[target] || target}.`; statusEl.dataset.state = 'error'; return; }
+    if (id == null) return;
+    switchSession(id);
+    const kickoff = `You're taking over this project from another agent. Read \`${cfg.dest}\` in the project root for the full handoff brief, then continue the work from there. Ask me only if something is genuinely unclear.`;
+    const ta = document.getElementById('ui-textarea');
+    if (ta) { ta.value = kickoff; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); }
+    briefWrittenCwd = null;   // handoff consumed — a fresh one needs a fresh brief
+    ctl.close();
+  }
+
+  slider.addEventListener('input', () => { cfg.threshold = parseInt(slider.value, 10) || 80; sliderV.textContent = cfg.threshold + '%'; updateDsSlider(slider); save(); renderStatus(); });
+  weeklyCb.addEventListener('change', () => { cfg.watchWeekly = weeklyCb.checked; save(); renderStatus(); });
+  autoCb.addEventListener('change', () => { cfg.autoOpen = autoCb.checked; save(); });
+  targetEl.addEventListener('change', () => { cfg.target = targetEl.value; if (contAgent) contAgent.textContent = AGENT_LABEL[cfg.target] || cfg.target; save(); });
+  destEl.addEventListener('change', () => { cfg.dest = destEl.value; save(); });
+  briefBtn.addEventListener('click', writeBrief);
+  contBtn.addEventListener('click', continueOnTarget);
+  refreshContinueGate();   // start locked until a brief is written
+  document.getElementById('budget-close')?.addEventListener('click', ctl.close);
+  document.getElementById('budget-done')?.addEventListener('click', ctl.close);
+
+  // Event-driven limit checks: after each agent turn (when usage actually moves),
+  // plus a slow fallback poll. Both auto-open the guard once per limit window.
+  ipcRenderer.on(IPC.ACP_DONE, () => checkLimits(true));
+  setInterval(() => checkLimits(true), 10 * 60 * 1000);
+  setTimeout(() => checkLimits(true), 8000);   // initial read shortly after launch
+
+  openBudgetModal = function() { syncControls(); ctl.open(); renderStatus(); checkLimits(false); };
 })();
 
 // ── Resume a past session — drop-up menu on the composer toolbar ──────────
@@ -6264,26 +6479,41 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const cancelBtn = document.getElementById('drift-cancel');
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-  let issues = [], state = {}, url = '', tokenCount = 0;
+  let issues = [], state = {}, url = '', tokenCount = 0, sbTokens = 0;
+  const CAT_LABEL = { color: 'Color', type: 'Type', radius: 'Radius', shadow: 'Shadow' };
+  const CAT_ORDER = ['color', 'type', 'radius', 'shadow'];
 
   function updateCount() {
     const n = issues.filter(i => state[i.idx].checked).length;
-    barCount.textContent = `${issues.length} drifted color${issues.length === 1 ? '' : 's'}`;
+    barCount.textContent = `${issues.length} drift issue${issues.length === 1 ? '' : 's'}` + (sbTokens ? ' · Storybook tokens' : '');
     sendBtn.textContent = n ? `Send ${n}` : 'Send';
     toggleAll.textContent = n > 0 ? 'uncheck all' : 'check all';
   }
-  function buildIssue(iss, n) {
+  // The from→token visual differs per category (color swatches, a shadow
+  // preview, or a mono value pill), but the row chrome is shared.
+  function driftVisual(iss) {
+    const sw = el('div', 'drift-swatches');
+    if (iss.cat === 'color') {
+      const from = el('span', 'drift-swatch'); from.style.background = iss.hex;
+      const to = el('span', 'drift-swatch'); to.style.background = iss.tokenHex;
+      sw.append(from, el('span', 'drift-hex', iss.hex), el('span', 'drift-arrow', '→'), to, el('span', 'drift-token', `var(${iss.token})`));
+    } else if (iss.cat === 'shadow') {
+      const from = el('span', 'drift-shadow-prev'); from.style.boxShadow = iss.from;
+      const to = el('span', 'drift-shadow-prev'); to.style.boxShadow = iss.toVal;
+      sw.append(from, el('span', 'drift-arrow', '→'), to, el('span', 'drift-token', `var(${iss.token})`));
+    } else {   // type / radius — px value → token (authored value in parens)
+      sw.append(el('span', 'drift-hex', iss.from), el('span', 'drift-arrow', '→'),
+                el('span', 'drift-token', `var(${iss.token})`), el('span', 'drift-hex', `(${iss.toVal})`));
+    }
+    return sw;
+  }
+  function buildIssue(iss) {
     const wrap = el('div', 'a11y-issue');
     const head = el('div', 'a11y-head');
-    head.append(el('span', 'a11y-num', String(n)));
+    head.append(el('span', 'a11y-num', String(iss.idx + 1)));   // matches the on-page badge (scan order)
     const mid = el('div', 'a11y-mid');
     mid.append(el('span', 'a11y-detail', iss.prop));
-    const sw = el('div', 'drift-swatches');
-    const from = el('span', 'drift-swatch'); from.style.background = iss.hex;
-    const arrow = el('span', 'drift-arrow', '→');
-    const to = el('span', 'drift-swatch'); to.style.background = iss.tokenHex;
-    sw.append(from, el('span', 'drift-hex', iss.hex), arrow, to, el('span', 'drift-token', `var(${iss.token})`));
-    mid.append(sw);
+    mid.append(driftVisual(iss));
     head.append(mid);
     const fix = el('label', 'a11y-fix');
     fix.append(el('span', 'a11y-fix-label', 'Fix'));
@@ -6300,17 +6530,23 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     listEl.innerHTML = '';
     if (!issues.length) {
       listEl.appendChild(el('div', 'a11y-empty', tokenCount
-        ? 'No color drift found — every color maps to a token.'
+        ? 'No drift found — every value maps to a token.'
         : 'No design tokens found on :root. Define CSS custom properties (or connect a Storybook) so drift can be detected.'));
       return;
     }
-    issues.forEach((iss, i) => listEl.appendChild(buildIssue(iss, i + 1)));
+    CAT_ORDER.forEach(cat => {
+      const group = issues.filter(i => i.cat === cat);
+      if (!group.length) return;
+      listEl.appendChild(el('div', 'drift-group', `${CAT_LABEL[cat]} · ${group.length}`));
+      group.forEach(iss => listEl.appendChild(buildIssue(iss)));
+    });
   }
   function open(data) {
     clearPickMode();
     issues = data.issues || [];
     url = data.url || '';
     tokenCount = data.tokens || 0;
+    sbTokens = data.sbTokens || 0;
     state = {};
     issues.forEach(i => { state[i.idx] = { checked: false }; });
     if (instrEl) instrEl.value = '';
@@ -6319,7 +6555,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   function close() { panel.hidden = true; listEl.innerHTML = ''; issues = []; state = {}; if (instrEl) instrEl.value = ''; }
   function send() {
-    const out = issues.filter(i => state[i.idx].checked).map(i => ({ selector: i.selector, prop: i.prop, hex: i.hex, token: i.token, tokenHex: i.tokenHex, url }));
+    const out = issues.filter(i => state[i.idx].checked).map(i => ({ selector: i.selector, cat: i.cat, prop: i.prop, from: i.from, token: i.token, toVal: i.toVal, source: i.source, hex: i.hex, tokenHex: i.tokenHex, url }));
     const _foot = instrEl ? instrEl.closest('.tp-foot') : null;
     ipcRenderer.send(IPC.DRIFT_SEND, { issues: out, instruction: decorateToolInstruction(instrEl ? instrEl.value.trim() : '', _foot) });
     _foot?._composerBar?.clear();

@@ -468,7 +468,7 @@
           <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none"><circle cx="9" cy="9" r="7.25" stroke="currentColor" stroke-width="1.25"></circle><circle cx="6.4" cy="6.9" r="1.15" fill="currentColor"></circle><circle cx="11.2" cy="6.5" r="1.15" fill="currentColor"></circle><circle cx="11.6" cy="10.6" r="1.15" fill="currentColor"></circle><circle cx="6.8" cy="11.1" r="1.15" fill="currentColor"></circle></svg></span>
           <div class="pp-head-text">
             <span class="tp-title">Design Drift</span>
-            <span class="tp-sub">Colors that should use a design token</span>
+            <span class="tp-sub">Values that should use a design token</span>
           </div>
         </div>
         <div id="drift-bar" class="a11y-bar">
@@ -671,7 +671,11 @@
             <!-- The 3 ways to get a Storybook running -->
             <div class="sb-ways-title">connect a storybook with these options</div>
             <div class="wf-tabs sb-ways" role="tablist">
-              <button class="wf-tab active" data-sbtab="start">
+              <button class="wf-tab active" data-sbtab="connect">
+                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M5.25 7.25V5.5C5.25 3.4289 6.9289 1.75 9 1.75C11.0711 1.75 12.75 3.4289 12.75 5.5V7.25"/><path d="M5.25 10.75V12.5C5.25 14.5711 6.9289 16.25 9 16.25C11.0711 16.25 12.75 14.5711 12.75 12.5V10.75"/><path d="M9 11.25V6.75"/></svg>
+                <span>Connect Existing</span>
+              </button>
+              <button class="wf-tab" data-sbtab="start">
                 <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M5.5498 4.75V1.75C5.5498 1.3634 5.8634 1.0498 6.25 1.0498C6.6366 1.0498 6.9502 1.3634 6.9502 1.75V4.75C6.9502 5.1366 6.6366 5.4502 6.25 5.4502C5.8634 5.4502 5.5498 5.1366 5.5498 4.75Z"/><path d="M11.0498 4.75V1.75C11.0498 1.3634 11.3634 1.0498 11.75 1.0498C12.1366 1.0498 12.4502 1.3634 12.4502 1.75V4.75C12.4502 5.1366 12.1366 5.4502 11.75 5.4502C11.3634 5.4502 11.0498 5.1366 11.0498 4.75Z"/><path d="M14.5498 5.75C14.5498 5.5846 14.4154 5.4502 14.25 5.4502H3.75C3.5846 5.4502 3.4502 5.5846 3.4502 5.75V7.5C3.4502 10.5624 5.9376 13.0498 9 13.0498C12.0624 13.0498 14.5498 10.5624 14.5498 7.5V5.75ZM15.9502 7.5C15.9502 11.3356 12.8356 14.4502 9 14.4502C5.1644 14.4502 2.0498 11.3356 2.0498 7.5V5.75C2.0498 4.8114 2.8114 4.0498 3.75 4.0498H14.25C15.1886 4.0498 15.9502 4.8114 15.9502 5.75V7.5Z"/><path d="M8.2998 16.25V13.75C8.2998 13.3634 8.6134 13.0498 9 13.0498C9.3866 13.0498 9.7002 13.3634 9.7002 13.75V16.25C9.7002 16.6366 9.3866 16.9502 9 16.9502C8.6134 16.9502 8.2998 16.6366 8.2998 16.25Z"/></svg>
                 <span>Run a storybook</span>
               </button>
@@ -683,14 +687,18 @@
                 <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M2.0498 14.25V3.75C2.0498 2.8114 2.8114 2.0498 3.75 2.0498H6C6.3866 2.0498 6.7002 2.3634 6.7002 2.75C6.7002 3.1366 6.3866 3.4502 6 3.4502H3.75C3.5846 3.4502 3.4502 3.5846 3.4502 3.75V14.25C3.4502 14.4154 3.5846 14.5498 3.75 14.5498H6C6.3866 14.5498 6.7002 14.8634 6.7002 15.25C6.7002 15.6366 6.3866 15.9502 6 15.9502H3.75C2.8114 15.9502 2.0498 15.1886 2.0498 14.25Z"/><path d="M14.5498 14.25V3.75C14.5498 3.5846 14.4154 3.4502 14.25 3.4502H12C11.6134 3.4502 11.2998 3.1366 11.2998 2.75C11.2998 2.3634 11.6134 2.0498 12 2.0498H14.25C15.1886 2.0498 15.9502 2.8114 15.9502 3.75V14.25C15.9502 15.1886 15.1886 15.9502 14.25 15.9502H12C11.6134 15.9502 11.2998 15.6366 11.2998 15.25C11.2998 14.8634 11.6134 14.5498 12 14.5498H14.25C14.4154 14.5498 14.5498 14.4154 14.5498 14.25Z"/><path d="M9 13C9.41421 13 9.75 12.6642 9.75 12.25C9.75 11.8358 9.41421 11.5 9 11.5C8.58579 11.5 8.25 11.8358 8.25 12.25C8.25 12.6642 8.58579 13 9 13Z"/><path d="M11.75 13C12.1642 13 12.5 12.6642 12.5 12.25C12.5 11.8358 12.1642 11.5 11.75 11.5C11.3358 11.5 11 11.8358 11 12.25C11 12.6642 11.3358 13 11.75 13Z"/><path d="M6.25 13C6.66421 13 7 12.6642 7 12.25C7 11.8358 6.66421 11.5 6.25 11.5C5.83579 11.5 5.5 11.8358 5.5 12.25C5.5 12.6642 5.83579 13 6.25 13Z"/></svg>
                 <span>Use a framework</span>
               </button>
-              <button class="wf-tab" data-sbtab="connect">
-                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><path d="M5.25 7.25V5.5C5.25 3.4289 6.9289 1.75 9 1.75C11.0711 1.75 12.75 3.4289 12.75 5.5V7.25"/><path d="M5.25 10.75V12.5C5.25 14.5711 6.9289 16.25 9 16.25C11.0711 16.25 12.75 14.5711 12.75 12.5V10.75"/><path d="M9 11.25V6.75"/></svg>
-                <span>Connect Existing</span>
-              </button>
             </div>
 
             <div class="wf-panel">
-              <div class="wf-tabpanel" data-sbpanel="start">
+              <div class="wf-tabpanel" data-sbpanel="connect">
+                <div class="wf-headline">point at a Storybook that's already running.</div>
+                <div class="wf-subdesc">Enter the URL of a Storybook you already have running, local or remote. Cathode connects to it directly so your agent can reference your live design system.</div>
+                <div class="wf-panel-form">
+                  <input id="sb-url" type="text" value="http://localhost:6006" placeholder="http://localhost:6006" spellcheck="false"/>
+                  <button id="sb-connect">Connect</button>
+                </div>
+              </div>
+              <div class="wf-tabpanel" data-sbpanel="start" hidden>
                 <div class="wf-headline">run the Storybook already in your project.</div>
                 <div class="wf-subdesc">Cathode starts your project's Storybook server and wires it up automatically. Your agent then has live access to every component and token in your design system.</div>
                 <button id="sb-start" class="sb-connect-btn">Start Storybook</button>
@@ -726,14 +734,6 @@
                     </div>
                   </div>
                   <button id="sb-build-fw">Build</button>
-                </div>
-              </div>
-              <div class="wf-tabpanel" data-sbpanel="connect" hidden>
-                <div class="wf-headline">point at a Storybook that's already running.</div>
-                <div class="wf-subdesc">Enter the URL of a Storybook you already have running, local or remote. Cathode connects to it directly so your agent can reference your live design system.</div>
-                <div class="wf-panel-form">
-                  <input id="sb-url" type="text" placeholder="http://localhost:6006" spellcheck="false"/>
-                  <button id="sb-connect">Connect</button>
                 </div>
               </div>
             </div>
@@ -1395,8 +1395,59 @@
       <p class="modal-desc">Estimated cost across all your Claude sessions, from local transcripts at per-model list prices — a guide, not your actual bill.</p>
       <div id="spend-body" class="spend-body"><div class="lh-empty">Scanning transcripts…</div></div>
       <div class="modal-actions">
+        <button class="modal-btn-cancel" id="spend-handoff">Write handoff brief</button>
         <button class="modal-btn-cancel" id="spend-refresh">Refresh</button>
         <button class="modal-btn-cancel" id="spend-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="budget-modal" class="modal-backdrop">
+    <div class="modal-box budget-box">
+      <button id="budget-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Budget Guard</div>
+      <p class="modal-desc">Watch your Claude usage limit and, when it runs low, hand the project off to a budget agent — the current agent writes a brief so the next one picks up with minimal explanation.</p>
+
+      <div id="budget-status" class="budget-status" data-state="idle">Checking your usage limit…</div>
+
+      <div class="budget-section">
+        <div class="budget-row-head">
+          <span class="budget-label">Advise switching at</span>
+          <span id="budget-threshold-val" class="budget-threshold-val">80%</span>
+        </div>
+        <input id="budget-threshold" type="range" min="50" max="95" step="5" value="80" class="ds-slider"/>
+        <div class="budget-hint">Percent of your <strong>5-hour</strong> session limit at which Budget Guard steps in.</div>
+        <label class="budget-check"><input type="checkbox" id="budget-watch-weekly"/> <span>Also watch my weekly limit</span></label>
+        <label class="budget-check"><input type="checkbox" id="budget-autoopen" checked/> <span>Pop this up automatically when I reach the limit</span></label>
+      </div>
+
+      <div class="budget-section">
+        <div class="budget-label">When the limit is reached</div>
+        <div class="budget-field">
+          <label class="budget-flabel" for="budget-target">Hand off to</label>
+          <select id="budget-target" class="budget-select">
+            <option value="hermes">Hermes</option>
+            <option value="gemini">Gemini</option>
+            <option value="codex">Codex</option>
+          </select>
+        </div>
+        <div class="budget-field">
+          <label class="budget-flabel" for="budget-dest">Write the brief to</label>
+          <select id="budget-dest" class="budget-select">
+            <option value="HANDOFF.md">HANDOFF.md (temporary)</option>
+            <option value="AGENTS.md">AGENTS.md (persistent memory)</option>
+          </select>
+        </div>
+        <div class="budget-hint">The current agent writes the brief to this file; the new agent reads it to continue.</div>
+      </div>
+
+      <div class="budget-handoff">
+        <button id="budget-write-brief" class="modal-btn-confirm">1 · Write handoff brief</button>
+        <button id="budget-continue" class="modal-btn-confirm budget-continue">2 · Continue on <span id="budget-continue-agent">Hermes</span> →</button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="budget-done">Done</button>
       </div>
     </div>
   </div>

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.35] - 2026-07-14
+
+### Changed
+- **AI Spend modal: monthly dollar budget → session budget.** The "Monthly budget" dollar field is now a **Session budget** slider (share of your 5-hour session limit) with a live bar showing current usage against it — the same setting Budget Guard uses, editable from either place. The modal also gained a **Write handoff brief** button so you can export a handoff brief any time, not only at the limit.
+- **Design system gained a Slider** — added a `Slider` component to the Storybook (filled track à la `ProgressBar`, accent thumb à la `Switch`), and the Budget Guard / AI Spend sliders now use a matching reusable `.ds-slider` style built on the design tokens (replacing bare `accent-color` range inputs).
+
+### Added
+- **Budget Guard** (Settings → Budget Guard) — watches your Claude usage limit and helps you keep working when it runs low. Set a threshold (a slider, % of your 5-hour session limit; optionally also watch the weekly limit) at which it advises handing off. When you cross it, the guard can pop up automatically (once per limit window). The hand-off is agent-driven: the **current agent writes a self-contained brief** (goal, state, decisions, files changed, next steps, gotchas) to `HANDOFF.md` (or `AGENTS.md`), then **"Continue on Hermes"** (which stays locked until the brief has actually been written for the current project) opens a fresh session on your chosen budget agent (Hermes/Gemini/Codex) with its composer primed to read the brief and pick up — minimal re-explanation from you. Keys off the real subscription-limit signal (`/api/oauth/usage`), not dollar estimates. Once you're over the threshold, a passive **"hand off" chip** also appears at the top of the Usage panel (click to open the guard), so the nudge is visible even if you've turned off the auto-popup.
+- **Design-drift scanner now covers type, radius, and shadow** (was colors-only). It discovers font-size, border-radius, and box-shadow tokens from `:root` custom properties and flags element values that are a near-miss — a `13px` that should be your `--font-size-sm`, a `5px` corner that should be `--radius-sm`, a hand-rolled `box-shadow` that should be `--shadow-md`. Length tokens are matched by name so a radius token is never suggested for a font-size (and vice-versa); shadows match structurally (offset/blur/spread + color), tolerant of the computed-vs-authored form. Findings are grouped by category in the panel, each with a live on-page preview of the fix.
+- **Design-drift scanner reads tokens from a connected Storybook.** When a Storybook is connected, the scanner pulls its preview `:root` design tokens and matches drift against *those* first — so a page's stale local copy of a token snaps to the canonical design-system value, not itself. Storybook tokens win over page `:root` tokens on name conflicts; the page's own tokens still fill any gaps. The panel notes when Storybook tokens are in play, and the agent hand-off says to treat them as the source of truth.
+
+### Fixed
+- **"Start Storybook" now finds a Storybook nested in your project** — detection was only looking one level deep, so a repo/monorepo whose Storybook lives in a subfolder read as "no Storybook." It now searches down to 4 levels (skipping `node_modules`, build/output dirs, etc.), and resolves the `storybook` bin by walking up from the config dir so a hoisted workspace `node_modules` still works.
+
+### Changed
+- **Storybook setup tabs reordered** to Connect Existing → Run a storybook → Build with figma → Use a framework, with Connect first and its URL prefilled to `http://localhost:6006` (clearable).
+- **First-run defaults** — a fresh install now opens with the system-performance panel hidden and the usage panel in its compact dial view (only seeded on first run; a returning user's toggles are untouched).
+
 ## [1.0.29] - 2026-07-08
 
 ### Fixed
