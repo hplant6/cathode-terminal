@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.36] - 2026-07-15
+
 ### Added
+- **Caveman mode** — a toggle on the composer toolbar (next to the persona menu) that asks the agent for terse, stripped-down output to save tokens (no filler/pleasantries/preamble; bullets over prose; code, commands, and paths kept exact). It's independent of the persona lens, so it **stacks on top of** whichever persona you have selected, and it persists across sessions.
 - **Separate notification sound for permission requests.** A permission ask (run a command, edit a file, etc.) now plays its own mellow cue, distinct from the agent-message sound (and no longer doubles up with it). Both respect the master notification-sounds toggle.
 - **Box/Lasso tool: "User Added" CSS properties.** Each selected element's drawer now has a **User Added** section with a searchable property picker, so you can add *any* CSS property — even ones the detected list omits (e.g. `padding`/`margin` on an element that currently has none, which were filtered out). Pick a property, type a value (applies live, arrow-keys to nudge numbers), and it's included in the edits sent to the agent.
 - **Box/Lasso tool: always-present Padding controls.** Every element's drawer now has a **Padding** section (Top/Right/Bottom/Left) styled exactly like the Width/Height properties, shown even when padding is 0 (it was omitted from the detected list before).

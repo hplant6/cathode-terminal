@@ -1071,6 +1071,19 @@ const PERSONAS = {
   secops:   { label: 'SecOps',       desc: 'Threat model, secrets, least-priv',   preamble: 'Approach this as a security engineer (SecOps). Threat-model first: before functionality, scrutinise secrets handling, input validation, authentication/authorisation and least-privilege, and the attack surface. Assume inputs are hostile and call out how this could be abused.' },
 };
 let activePersona = null;   // null = Default (no lens)
+
+// Caveman mode — an independent, persisted toggle (stacks on top of any persona) that
+// asks the agent for terse output to save tokens. Applied to the agent-facing text only.
+const CAVEMAN_PREAMBLE = 'Be blunt and minimal. Grammatical but stripped: no filler, no pleasantries, no preamble or summary, no restating the question. Short lines, bullets over prose. Keep all code, commands, and file paths exact and complete.';
+let caveMode = localStorage.getItem('cathode-caveman') === '1';
+// Prepend any active response lenses (persona framing + caveman terseness). Caveman is
+// added first so the persona (if any) sits at the very top; both precede the message.
+function applyLenses(text) {
+  if (caveMode) text = CAVEMAN_PREAMBLE + '\n\n' + text;
+  if (activePersona && PERSONAS[activePersona]) text = PERSONAS[activePersona].preamble + '\n\n' + text;
+  return text;
+}
+
 const personaWrap  = document.getElementById('persona-wrap');
 const btnPersona   = document.getElementById('btn-persona');
 const personaLabel = document.getElementById('btn-persona-label');
@@ -1121,6 +1134,21 @@ document.addEventListener('click', (e) => {
   });
 });
 if (btnPersona) registerPersonaControl({ wrap: personaWrap, btn: btnPersona, label: personaLabel, menu: personaMenu });
+
+// ── Caveman mode toggle (composer toolbar) ────────────────────────
+const btnCaveman = document.getElementById('btn-caveman');
+function syncCaveman() {
+  if (!btnCaveman) return;
+  btnCaveman.classList.toggle('on', caveMode);
+  btnCaveman.setAttribute('aria-checked', caveMode ? 'true' : 'false');
+}
+btnCaveman?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  caveMode = !caveMode;
+  localStorage.setItem('cathode-caveman', caveMode ? '1' : '0');
+  syncCaveman();
+});
+syncCaveman();
 
 // ── Figma quick actions (composer) ────────────────────────────────
 // Shown only when a `figma` MCP server is connected. Selecting an action
@@ -1246,8 +1274,7 @@ function decorateToolInstruction(instruction, foot) {
   let text = (instruction || '').trim();
   const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
   if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
-  if (activePersona && PERSONAS[activePersona]) text = PERSONAS[activePersona].preamble + '\n\n' + text;
-  return text;
+  return applyLenses(text);
 }
 
 // Inject a composer bar into every tool-panel footer (they exist, hidden, at load).
@@ -8609,9 +8636,9 @@ function sendUiMessage() {
   let text = (sbConfig && sbConfig.autoInject)
     ? sbContextText(sbConfig) + '\n\n' + body
     : body;
-  // Persona lens: prepend the active persona's framing to the agent-facing text
-  // only — the chat `display` stays clean (the dropdown shows which lens is on).
-  if (activePersona && PERSONAS[activePersona]) text = PERSONAS[activePersona].preamble + '\n\n' + text;
+  // Response lenses (persona framing + caveman terseness): prepend to the agent-facing
+  // text only — the chat `display` stays clean (the toolbar shows which lenses are on).
+  text = applyLenses(text);
   routeToActiveSession(text, display, images, { figma, attach });
   clearFigmaChips();
   clearAttachChips();

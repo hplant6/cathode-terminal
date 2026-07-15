@@ -2430,6 +2430,7 @@ html, body {
 #btn-persona:hover { background: var(--spec-structural); color: var(--spec-text); }   /* shade 3 */
 #btn-persona.has-persona { color: var(--spec-accent); }                                /* a lens is active */
 #btn-persona.has-persona .persona-glyph { color: var(--spec-accent); }
+#ui-toolbar .view-toggle { padding-left: 10px; }                                       /* breathing room for the Caveman toggle */
 #btn-persona-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .persona-glyph { flex-shrink: 0; }
 .persona-caret { flex-shrink: 0; width: 9px; height: 9px; transition: transform 0.18s ease; }
