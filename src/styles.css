@@ -497,7 +497,7 @@ html, body {
 /* Design-system slider (mirrors storybook-demo Slider): filled track + accent thumb. */
 .ds-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 4px 0 8px; background: transparent; cursor: pointer; }
 .ds-slider:disabled { opacity: 0.5; cursor: default; }
-.ds-slider::-webkit-slider-runnable-track { height: 7px; border-radius: var(--radius-md); background: linear-gradient(to right, var(--spec-accent) var(--_pct, 0%), var(--spec-input-bg) var(--_pct, 0%)); }
+.ds-slider::-webkit-slider-runnable-track { height: 7px; border-radius: var(--radius-md); background: linear-gradient(to right, var(--spec-accent) var(--_pct, 0%), var(--spec-structural) var(--_pct, 0%)); }
 .ds-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -4.5px; border-radius: 50%; background: var(--spec-text); border: 2px solid var(--spec-accent); box-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: background 0.12s; }
 .ds-slider:hover::-webkit-slider-thumb { background: #fff; }
 .ds-slider:focus { outline: none; }
@@ -1219,6 +1219,7 @@ html, body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  position: relative;   /* anchor the sticky-user header overlay */
   overflow: hidden;
   background: var(--spec-toolbar-bg);   /* shade 5 — chat area */
   padding-right: 40px;                  /* clear the floating toolbar palette */
@@ -1238,13 +1239,12 @@ html, body {
   -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 52px), transparent 100%);
           mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 52px), transparent 100%);
 }
-.acp-messages.fade-top:not(.fade-bot) {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 52px, #000 100%);
-          mask-image: linear-gradient(to bottom, transparent 0, #000 52px, #000 100%);
-}
+/* Top fade is disabled while the pinned user-message header occupies the top edge
+   (it would fade the header). Bottom fade only. */
+.acp-messages.fade-top:not(.fade-bot) { -webkit-mask-image: none; mask-image: none; }
 .acp-messages.fade-top.fade-bot {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 52px, #000 calc(100% - 52px), transparent 100%);
-          mask-image: linear-gradient(to bottom, transparent 0, #000 52px, #000 calc(100% - 52px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 52px), transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 52px), transparent 100%);
 }
 /* ── ACP startup banner ── */
 .acp-banner {
@@ -1599,6 +1599,21 @@ html, body {
   padding: 8px 12px;
   color: #FFFFFF;
 }
+/* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
+   of the chat. Switches as you scroll between turns / post a new message. */
+.acp-sticky-user {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  padding: 24px 14px;   /* +15px top & bottom vs the base 9px */
+  background: var(--spec-dropdown-bg);   /* shade 4 */
+  border-bottom: 1px solid var(--spec-structural);
+  color: var(--spec-text);
+  font-size: var(--chat-font-size, 12px); line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 6px 14px -9px rgba(0,0,0,0.65);
+  cursor: pointer; transition: background 0.12s;
+}
+.acp-sticky-user:hover { background: var(--spec-structural); }
+.acp-sticky-user[hidden] { display: none; }
 /* Collapsed drawer for tool-injected context (CSS / logs / code) — keeps the chat clean */
 .acp-msg-detail {
   margin-top: 6px;
@@ -1803,17 +1818,29 @@ html, body {
   opacity: 0.7;
 }
 /* Risky-tool approval prompt (execute/edit/delete/…) */
+/* Anchored, modal-like permission stack — floats just above the status bar so the
+   prompt isn't buried in the chat scroll. One card visible at a time; rest queue. */
+.acp-perm-stack {
+  /* Left-anchored; right edge pulled in ~54px to clear the vertical #tool-rail (~45px). */
+  position: absolute; left: 10px; right: 54px; bottom: 40px; z-index: 8;
+  pointer-events: none;   /* transparent container; the card re-enables pointer events */
+}
+.acp-perm-stack[hidden] { display: none; }
 .acp-permission {
-  align-self: stretch;
-  margin: 6px 0;
+  pointer-events: auto;
   padding: 12px 14px;
   background: var(--spec-input-bg);
   border: 1px solid var(--spec-accent);
   border-radius: var(--radius-md);
-  /* Orange glow — this prompt pauses the agent, so it should pull the eye. */
+  /* Orange glow + depth — this prompt pauses the agent, so it should pull the eye. */
   box-shadow: 0 0 10px color-mix(in srgb, var(--spec-accent) 40%, transparent),
-              0 0 26px color-mix(in srgb, var(--spec-accent) 18%, transparent);
+              0 0 26px color-mix(in srgb, var(--spec-accent) 18%, transparent),
+              0 14px 32px -10px rgba(0,0,0,0.65);
+  /* Enter animation — fade in while moving up (toggled by .show). */
+  opacity: 0; transform: translateY(16px);
+  transition: opacity 0.24s ease, transform 0.28s cubic-bezier(0.2,0.75,0.2,1);
 }
+.acp-permission.show { opacity: 1; transform: translateY(0); }
 .acp-perm-head { font-size: 12.5px; color: var(--spec-text); margin-bottom: 4px; }
 .acp-perm-head b { color: var(--spec-accent); font-weight: 600; }
 .acp-perm-title {
@@ -3119,6 +3146,17 @@ html, body {
 /* Sectioned, typed-control property fields (Claude-design inspector style) */
 .pp-section { padding: 2px 0 8px; }
 .pp-section-title { padding: 11px 12px 7px; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
+/* User Added section — searchable property picker */
+.pp-ua-wrap { border-top: 1px solid var(--spec-header-bg); }
+.pp-ua-combo { padding: 6px 12px 4px; }
+.pp-ua-input { width: 100%; box-sizing: border-box; padding: 5px 9px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); color: var(--spec-text); font: 12px var(--font-mono); outline: none; }
+.pp-ua-input::placeholder { color: var(--spec-text-faint); }
+.pp-ua-input:focus { border-color: var(--spec-text-dim); }
+/* In-flow (not absolute) so the scrollable drawer list can't clip it. */
+.pp-ua-menu { display: none; max-height: 200px; overflow-y: auto; margin: 4px 0 2px; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); }
+.pp-ua-item { padding: 5px 10px; font: 12px var(--font-mono); color: var(--spec-text-dim); cursor: pointer; }
+.pp-ua-item:hover, .pp-ua-item.active { background: var(--spec-header-bg); color: var(--spec-text); }
+.pp-ua-empty { padding: 6px 10px; font: 11px var(--font-ui); color: var(--spec-text-faint); }
 .pp-field {
   display: flex; align-items: center; gap: 10px;
   margin: 0; padding: 0 12px; height: 56px;

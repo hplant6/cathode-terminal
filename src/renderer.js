@@ -533,7 +533,21 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   const msgsEl = document.createElement('div');
   msgsEl.className = 'acp-messages';
   chatEl.appendChild(msgsEl);
-  msgsEl.addEventListener('scroll', () => updateMsgsFade(msgsEl), { passive: true });
+  // Sticky-header overlay — mirrors the current turn's user message, pinned to the top.
+  const stickyUser = document.createElement('div');
+  stickyUser.className = 'acp-sticky-user';
+  stickyUser.hidden = true;
+  stickyUser.title = 'Jump to this message';
+  stickyUser.addEventListener('click', () => { if (stickyUser._target) stickyUser._target.scrollIntoView({ block: 'start', behavior: 'smooth' }); });
+  chatEl.appendChild(stickyUser);
+
+  // Permission prompts — an anchored stack above the status bar (modal-like), not in
+  // the chat scroll where they get buried. One shows at a time; the rest queue.
+  const permStack = document.createElement('div');
+  permStack.className = 'acp-perm-stack';
+  permStack.hidden = true;
+  chatEl.appendChild(permStack);
+  msgsEl.addEventListener('scroll', () => { updateMsgsFade(msgsEl); updateStickyUser(msgsEl, stickyUser); }, { passive: true });
 
   // Terminal view — real xterm PTY (lazy-spawned on first switch)
   const termEl = document.createElement('div');
@@ -580,7 +594,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   eq.start();   // the session opens in "Connecting…" — animate until ready/error
 
   sessions.set(id, {
-    id, name, type: 'acp', agent, command, el, chatEl, msgsEl, specEl, eq, statusEl, statusTextEl,
+    id, name, type: 'acp', agent, command, el, chatEl, msgsEl, stickyUserEl: stickyUser, permStackEl: permStack, specEl, eq, statusEl, statusTextEl,
     resumeTitle: (resume && resume.title) || null,   // original session title, shown as the tab tooltip
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
@@ -635,6 +649,13 @@ function switchAcpView(id, view) {
   s.viewMode = view;
   s.msgsEl.style.display  = view === 'chat' ? '' : 'none';
   s.termEl.style.display  = view === 'term' ? '' : 'none';
+  if (view !== 'chat') {   // don't float the overlays over the terminal view
+    if (s.stickyUserEl) s.stickyUserEl.hidden = true;
+    if (s.permStackEl)  s.permStackEl.hidden = true;
+  } else {
+    updateStickyUser(s.msgsEl, s.stickyUserEl);
+    showTopPerm(s);
+  }
   if (view === 'term') {
     if (!s._ptySpawned) {
       s._ptySpawned = true;
@@ -2408,12 +2429,13 @@ const Notif = (() => {
     a.play().catch(err => console.warn('[notif] sound failed:', src, err && err.message));
   }
   // Warm the cache up front so the first alert isn't delayed by a cold fetch.
-  ['sounds/error.wav', 'sounds/message.wav'].forEach(src => { try { audioFor(src); } catch (_) {} });
+  ['sounds/error.wav', 'sounds/message.wav', 'sounds/permission.wav'].forEach(src => { try { audioFor(src); } catch (_) {} });
   const sounds = {
-    done:    () => { blip(659.25, 0, 0.13); blip(987.77, 0.10, 0.22); },   // synth fallback (not wired)
-    message: () => playFile('sounds/message.wav'),                         // KEDR servo-bot data response
-    error:   () => playFile('sounds/error.wav'),                          // Slava Pogorelsky error tone
-    limit:   () => playFile('sounds/error.wav'),                          // same as error, per request
+    done:       () => { blip(659.25, 0, 0.13); blip(987.77, 0.10, 0.22); },   // synth fallback (not wired)
+    message:    () => playFile('sounds/message.wav'),                         // KEDR servo-bot data response
+    permission: () => playFile('sounds/permission.wav'),                     // mellow cue for a permission ask
+    error:      () => playFile('sounds/error.wav'),                          // Slava Pogorelsky error tone
+    limit:      () => playFile('sounds/error.wav'),                          // same as error, per request
   };
   function setOn(v) { on = !!v; localStorage.setItem(LS.notif, on ? '1' : '0'); syncNotifToggles(); }
   return {
@@ -2463,6 +2485,24 @@ function acpSetStatus(s, state) {
 // unbatched scrollIntoView forces a full layout pass every call.
 // Fade the top/bottom edges only when content is actually scrolled past them — so the
 // banner resting at the very top (startup) is never faded.
+// Sticky-header overlay: mirror the current turn's user message (the last one scrolled
+// past the top). Switches as you scroll between turns or post a new message.
+function updateStickyUser(msgsEl, stickyEl) {
+  if (!msgsEl || !stickyEl) return;
+  const line = msgsEl.getBoundingClientRect().top + 4;   // just under the container's top edge
+  let current = null;
+  const users = msgsEl.querySelectorAll('.acp-msg.user');
+  for (const u of users) {
+    if (u.getBoundingClientRect().top <= line) current = u;   // last user msg at/above the line
+    else break;                                               // rest are below → done
+  }
+  const txt = current ? (current.querySelector('.acp-msg-text')?.textContent || '').trim() : '';
+  if (!txt) { stickyEl.hidden = true; stickyEl._target = null; return; }
+  stickyEl._target = current;                                   // click → scroll back to this turn
+  if (stickyEl.textContent !== txt) stickyEl.textContent = txt;
+  stickyEl.hidden = false;
+}
+
 function updateMsgsFade(el) {
   if (!el) return;
   const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -2509,6 +2549,7 @@ function acpScrollEnd(s) {
     // clears the 52px edge fade — otherwise new messages land inside it and fade out.
     if (s.msgsEl._stick !== false) s.msgsEl.scrollTop = s.msgsEl.scrollHeight;
     updateMsgsFade(s.msgsEl);
+    updateStickyUser(s.msgsEl, s.stickyUserEl);
   });
 }
 
@@ -3169,7 +3210,8 @@ ipcRenderer.on(IPC.ACP_CLOSED, (_, { id }) => {
   const s = sessions.get(id);
   if (s?.type === 'acp') {
     acpFinalizeStream(s); acpSetStatus(s, 'closed');
-    s.msgsEl.querySelectorAll('.acp-permission').forEach(c => c.remove());   // drop any dangling approval prompts
+    if (s.permStackEl) { s.permStackEl.querySelectorAll('.acp-permission').forEach(c => c.remove()); s.permStackEl.hidden = true; }   // drop dangling approval prompts
+    if (_activePerm && !_activePerm.card.isConnected) _activePerm = null;
   }
 });
 
@@ -3207,22 +3249,42 @@ ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlwa
   card.querySelector('.acp-perm-head b').textContent = verb;   // textContent → no XSS from kind/title
   if (title) card.querySelector('.acp-perm-title').textContent = title;
   const decide = (decision) => {
-    if (_activePerm && _activePerm.card === card) _activePerm = null;
     ipcRenderer.send(IPC.ACP_PERMISSION_RESPONSE, { reqId, decision });
     card.remove();
+    showTopPerm(s);   // reveal the next queued prompt (or clear _activePerm)
   };
   card.querySelector('.acp-perm-deny').addEventListener('click', () => decide('deny'));
   card.querySelector('.acp-perm-allow').addEventListener('click', () => decide('approve'));
   card.querySelector('.acp-perm-always')?.addEventListener('click', () => decide('always'));
-  // Wire the number-key shortcuts to this prompt.
+  // Number-key shortcuts for this prompt (applied when it's the visible one).
   const keys = { '1': () => decide('approve'), [denyKey]: () => decide('deny') };
   if (canAlways) keys['2'] = () => decide('always');
-  _activePerm = { card, keys };
-  s.msgsEl.appendChild(card);
-  acpScrollEnd(s);
+  card._permKeys = keys;
+  s.permStackEl.appendChild(card);
+  showTopPerm(s);
   if (document.activeElement === uiTextarea) uiTextarea.blur();   // so 1/2/3 drive the prompt immediately
-  Notif.play('message');   // audible cue — the agent is paused waiting on you
+  if (!s._replaying) Notif.play('permission');   // distinct cue: the agent is paused waiting on you
 });
+
+// Show the oldest pending prompt (the rest queue, one visible at a time), animate it
+// in, and point the number-key shortcuts at it.
+function showTopPerm(s) {
+  const stack = s && s.permStackEl;
+  if (!stack) return;
+  const cards = [...stack.querySelectorAll('.acp-permission:not(.leaving)')];
+  cards.forEach((c, i) => {
+    if (i === 0) {
+      c.style.display = '';
+      if (!c.classList.contains('show')) requestAnimationFrame(() => c.classList.add('show'));   // fade + slide up
+    } else {
+      c.classList.remove('show');
+      c.style.display = 'none';
+    }
+  });
+  stack.hidden = cards.length === 0;
+  const top = cards[0];
+  _activePerm = top ? { card: top, keys: top._permKeys } : null;
+}
 
 ipcRenderer.on(IPC.ACP_ERROR, (_, { id, message, setupCmd, setupLabel }) => {
   const s = acpSession(id);
@@ -5289,6 +5351,15 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   function activeIndices() { return rows.map((r, i) => (r.removed ? -1 : i)).filter(i => i >= 0); }
   function applyStyle(i, prop, value) { ipcRenderer.send(IPC.PICK_PANEL_STYLE, { i, prop, value }); }
+  // Every CSS property this Chromium build knows (renderer engine == page engine),
+  // for the "User Added" picker — lets you add a property the detected list omits.
+  const ALL_CSS_PROPS = (() => {
+    try {
+      const cs = getComputedStyle(document.documentElement), out = [];
+      for (let i = 0; i < cs.length; i++) { const n = cs[i]; if (n && n.indexOf('--') !== 0) out.push(n); }
+      return out.sort();
+    } catch (e) { return []; }
+  })();
 
   // ── one CSS property row ──────────────────────────────────────
   // ── property metadata (Method 2 sections + Method 3 typed controls) ─
@@ -5565,8 +5636,10 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function buildBody(row, i, body) {
     if (body.dataset.built) return;
     body.dataset.built = '1';
-    const props = row.item.cssProps || [];
-    if (!props.length) { body.appendChild(el('div', 'pp-no-css', 'no CSS properties')); return; }
+    const PADDING_SIDES = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
+    const props = (row.item.cssProps || []).filter(p => !PADDING_SIDES.includes(p.name));   // padding → its own slider section
+    body.appendChild(buildPaddingSection(row, i));   // always present, even when padding is 0
+    if (!props.length) { appendUserAddedSection(row, i, body); return; }
     const disp = (props.find(p => p.name === 'display') || {}).value || '';
     // A zero-width / styleless border makes its style + color irrelevant too.
     const _bw = props.find(p => p.name === 'border-top-width');
@@ -5592,6 +5665,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const primary = props.filter(meaningful);
     const defaults = props.filter(p => !meaningful(p));
     renderSections(primary, body);
+    appendUserAddedSection(row, i, body);   // User Added — above the Defaults strip
 
     if (defaults.length) {
       // Collapsible strip for default/irrelevant props — same escape-hatch pattern as
@@ -5608,6 +5682,92 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       wrap.append(head, dbody);
       body.appendChild(wrap);
     }
+  }
+
+  // Padding — always shown per element (even at 0), one slider per side. Padding
+  // props are omitted from the serialized CSS when 0, so we seed any missing side.
+  function buildPaddingSection(row, i) {
+    const SIDES = [['padding-top', 'Top'], ['padding-right', 'Right'], ['padding-bottom', 'Bottom'], ['padding-left', 'Left']];
+    const sec = el('div', 'pp-section pp-pad-sec');
+    sec.appendChild(el('div', 'pp-section-title', 'Padding'));
+    SIDES.forEach(([name, short]) => {
+      let p = (row.item.cssProps || []).find(x => x.name === name);
+      if (!p) { p = { name, value: '0px' }; (row.item.cssProps = row.item.cssProps || []).push(p); }
+      // Identical control to width/height (buildField → ctrlLength: knob slider +
+      // numeric input + unit dropdown); just relabel to the side.
+      const field = buildField(row, i, p);
+      const lbl = field.querySelector('.pp-field-label');
+      if (lbl) { lbl.textContent = short; lbl.title = name; }
+      sec.appendChild(field);
+    });
+    return sec;
+  }
+
+  // "User Added" — a searchable picker to add ANY CSS property (even ones the
+  // detected list omits, e.g. `padding`/`gap`/`aspect-ratio`). Added fields reuse
+  // buildField, so they apply live and ride along in the message like the rest.
+  function appendUserAddedSection(row, i, body) {
+    const wrap = el('div', 'pp-section pp-ua-wrap');
+    wrap.appendChild(el('div', 'pp-section-title', 'User Added'));
+    const fields = el('div', 'pp-ua-fields');
+    wrap.appendChild(fields);
+    [...(row.userAdded || [])].forEach(name => {
+      const p = (row.item.cssProps || []).find(x => x.name === name);
+      if (p) fields.appendChild(buildField(row, i, p));
+    });
+    const combo = el('div', 'pp-ua-combo');
+    const input = el('input', 'pp-ua-input'); input.type = 'text'; input.placeholder = 'add a CSS property…'; input.spellcheck = false; input.autocomplete = 'off';
+    const menu = el('div', 'pp-ua-menu');
+    combo.append(input, menu);
+    wrap.appendChild(combo);
+    body.appendChild(wrap);
+
+    function addField(prop) {
+      prop = (prop || '').trim().toLowerCase();
+      if (!prop || !/^-?[a-z-]+$/.test(prop)) return;
+      if (!row.userAdded) row.userAdded = new Set();
+      if (row.userAdded.has(prop)) { input.value = ''; menu.style.display = 'none'; return; }
+      let p = (row.item.cssProps || []).find(x => x.name === prop);
+      if (!p) { p = { name: prop, value: '' }; (row.item.cssProps = row.item.cssProps || []).push(p); }
+      row.userAdded.add(prop);
+      const field = buildField(row, i, p);
+      fields.appendChild(field);
+      input.value = ''; menu.style.display = 'none';
+      const ctl = field.querySelector('input, select');
+      if (ctl) { ctl.focus(); if (ctl.select) ctl.select(); }
+    }
+    function renderMenu() {
+      const q = input.value.trim().toLowerCase();
+      const have = new Set((row.item.cssProps || []).map(p => p.name));
+      const matches = ALL_CSS_PROPS.filter(p => !have.has(p) && (!q || p.indexOf(q) !== -1)).slice(0, 50);
+      menu.innerHTML = '';
+      if (!matches.length) { menu.appendChild(el('div', 'pp-ua-empty', 'no matching property')); menu.style.display = 'block'; return; }
+      matches.forEach((p, k) => {
+        const it = el('div', 'pp-ua-item' + (k === 0 ? ' active' : ''), p);
+        it.dataset.prop = p;
+        it.addEventListener('mousedown', e => { e.preventDefault(); addField(p); });   // mousedown beats input blur
+        menu.appendChild(it);
+      });
+      menu.style.display = 'block';
+    }
+    input.addEventListener('focus', renderMenu);
+    input.addEventListener('input', renderMenu);
+    input.addEventListener('blur', () => setTimeout(() => { menu.style.display = 'none'; }, 150));
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      const list = [...menu.querySelectorAll('.pp-ua-item')];
+      const active = menu.querySelector('.pp-ua-item.active');
+      if (e.key === 'Enter') { e.preventDefault(); addField((active && active.dataset.prop) || input.value); }
+      else if (e.key === 'Escape') { menu.style.display = 'none'; }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!list.length) return;
+        let idx = list.indexOf(active);
+        idx = e.key === 'ArrowDown' ? Math.min(list.length - 1, idx + 1) : Math.max(0, idx - 1);
+        list.forEach(x => x.classList.remove('active'));
+        list[idx].classList.add('active'); list[idx].scrollIntoView({ block: 'nearest' });
+      }
+    });
   }
 
   // ── full drawer list ──────────────────────────────────────────
@@ -5824,7 +5984,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function open(items, tool) {
     clearPickMode();
     if (tool) titleEl.textContent = tool;
-    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {}, states: new Set() }));   // single selection → open by default
+    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {}, states: new Set(), userAdded: new Set() }));   // single selection → open by default
     structuralExpanded = !rows.some(r => !r.item.structural);   // if nothing paint-y was found, show the containers by default
     clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
@@ -5856,7 +6016,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       // props are marked current-value context so the agent doesn't "apply" them.
       const selectedCSS = (it.cssProps || []).filter(p => r.checked.has(p.name)).map(p => {
         const nv = r.mods[p.name];
-        return nv !== undefined ? `${p.name}: ${p.value} → ${nv}` : `${p.name}: ${p.value}   (current)`;
+        if (nv !== undefined) return p.value ? `${p.name}: ${p.value} → ${nv}` : `${p.name}: ${nv}`;   // user-added props have no prior value
+        return `${p.name}: ${p.value}   (current)`;
       });
       return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector, reactComponent: it.reactComponent, tag: it.tag, rect: it.rect, debugSource: it.debugSource, selectedCSS };
     });

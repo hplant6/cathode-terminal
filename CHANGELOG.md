@@ -7,7 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Separate notification sound for permission requests.** A permission ask (run a command, edit a file, etc.) now plays its own mellow cue, distinct from the agent-message sound (and no longer doubles up with it). Both respect the master notification-sounds toggle.
 - **Box/Lasso tool: "User Added" CSS properties.** Each selected element's drawer now has a **User Added** section with a searchable property picker, so you can add *any* CSS property — even ones the detected list omits (e.g. `padding`/`margin` on an element that currently has none, which were filtered out). Pick a property, type a value (applies live, arrow-keys to nudge numbers), and it's included in the edits sent to the agent.
+- **Box/Lasso tool: always-present Padding controls.** Every element's drawer now has a **Padding** section (Top/Right/Bottom/Left) styled exactly like the Width/Height properties, shown even when padding is 0 (it was omitted from the detected list before).
+- **Sticky user-message header in chat.** The current turn's question pins to the top of the chat as a header and switches as you scroll between turns — click it to jump back to that message. Keeps the question visible when a turn buries the chat in tool cards and diffs.
+
+### Changed
+- **Permission prompts are now an anchored modal, not chat scroll.** Approval prompts float just above the working-status bar (clear of the tool rail) instead of scrolling away in the chat, fade/slide in, and stack (one shown at a time) so they can't get buried under terminal commands and code changes.
 
 ### Fixed
 - **Right-click on a misspelled word now offers spelling suggestions.** The composer (and every spellchecked input) underlined misspellings but its context menu only had Cut/Copy/Paste — now it lists the dictionary suggestions (click to replace) plus "Add to Dictionary", above the edit actions.
