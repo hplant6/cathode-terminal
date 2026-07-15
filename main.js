@@ -432,7 +432,7 @@ function createWindow() {
     "::-webkit-scrollbar-button:single-button:horizontal:decrement { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='8,3 5,6 8,9'/></svg>\"); }",
     "::-webkit-scrollbar-button:single-button:horizontal:increment { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='5,3 8,6 5,9'/></svg>\"); }",
   ].join('\n');
-  browserView.webContents.on('did-finish-load', () => { browserView.webContents.insertCSS(WF_SCROLLBAR_CSS).catch(() => {}); });
+  browserView.webContents.on('did-finish-load', () => { browserView.webContents.insertCSS(WF_SCROLLBAR_CSS).catch(() => {}); installHoverTracker(browserView); });
 
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();
@@ -503,10 +503,22 @@ function createWindow() {
   // ── Context menu: main renderer (address bar, inputs, terminal) ───
   mainWindow.webContents.on('context-menu', (_, p) => {
     const tpl = [];
+    // Spelling suggestions for a misspelled word under the cursor (the underline
+    // was showing, but the fix suggestions were never offered).
+    if (p.misspelledWord) {
+      if (p.dictionarySuggestions && p.dictionarySuggestions.length) {
+        for (const s of p.dictionarySuggestions) tpl.push({ label: s, click: () => mainWindow.webContents.replaceMisspelling(s) });
+      } else {
+        tpl.push({ label: 'No spelling suggestions', enabled: false });
+      }
+      tpl.push({ type: 'separator' });
+      tpl.push({ label: 'Add to Dictionary', click: () => mainWindow.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+      tpl.push({ type: 'separator' });
+    }
     if (p.editFlags.canCut)    tpl.push({ label: 'Cut',        role: 'cut'       });
     if (p.selectionText || p.editFlags.canCopy) tpl.push({ label: 'Copy', role: 'copy' });
     if (p.editFlags.canPaste)  tpl.push({ label: 'Paste',      role: 'paste'     });
-    if (tpl.length)            tpl.push({ type: 'separator' });
+    if (tpl.length && tpl[tpl.length - 1].type !== 'separator') tpl.push({ type: 'separator' });
     tpl.push(                  { label: 'Select All',          role: 'selectAll' });
     if (tpl.length > 1) Menu.buildFromTemplate(tpl).popup({ window: mainWindow });
   });
@@ -658,6 +670,7 @@ function createPanelView(url) {
   // Rounded container, matching the browser view (Figma / Storybook / URL pop-outs).
   if (typeof view.setBorderRadius === 'function') view.setBorderRadius(22);
   attachShortcutHandler(view.webContents);
+  view.webContents.on('did-finish-load', () => installHoverTracker(view));   // screenshot hover-preservation (Storybook/Figma/pop-outs)
   view.webContents.loadURL(url).catch(() => {});
   return view;
 }
@@ -3064,8 +3077,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'New Window',         click: act('new-window') },
     { label: 'Reload App',         click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reloadIgnoringCache(); } },
     { type: 'separator' },
-    { label: 'Report a Performance Issue…', click: act('perf-report') },
-    { label: 'Report an Issue…',   click: () => { shell.openExternal('https://github.com/hplant6/cathode-terminal/issues/new').catch(() => {}); } },
+    { label: 'Report an Issue…', click: act('perf-report') },
     { label: 'About Cathode',      click: act('about') },
   ]);
   const p = pos || {};   // a missing pos → popup at the default (cursor) position
@@ -3129,9 +3141,9 @@ ipcMain.handle(IPC.PERF_REPORT_COLLECT, async (_, { sampleMs } = {}) => {
   return perfSummaryMarkdown(d);
 });
 ipcMain.on(IPC.PERF_REPORT_OPEN, (_, { description = '', summary = '' } = {}) => {
-  const title = 'Performance: ' + (description.split('\n')[0] || 'macOS slowdown').slice(0, 70);
-  const body = `### What's slow\n${description.trim() || '_(add detail: when it happens, what you were doing)_'}\n\n${summary}`;
-  const url = 'https://github.com/hplant6/cathode-terminal/issues/new?labels=performance'
+  const title = (description.split('\n')[0] || 'Issue report').slice(0, 70);
+  const body = `### What happened\n${description.trim() || '_(add detail: what you did, what you expected, steps to reproduce)_'}\n\n${summary}`;
+  const url = 'https://github.com/hplant6/cathode-terminal/issues/new?labels=bug'
     + '&title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
   shell.openExternal(url).catch(() => {});
 });
@@ -3474,11 +3486,67 @@ ipcMain.on(IPC.EXTRACT_PANEL_CANCEL, async () => {
   uiSend(IPC.PICK_CANCELLED);
 });
 
+// ── Hover preservation for the screenshot tool ────────────────────
+// The tool is launched from the app toolbar, so by the time it fires the pointer
+// has already left the page and the element's :hover has cleared. A tiny always-on
+// tracker (installed per page load) remembers the last element under the pointer;
+// on capture we force :hover on it + its ancestors via CDP so a hover interaction
+// can actually be screenshotted.
+const HOVER_TRACKER = `(function(){
+  if (window.__cathodeHoverInstalled) return;
+  window.__cathodeHoverInstalled = true;
+  window.__cathodeHoverEl = null;
+  document.addEventListener('mouseover', function(e){ window.__cathodeHoverEl = e.target; }, true);
+})();`;
+function installHoverTracker(view) {
+  if (!view || view.webContents.isDestroyed()) return;
+  view.webContents.executeJavaScript(HOVER_TRACKER).catch(() => {});
+}
+async function screenshotForceHover(view) {
+  if (devToolsView || !view || view.webContents.isDestroyed()) return null;   // one CDP client only
+  let count = 0;
+  try {
+    // Tag the last-hovered element + its ancestors (hover styles can live on either).
+    count = await view.webContents.executeJavaScript(`(function(){
+      var el = window.__cathodeHoverEl, out = [];
+      while (el && el.nodeType === 1 && el !== document.documentElement) { out.push(el); el = el.parentElement; }
+      out.forEach(function(e,i){ e.setAttribute('data-cathode-hover', String(i)); });
+      return out.length;
+    })()`);
+  } catch (_) { return null; }
+  if (!count) return null;
+  const dbg = view.webContents.debugger;
+  try { dbg.attach('1.3'); } catch (_) {}   // no-op if already attached
+  const forced = [];
+  try {
+    await dbg.sendCommand('DOM.enable');
+    await dbg.sendCommand('CSS.enable');
+    const { root } = await dbg.sendCommand('DOM.getDocument', { depth: 0 });
+    for (let i = 0; i < count; i++) {
+      try {
+        const r = await dbg.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: '[data-cathode-hover="' + i + '"]' });
+        if (r.nodeId) { await dbg.sendCommand('CSS.forcePseudoState', { nodeId: r.nodeId, forcedPseudoClasses: ['hover'] }); forced.push(r.nodeId); }
+      } catch (_) {}
+    }
+  } catch (e) { console.log('[screenshot] hover force failed:', (e && e.message) || e); }
+  return forced.length ? forced : null;
+}
+async function screenshotClearHover(view, forced) {
+  if (!view || view.webContents.isDestroyed()) return;
+  try {
+    const dbg = view.webContents.debugger;
+    if (forced) for (const nodeId of forced) { try { await dbg.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] }); } catch (_) {} }
+  } catch (_) {}
+  try { await view.webContents.executeJavaScript(`document.querySelectorAll('[data-cathode-hover]').forEach(function(e){ e.removeAttribute('data-cathode-hover'); });`); } catch (_) {}
+}
+
 // ── IPC: screenshot ───────────────────────────────────────────────
 ipcMain.on(IPC.PICK_SCREENSHOT, async () => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
+  let forcedHover = null;
   try {
+    forcedHover = await screenshotForceHover(view);   // keep the hovered element's :hover through capture
     // Phase 1: user draws the capture region
     const sel = await view.webContents.executeJavaScript(getScreenshotScript());
     if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }
@@ -3506,6 +3574,8 @@ ipcMain.on(IPC.PICK_SCREENSHOT, async () => {
   } catch (err) {
     console.error('Screenshot error:', err);
     uiSend(IPC.PICK_CANCELLED);
+  } finally {
+    if (forcedHover) await screenshotClearHover(view, forcedHover);
   }
 });
 

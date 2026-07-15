@@ -737,8 +737,35 @@ function finishModelSwitch(s) {
   if (!s || !s._modelToast) return;
   s._modelToast.dismiss();
   s._modelToast = null;
-  showToast(`Model: ${s._pendingModelLabel || ''}`.trim(), { duration: 1800 });
+  showToast(s._pendingClear ? 'Session cleared' : `Model: ${s._pendingModelLabel || ''}`.trim(), { duration: 1800 });
   s._pendingModelLabel = null;
+  s._pendingClear = false;
+}
+
+// Clear/reset a session — start a fresh conversation, keeping the current model.
+// (Model switching was previously the only way to reset an ACP session.)
+function clearSession(s) {
+  s = s || sessions.get(activeId);
+  if (!s) return;
+  if (s._modelToast) s._modelToast.dismiss();
+  s._modelToast = showToast('Clearing session…', { spinner: true });
+  s._pendingClear = true;
+  if (s.type === 'acp') {
+    // Restart the adapter with the same model → new conversation; wipe the chat.
+    acpFinalizeStream(s);                                   // close any in-flight bubble
+    s.streamEl = null; s.streamTextEl = null; s.streamMsgId = null;
+    clearTimeout(s._trailingTimer); s._trailingWork = false;
+    if (s.msgsEl) s.msgsEl.innerHTML = '';                  // banner re-renders on ACP_READY
+    acpSetStatus(s, 'connecting');
+    if (s.statusTextEl) s.statusTextEl.textContent = 'Clearing session…';
+    ipcRenderer.send(IPC.ACP_KILL, { id: s.id });
+    ipcRenderer.send(IPC.ACP_SPAWN, { id: s.id, model: s.model, agent: s.agent });
+  } else {
+    s.term.clear();
+    ipcRenderer.send(IPC.PTY_RESTART, { id: s.id, command: s.command });
+    const myToast = s._modelToast;
+    setTimeout(() => { if (s._modelToast === myToast) finishModelSwitch(s); }, PTY_MODEL_SWITCH_SETTLE_MS);
+  }
 }
 
 // ── Usage panel ───────────────────────────────────────────────────
@@ -3488,7 +3515,8 @@ async function openAboutModal() {
   aboutModalCtl.open();
 }
 
-// ── Report a Performance Issue modal (Settings → Report a Performance Issue) ──
+// ── Report an Issue modal (Settings → Report an Issue) — collects diagnostics
+// (incl. an optional CPU capture for slowness) and opens a pre-filled GitHub issue ──
 let openPerfReportModal = null;
 (function initPerfReport() {
   const modal = document.getElementById('perf-report-modal');
@@ -4282,6 +4310,12 @@ function openTabSettingsMenu(btn, s) {
     menu.appendChild(parent);
     menu.appendChild(sub);
   }
+
+  // Clear/reset — fresh conversation, keeping the current model (no model change needed).
+  const sep = document.createElement('div');
+  sep.className = 'tab-settings-sep';
+  menu.appendChild(sep);
+  mkItem('Clear session', () => { if (s.id !== activeId) switchSession(s.id); clearSession(s); });
 
   document.body.appendChild(menu);
   const r = btn.getBoundingClientRect();

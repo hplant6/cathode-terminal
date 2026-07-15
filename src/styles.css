@@ -2440,6 +2440,7 @@ html, body {
 .tab-settings-submenu { display: flex; flex-direction: column; }
 .tab-settings-submenu[hidden] { display: none; }
 .tab-settings-sub { padding-left: 26px; font-size: 11.5px; }      /* indented model rows */
+.tab-settings-sep { height: 1px; margin: 4px 6px; background: var(--spec-structural); }   /* shade 3 divider */
 
 /* ── Mode switch ── */
 #mode-switch {

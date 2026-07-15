@@ -640,6 +640,16 @@ function cathodeCombinedPage(OPTS) {
     const expandedSet = new Set();
     const checkedCSS   = {}; // { [itemIndex]: Set<propName> }
     const modifiedProps = {}; // { [itemIndex]: { [propName]: newValue } }
+    const userAdded    = {}; // { [itemIndex]: Set<propName> } — props the user added by hand
+    // Every CSS property the browser knows, for the "User Added" property picker.
+    const ALL_CSS_PROPS = (() => {
+      try {
+        const cs = getComputedStyle(document.documentElement);
+        const names = [];
+        for (let i = 0; i < cs.length; i++) { const n = cs[i]; if (n && n.indexOf('--') !== 0) names.push(n); }
+        return names.sort();
+      } catch (e) { return []; }
+    })();
     let cpEl = null, cpIro = null;
     let cpSyncing = false, cpBuilt = false, cpMode = 'hex';
     let cpCurrentApply = null, cpCurrentSwatch = null;
@@ -925,7 +935,7 @@ function cathodeCombinedPage(OPTS) {
         const isOpen = expandedSet.has(i);
         const checked = checkedCSS[i] || new Set();
         const mods    = modifiedProps[i] || {};
-        const cssRows = (item.cssProps || []).map(p => `
+        const rowHtml = (p) => `
           <label class="css-row">
             <input class="css-cb" type="checkbox" data-i="${i}" data-prop="${esc(p.name)}" ${checked.has(p.name) ? 'checked' : ''} />
             <span class="prop-name">${esc(p.name)}</span>
@@ -935,7 +945,22 @@ function cathodeCombinedPage(OPTS) {
                   data-i="${i}" data-prop="${esc(p.name)}" data-orig="${esc(p.value)}"
                   title="Click to edit">${esc(mods[p.name] !== undefined ? mods[p.name] : p.value)}</span>
           </label>
-        `).join('');
+        `;
+        const uaSet   = userAdded[i] || new Set();
+        const allP    = item.cssProps || [];
+        const cssRows = allP.filter(p => !uaSet.has(p.name)).map(rowHtml).join('');
+        const uaRows  = allP.filter(p =>  uaSet.has(p.name)).map(rowHtml).join('');
+        // "User Added" section — add any CSS property (e.g. padding on a 0-padding
+        // element, which the detected list omits) via a searchable picker.
+        const uaSection = `
+          <div class="ua-section">
+            <div class="ua-title">User Added</div>
+            ${uaRows ? '<div class="ua-rows">' + uaRows + '</div>' : ''}
+            <div class="ua-combo">
+              <input class="ua-input" type="text" data-i="${i}" placeholder="add a CSS property…" autocomplete="off" spellcheck="false" />
+              <div class="ua-menu" data-i="${i}"></div>
+            </div>
+          </div>`;
 
         if (aiDevMode) {
           return `
@@ -957,7 +982,8 @@ function cathodeCombinedPage(OPTS) {
             </div>
             <div class="drawer-body" data-i="${i}" style="display:${isOpen ? 'block' : 'none'}">
               ${cssRows ? '<div class="search-wrap"><input class="css-search" type="text" placeholder="filter…" data-i="' + i + '" autocomplete="off" spellcheck="false" /></div>' : ''}
-              ${cssRows || '<div class="no-css">no CSS properties</div>'}
+              ${cssRows || '<div class="no-css">no detected CSS properties</div>'}
+              ${uaSection}
             </div>
           </div>
         `;
@@ -1084,6 +1110,31 @@ function cathodeCombinedPage(OPTS) {
             pointer-events: all; user-select: text;
           }
           .no-css { padding: 7px 26px; font-size: 11px; color: #2a2a2a; font-style: italic; }
+          /* User Added section — searchable property picker */
+          .ua-section { border-top: 1px solid #161616; margin-top: 2px; padding: 5px 0 8px; }
+          .ua-title {
+            font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
+            font-size: 9px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase;
+            color: #6a6a6a; padding: 4px 12px 2px;
+          }
+          .ua-rows { border-bottom: 1px solid #0f0f0f; }
+          .ua-combo { position: relative; padding: 5px 12px 0; }
+          .ua-input {
+            width: 100%; background: #040404; border: 1px solid #1e1e1e; border-radius: 4px;
+            color: #bbb; font-family: 'Consolas','Cascadia Code','Courier New',monospace; font-size: 11px;
+            padding: 4px 8px; outline: none; pointer-events: all; user-select: text;
+          }
+          .ua-input::placeholder { color: #333; }
+          .ua-input:focus { border-color: #2a2a2a; }
+          .ua-menu {
+            position: absolute; left: 12px; right: 12px; top: 100%;
+            max-height: 180px; overflow-y: auto; z-index: 6; display: none;
+            background: #0c0c0c; border: 1px solid #222; border-radius: 4px; margin-top: 2px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.85);
+          }
+          .ua-menu-item { padding: 4px 9px; font-family: 'Consolas','Cascadia Code','Courier New',monospace; font-size: 11px; color: #aaa; cursor: pointer; }
+          .ua-menu-item:hover, .ua-menu-item.active { background: #161616; color: #fff; }
+          .ua-menu-empty { padding: 5px 9px; font-family: system-ui,-apple-system,'Segoe UI',sans-serif; font-size: 10px; color: #444; }
           .inst-title {
             font-family: system-ui,-apple-system,'Segoe UI',sans-serif;
             font-size: 10px; font-weight: 800;
@@ -1443,6 +1494,66 @@ function cathodeCombinedPage(OPTS) {
         });
       });
 
+      // ── User Added: searchable CSS-property picker ──────────────
+      function addUserProp(i, prop) {
+        prop = (prop || '').trim().toLowerCase();
+        if (!prop || !/^[a-z-]+$/.test(prop)) return;
+        if (!userAdded[i]) userAdded[i] = new Set();
+        if (!(items[i].cssProps || []).some(p => p.name === prop)) {
+          let cur = '';
+          try { cur = getComputedStyle(items[i].el).getPropertyValue(prop) || ''; } catch (e) {}
+          items[i].cssProps = items[i].cssProps || [];
+          items[i].cssProps.push({ name: prop, value: cur });
+        }
+        userAdded[i].add(prop);
+        expandedSet.add(i);   // keep the drawer open
+        build();
+        // Open the value editor for the freshly added property so the user can type it.
+        const span = shadow.querySelector('.ua-rows .prop-value[data-i="' + i + '"][data-prop="' + prop + '"]');
+        if (span) span.click();
+      }
+      shadow.querySelectorAll('.ua-input').forEach(input => {
+        const i = parseInt(input.dataset.i);
+        const menu = shadow.querySelector('.ua-menu[data-i="' + i + '"]');
+        const renderMenu = () => {
+          const q = input.value.trim().toLowerCase();
+          const have = new Set((items[i].cssProps || []).map(p => p.name));
+          const matches = ALL_CSS_PROPS.filter(p => !have.has(p) && (!q || p.indexOf(q) !== -1)).slice(0, 50);
+          menu.innerHTML = matches.length
+            ? matches.map((p, k) => '<div class="ua-menu-item' + (k === 0 ? ' active' : '') + '" data-prop="' + p + '">' + p + '</div>').join('')
+            : '<div class="ua-menu-empty">no matching property</div>';
+          menu.style.display = 'block';
+        };
+        input.addEventListener('mousedown', e => e.stopPropagation());
+        input.addEventListener('focus', renderMenu);
+        input.addEventListener('input', renderMenu);
+        input.addEventListener('blur', () => setTimeout(() => { menu.style.display = 'none'; }, 160));
+        input.addEventListener('keydown', e => {
+          e.stopPropagation();
+          const items_ = [...menu.querySelectorAll('.ua-menu-item')];
+          const active = menu.querySelector('.ua-menu-item.active');
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addUserProp(i, (active && active.dataset.prop) || input.value);
+          } else if (e.key === 'Escape') {
+            menu.style.display = 'none';
+          } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!items_.length) return;
+            let idx = items_.indexOf(active);
+            idx = e.key === 'ArrowDown' ? Math.min(items_.length - 1, idx + 1) : Math.max(0, idx - 1);
+            items_.forEach(el => el.classList.remove('active'));
+            items_[idx].classList.add('active');
+            items_[idx].scrollIntoView({ block: 'nearest' });
+          }
+        });
+        menu.addEventListener('mousedown', e => e.stopPropagation());
+        menu.addEventListener('click', e => {
+          const it = e.target.closest('.ua-menu-item');
+          if (it && it.dataset.prop) addUserProp(i, it.dataset.prop);
+        });
+      });
+
       // ── X buttons ───────────────────────────────────────────────
       shadow.querySelectorAll('.el-x').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1451,17 +1562,20 @@ function cathodeCombinedPage(OPTS) {
           const i = parseInt(btn.dataset.i);
           items.splice(i, 1);
           // Re-index state after splice
-          const newChecked = {}, newMods = {}, newExpanded = new Set();
+          const newChecked = {}, newMods = {}, newUser = {}, newExpanded = new Set();
           items.forEach((_, ni) => {
             const oi = ni >= i ? ni + 1 : ni;
             if (checkedCSS[oi])    newChecked[ni] = checkedCSS[oi];
             if (modifiedProps[oi]) newMods[ni]    = modifiedProps[oi];
+            if (userAdded[oi])     newUser[ni]    = userAdded[oi];
             if (expandedSet.has(oi)) newExpanded.add(ni);
           });
           for (const k in checkedCSS)    delete checkedCSS[k];
           for (const k in modifiedProps) delete modifiedProps[k];
+          for (const k in userAdded)     delete userAdded[k];
           Object.assign(checkedCSS, newChecked);
           Object.assign(modifiedProps, newMods);
+          Object.assign(userAdded, newUser);
           expandedSet.clear();
           newExpanded.forEach(n => expandedSet.add(n));
           if (items.length === 0) { done(null); return; }

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Box/Lasso tool: "User Added" CSS properties.** Each selected element's drawer now has a **User Added** section with a searchable property picker, so you can add *any* CSS property — even ones the detected list omits (e.g. `padding`/`margin` on an element that currently has none, which were filtered out). Pick a property, type a value (applies live, arrow-keys to nudge numbers), and it's included in the edits sent to the agent.
+
+### Fixed
+- **Right-click on a misspelled word now offers spelling suggestions.** The composer (and every spellchecked input) underlined misspellings but its context menu only had Cut/Copy/Paste — now it lists the dictionary suggestions (click to replace) plus "Add to Dictionary", above the edit actions.
+- **Screenshot tool now preserves the `:hover` state.** Launching the tool moved the pointer off the page (to the toolbar button), so the element's hover cleared before you could capture it. A lightweight per-page tracker remembers the last-hovered element, and on capture Cathode force-holds its `:hover` (and its ancestors') via CDP through the region selection and snapshot — so you can actually screenshot a hover interaction. (CSS `:hover` styles; JS-driven hover menus still can't be frozen. No effect when DevTools is open, since it holds the debugger.)
+
+### Added
+- **Clear session** in the agent-tab kebab menu — starts a fresh conversation while **keeping the current model**. Previously the only way to reset an ACP session was to switch models; now you can clear without changing anything. Restarts the adapter with the same model and wipes the chat (the banner re-renders on reconnect); for terminal sessions it restarts the command.
+
 ## [1.0.35] - 2026-07-14
 
 ### Changed
