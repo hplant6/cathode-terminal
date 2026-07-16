@@ -128,6 +128,71 @@ function cathodeCombinedPage(OPTS) {
     return cssSelector;
   }
 
+  // ── Identity markers ────────────────────────────────────────────
+  // The agent's job is to find this element in SOURCE, so everything here is chosen to be
+  // greppable: attributes verbatim, the opening tag as a literal string to match, and a
+  // unique DOM path for when nothing else pins the element down. `cssSelector` alone is
+  // tag#id.class1.class2 — rarely unique, which is why the agent ends up hunting.
+  const TEST_ATTRS = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa', 'data-automation-id', 'data-pw'];
+  const NAMED_ATTRS = ['role', 'aria-label', 'aria-labelledby', 'name', 'type', 'href', 'alt', 'placeholder', 'title', 'for'];
+
+  // The single best handle when present — a test id is usually a 1:1 grep hit in source.
+  function testId(el) {
+    for (const a of TEST_ATTRS) { const v = el.getAttribute(a); if (v) return a + '="' + v + '"'; }
+    return null;
+  }
+  // Every data-* (framework hints like data-component / data-sb-*) plus the semantic
+  // attributes. id/class/style are already carried by cssSelector and the CSS list.
+  function markers(el) {
+    const out = [];
+    for (const at of el.attributes) {
+      const n = at.name;
+      if (n === 'class' || n === 'style' || n === 'id') continue;
+      if (!n.startsWith('data-') && NAMED_ATTRS.indexOf(n) === -1) continue;
+      let v = (at.value || '').replace(/\s+/g, ' ').trim();
+      if (v.length > 60) v = v.slice(0, 59) + '…';
+      out.push(v ? n + '="' + v + '"' : n);
+    }
+    return out.slice(0, 12);
+  }
+  // The opening tag — one field carrying every attribute, and a literal string the agent
+  // can grep for directly. Built from .attributes rather than sliced out of outerHTML:
+  // outerHTML serializes the whole subtree, and this runs over every candidate element
+  // (including <body> in whole-page mode), which would cost the page dearly.
+  function openTag(el) {
+    let s = '<' + el.tagName.toLowerCase();
+    for (const at of el.attributes) {
+      let v = (at.value || '').replace(/\s+/g, ' ').trim();
+      if (v.length > 80) v = v.slice(0, 79) + '…';
+      s += ' ' + at.name + (v ? '="' + v + '"' : '');
+    }
+    s += '>';
+    return s.length > 300 ? s.slice(0, 299) + '…' : s;
+  }
+  // Unique-ish path. Stops at the first #id (unique by definition) and only spends an
+  // :nth-of-type where the tag is actually ambiguous among its siblings.
+  function domPath(el) {
+    const parts = [];
+    let node = el;
+    while (node && node.nodeType === 1 && parts.length < 6) {
+      const t = node.tagName.toLowerCase();
+      if (t === 'body' || t === 'html') break;
+      if (node.id) { parts.unshift('#' + CSS.escape(node.id)); break; }
+      const cls = typeof node.className === 'string'
+        ? node.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(c => '.' + CSS.escape(c)).join('')
+        : '';
+      let seg = t + cls;
+      const parent = node.parentElement;
+      if (parent) {
+        const sibs = Array.prototype.filter.call(parent.children, c => c.tagName === node.tagName);
+        if (sibs.length > 1) seg += ':nth-of-type(' + (sibs.indexOf(node) + 1) + ')';
+      }
+      parts.unshift(seg);
+      node = parent;
+    }
+    return parts.join(' > ');
+  }
+
   function getInfo(el) {
     if (!el) return null;
     const tag = el.tagName.toLowerCase();
@@ -139,22 +204,27 @@ function cathodeCombinedPage(OPTS) {
     const fk = Object.keys(el).find(k =>
       k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
     let reactName = null;
+    let reactPath = null;
     let debugSource = null;
     if (fk) {
       let fiber = el[fk];
-      while (fiber) {
+      // Collect the enclosing component chain, not just the nearest one — "LoginForm ›
+      // Button" localizes the file far better than a bare "Button" that could be anywhere.
+      const chain = [];
+      while (fiber && chain.length < 3) {
         if (fiber.type && typeof fiber.type === 'function') {
           const n = fiber.type.displayName || fiber.type.name || '';
           if (n && !/^[a-z]/.test(n) && n !== 'Component' && n !== 'Fragment') {
-            reactName = n;
-            if (fiber._debugSource) {
+            if (!chain.length && fiber._debugSource) {
               debugSource = { file: fiber._debugSource.fileName, line: fiber._debugSource.lineNumber };
             }
-            break;
+            chain.push(n);
           }
         }
         fiber = fiber.return;
       }
+      reactName = chain[0] || null;
+      if (chain.length > 1) reactPath = chain.slice().reverse().join(' › ');
     }
     const cssSelector = tag + id + (cls ? '.' + cls : '');
     const text = bestLabel(el, tag, cssSelector);
@@ -166,7 +236,9 @@ function cathodeCombinedPage(OPTS) {
     // Page-absolute box so the message can tell the agent WHERE on the page it is.
     const _r = el.getBoundingClientRect();
     const rect = { x: Math.round(_r.left + window.scrollX), y: Math.round(_r.top + window.scrollY), w: Math.round(_r.width), h: Math.round(_r.height) };
-    return { el, label, descriptor: describe(el, tag), cssSelector, reactComponent: reactName, tag, rect, debugSource };
+    return { el, label, descriptor: describe(el, tag), cssSelector, domPath: domPath(el),
+      openTag: openTag(el), testId: testId(el), markers: markers(el),
+      reactComponent: reactName, reactPath, tag, rect, debugSource };
   }
 
   let items;
@@ -600,8 +672,8 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, descriptor, cssSelector, reactComponent, tag, rect, debugSource, cssProps, structural }) =>
-      ({ label, descriptor, cssSelector, reactComponent, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural }));
+    const serial = items.map(({ label, descriptor, cssSelector, domPath, openTag, testId, markers, reactComponent, reactPath, tag, rect, debugSource, cssProps, structural }) =>
+      ({ label, descriptor, cssSelector, domPath, openTag, testId, markers: markers || [], reactComponent, reactPath, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural }));
     return Promise.resolve({ panel: true, items: serial });
   }
 

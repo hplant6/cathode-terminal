@@ -2537,6 +2537,10 @@ function acpSetStatus(s, state) {
   if (s.eq) { if (state === 'thinking' || state === 'connecting' || state === 'installing') s.eq.start(); else s.eq.stop(); }
   // Alerts: error (task-complete is covered by the per-message sound on finalize)
   if (state === 'error' && prev !== 'error') Notif.play('error');
+  // Drive the Changes tab: a new turn re-enables auto-follow + pulses the tab; when the
+  // turn ends, stop the pulse and do a final refresh so the diff reflects the end state.
+  if (state === 'thinking' && prev !== 'thinking') { window.__diffSetWorking?.(true); window.__diffUnpin?.(); }
+  if (prev === 'thinking' && state !== 'thinking') { window.__diffSetWorking?.(false); window.__diffPoke?.(); }
 }
 
 // Coalesced to one scroll per frame — streaming calls this per chunk, and an
@@ -3130,6 +3134,8 @@ function appendToolDiff(body, path, oldText, newText) {
     pre.appendChild(line);
   });
   block.appendChild(pre);
+  // The agent just wrote a diff → live-update the Changes tab, following this file.
+  try { window.__diffPoke?.(path); } catch (_) {}
 }
 // Render one tool-call `content` payload into a card body. Handles ACP's array or
 // single-object forms, diff blocks (edits) and text blocks (output). Returns true if
@@ -4707,6 +4713,7 @@ function activateViewTab(tabId, silent = false) {
   else window.__onCodeTabInactive?.();
   if (isConsole) window.__onConsoleTabActive?.();
   if (isDiff) window.__onDiffTabActive?.();
+  else window.__onDiffTabInactive?.();
   if (!silent) {
     const mode = tab.type === 'url' ? 'url:' + tab.url : tab.type;
     ipcRenderer.send(IPC.RIGHT_PANEL_MODE, mode);
@@ -4753,7 +4760,7 @@ function renderViewTabs() {
     btn.addEventListener('click', () => activateViewTab(tab.id));
     container.appendChild(btn);
   });
-  requestAnimationFrame(() => { alignTabIconGaps(); equalizeTabWidths(); updateViewTabThumb(); });
+  requestAnimationFrame(() => { alignTabIconGaps(); equalizeTabWidths(); updateViewTabThumb(); window.__diffRefreshTabDeco?.(); });
 }
 
 renderViewTabs();
@@ -6020,7 +6027,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         '<div class="pp-cp-panel" data-m="rgb" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>R</span><input data-c="r" type="number" min="0" max="255"/><span>G</span><input data-c="g" type="number" min="0" max="255"/><span>B</span><input data-c="b" type="number" min="0" max="255"/></div></div>' +
         '<div class="pp-cp-panel" data-m="hsl" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>H</span><input data-c="h" type="number" min="0" max="360"/><span>S</span><input data-c="s" type="number" min="0" max="100"/><span>L</span><input data-c="l" type="number" min="0" max="100"/></div></div>';
       document.body.appendChild(cpEl);
-      cpEl.querySelectorAll('.pp-cp-mode').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); setMode(b.dataset.m); }));
+      cpEl.querySelectorAll('.pp-cp-mode').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); setMode(b.dataset.m); place(); }));
       inputs = {
         hex: cpEl.querySelector('.pp-cp-hex'),
         r: cpEl.querySelector('[data-c=r]'), g: cpEl.querySelector('[data-c=g]'), b: cpEl.querySelector('[data-c=b]'),
@@ -6051,16 +6058,28 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       if (cpIro) { try { cpIro.off('color:change'); } catch (_) {} }
       document.removeEventListener('mousedown', onOutside, true);
     }
+    // Anchor the picker's BOTTOM-RIGHT corner at the swatch, i.e. grow up-and-left.
+    // These swatches sit at the right edge of the left-hand tool panel, so growing
+    // down-and-right runs the panel out over the native browser WebContentsView —
+    // which always paints above HTML, silently clipping the picker. Up-left keeps it
+    // inside the panel. Flip back only if there's genuinely no room to the left.
+    function place() {
+      if (!cpEl || !swatchEl) return;
+      const rect = swatchEl.getBoundingClientRect();
+      const GAP = 10;
+      const pw = cpEl.offsetWidth || 250, ph = cpEl.offsetHeight || 320;   // measured, not guessed
+      let left = rect.left - GAP - pw;
+      if (left < 8) left = Math.min(rect.right + GAP, window.innerWidth - pw - 8);
+      let top = rect.bottom - ph;
+      cpEl.style.left = Math.max(8, left) + 'px';
+      cpEl.style.top = Math.max(8, Math.min(top, window.innerHeight - ph - 8)) + 'px';
+    }
     function open(swatch, value, fn) {
       if (!built) build();
       swatchEl = swatch; applyFn = fn;
-      const rect = swatch.getBoundingClientRect();
-      const pw = 248, ph = 320;
-      let left = rect.right + 10;
-      if (left + pw > window.innerWidth) left = Math.max(8, rect.left - pw - 10);
-      const top = Math.max(8, Math.min(rect.top, window.innerHeight - ph - 10));
-      cpEl.style.left = left + 'px'; cpEl.style.top = top + 'px'; cpEl.style.display = 'block';
-      setMode(mode);
+      cpEl.style.display = 'block';
+      setMode(mode);   // before place() — mode decides the panel's height
+      place();
       setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
 
       const attach = () => cpIro.on('color:change', (color) => { if (syncing) return; sync(color); push(color.hexString); });
@@ -6079,6 +6098,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
           });
         } catch (_) { return; }
         attach(); sync(cpIro.color);
+        place();   // first open measured a picker-less box — re-place now that iro has height
       });
     }
     return { open, hide };
@@ -6124,7 +6144,10 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         if (nv !== undefined) return p.value ? `${p.name}: ${p.value} → ${nv}` : `${p.name}: ${nv}`;   // user-added props have no prior value
         return `${p.name}: ${p.value}   (current)`;
       });
-      return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector, reactComponent: it.reactComponent, tag: it.tag, rect: it.rect, debugSource: it.debugSource, selectedCSS };
+      return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector,
+      domPath: it.domPath, openTag: it.openTag, testId: it.testId, markers: it.markers,
+      reactComponent: it.reactComponent, reactPath: it.reactPath,
+      tag: it.tag, rect: it.rect, debugSource: it.debugSource, selectedCSS };
     });
   }
   function send() {
@@ -7355,6 +7378,32 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       updateCount();
     }
   }
+  // ── Staged send ── a send button no longer fires straight at the agent; it stages the
+  // log payload in the ask bar so the user can say what they actually want done with it.
+  const askBar = document.getElementById('console-ask');
+  const askLabel = document.getElementById('console-ask-label');
+  const askIn = document.getElementById('console-ask-input');
+  let pending = null;   // { detail, label, fallback, toast }
+
+  function autoGrowAsk() { askIn.style.height = 'auto'; askIn.style.height = askIn.scrollHeight + 'px'; }
+  function openAsk(p) {
+    pending = p;
+    askLabel.textContent = p.label;
+    askIn.value = p.fallback;
+    askBar.hidden = false;
+    autoGrowAsk();
+    askIn.focus(); askIn.select();   // pre-filled default is selected → typing replaces it
+  }
+  function closeAsk() { pending = null; askBar.hidden = true; askIn.value = ''; }
+  function sendAsk() {
+    if (!pending) return;
+    const { detail, label, fallback, toast } = pending;
+    const body = askIn.value.trim() || fallback;   // blank → fall back to the canned ask
+    const ok = routeToActiveSession(detail + '\n\n' + body, { body, detail, label });
+    showToast(ok ? toast : 'No active session', { duration: 1500 });
+    closeAsk();
+  }
+
   function sendOne(e) {
     let detail, body, label;
     if (e.kind === 'net') {
@@ -7368,8 +7417,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       body = 'Investigate and fix this.';
       label = `Console ${e.level}`;
     }
-    const text = detail + '\n\n' + body;   // full (log first, then the ask) → agent
-    showToast(routeToActiveSession(text, { body, detail, label }) ? 'Sent to chat' : 'No active session', { duration: 1500 });
+    openAsk({ detail, label, fallback: body, toast: 'Sent to chat' });
   }
 
   ipcRenderer.on(IPC.CONSOLE_ENTRY, (_, e) => add(e));
@@ -7383,7 +7431,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     });
   });
   document.getElementById('console-clear').addEventListener('click', () => {
-    entries = []; errCount = 0; ipcRenderer.send(IPC.CONSOLE_CLEAR); render();
+    entries = []; errCount = 0; ipcRenderer.send(IPC.CONSOLE_CLEAR); closeAsk(); render();
   });
   document.getElementById('console-send-errors').addEventListener('click', () => {
     const errs = entries.filter(isErr);
@@ -7393,9 +7441,19 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       if (e.kind === 'net') lines.push('• [request] ' + (e.method || 'GET') + ' ' + e.url + ' — ' + (e.error || ('HTTP ' + e.status)));
       else lines.push('• [console] ' + e.text + (e.source ? '  (' + shortSrc(e.source) + (e.line ? ':' + e.line : '') + ')' : ''));
     });
-    const detail = lines.join('\n');
-    const body = 'Investigate and fix these.';
-    showToast(routeToActiveSession(detail + '\n\n' + body, { body, detail, label: `Console errors · ${errs.length}` }) ? 'Sent ' + errs.length + ' to chat' : 'No active session', { duration: 1500 });
+    openAsk({
+      detail: lines.join('\n'),
+      label: `Console errors · ${errs.length}`,
+      fallback: 'Investigate and fix these.',
+      toast: 'Sent ' + errs.length + ' to chat',
+    });
+  });
+  document.getElementById('console-ask-send').addEventListener('click', sendAsk);
+  document.getElementById('console-ask-cancel').addEventListener('click', closeAsk);
+  askIn.addEventListener('input', autoGrowAsk);
+  askIn.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendAsk(); }   // Shift+Enter → newline
+    else if (ev.key === 'Escape') { ev.preventDefault(); closeAsk(); }
   });
   listEl.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.c-send'); if (!btn) return;
@@ -7419,6 +7477,10 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   let monaco = null, diffEditor = null, models = null;
   let files = [], selected = null;
   let reqToken = 0;   // guards against out-of-order diff-file responses
+  // Live-update state (Cursor-style): the tab refreshes in place as the agent edits.
+  let pollTimer = null, busy = false, queued = false, queuedFollow = null;
+  let selSig = '', lastCount = 0, userPinned = false, workCount = 0;
+  let pokeTimer = null, pokeFollow = null;
 
   const esc = escHtml;   // canonical helper (was a byte-identical local copy)
   const base = baseName;   // shared module-level helper (was a local duplicate)
@@ -7450,15 +7512,18 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     deleted:  { l: 'D', c: '#ef4444' },
     renamed:  { l: 'R', c: '#4a9eff' },
   };
-  function renderList() {
+  function renderList(changedRels) {
+    const top = listEl.scrollTop;   // preserve list scroll across live re-renders
     listEl.innerHTML = files.map((f, i) => {
       const m = SM[f.status] || SM.modified;
       const st = (f.added != null || f.deleted != null)
         ? '<span class="diff-stat"><span class="add">+' + (f.added || 0) + '</span><span class="del">−' + (f.deleted || 0) + '</span></span>' : '';
-      return '<div class="diff-file' + (selected && f.rel === selected.rel ? ' active' : '') + '" data-i="' + i + '">'
+      const flash = changedRels && changedRels.has(f.rel) ? ' diff-flash' : '';
+      return '<div class="diff-file' + (selected && f.rel === selected.rel ? ' active' : '') + flash + '" data-i="' + i + '">'
         + '<span class="diff-badge" style="color:' + m.c + ';border-color:' + m.c + '66">' + m.l + '</span>'
         + '<span class="diff-name" title="' + esc(f.rel) + '">' + esc(f.rel) + '</span>' + st + '</div>';
     }).join('');
+    listEl.scrollTop = top;
   }
   async function pickFolder() {
     const dir = await ipcRenderer.invoke(IPC.PICK_PROJECT_DIR).catch(() => null);
@@ -7489,9 +7554,14 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       emptyEl.appendChild(btn);
     }
   }
-  async function selectFile(f) {
+  async function selectFile(f, { preserveView = false, changedRels = null } = {}) {
     const token = ++reqToken;          // captured before any await (matches click order)
-    selected = f; renderList();
+    const prevRel = selected && selected.rel;
+    selected = f; renderList(changedRels);
+    const sig = f.rel + '|' + f.status + '|' + f.added + '|' + f.deleted;
+    // Same file, same diff shape, model already loaded → nothing to redraw. This is
+    // what keeps live refreshes from flickering the editor when only *other* files changed.
+    if (preserveView && prevRel === f.rel && sig === selSig && models) return;
     const ed = await ensureEditor();
     if (!ed) { showEmpty('no-git'); return; }
     if (token !== reqToken) return;    // superseded while Monaco loaded
@@ -7504,27 +7574,82 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     const lang = res && res.binary ? 'plaintext' : langFor(base(f.rel));
     const before = res && res.binary ? '(binary file)' : ((res && res.before) || '');
     const after  = res && res.binary ? '(binary file)' : ((res && res.after) || '');
+    // Same file being re-diffed (agent edited it again) → keep scroll/cursor in place.
+    const view = (preserveView && prevRel === f.rel && models) ? ed.saveViewState() : null;
     const orig = monaco.editor.createModel(before, lang);
     const mod  = monaco.editor.createModel(after, lang);
     ed.setModel({ original: orig, modified: mod });
+    if (view) { try { ed.restoreViewState(view); } catch (_) {} }
     ed.layout();
     if (models) { models.original.dispose(); models.modified.dispose(); }
     models = { original: orig, modified: mod };
+    selSig = sig;
   }
-  async function refresh() {
-    const res = await ipcRenderer.invoke(IPC.DIFF_STATUS);
-    if (!res || !res.ok) { files = []; selected = null; branchEl.textContent = ''; renderList(); showEmpty(res ? res.reason : 'not-git'); return; }
-    branchEl.textContent = res.branch || '';
-    files = res.files || [];
-    renderList();
-    if (!files.length) { selected = null; showEmpty('clean'); return; }
-    const keep = selected && files.find(f => f.rel === selected.rel);
-    selectFile(keep || files[0]);
+  const panelVisible = () => !!panel && getComputedStyle(panel).display !== 'none';
+  // ACP edit paths can be absolute (WSL) while git rel is repo-relative — match either.
+  const sameFile = (rel, p) => { const n = String(p || '').replace(/\\/g, '/'); return !!n && (n === rel || n.endsWith('/' + rel)); };
+
+  async function refresh({ followRel } = {}) {
+    if (busy) { queued = true; if (followRel) queuedFollow = followRel; return; }   // coalesce overlapping pokes
+    busy = true;
+    try {
+      const res = await ipcRenderer.invoke(IPC.DIFF_STATUS);
+      if (!res || !res.ok) {
+        files = []; selected = null; selSig = ''; lastCount = 0; applyBadge(); branchEl.textContent = '';
+        if (panelVisible()) { renderList(); showEmpty(res ? res.reason : 'not-git'); }
+        return;
+      }
+      branchEl.textContent = res.branch || '';
+      const prev = files;
+      files = res.files || [];
+      lastCount = files.length; applyBadge();   // badge tracks the count even when the tab isn't showing
+      // Which files changed since the last poll → row flash + follow target.
+      const changedRels = new Set();
+      files.forEach(f => { const p = prev.find(x => x.rel === f.rel); if (!p || p.added !== f.added || p.deleted !== f.deleted || p.status !== f.status) changedRels.add(f.rel); });
+      if (!panelVisible()) return;   // badge updated; skip all editor work while hidden
+      if (!files.length) { selected = null; selSig = ''; renderList(); showEmpty('clean'); return; }
+      // Keep the user's selection; only auto-follow the agent's edited file when unpinned.
+      let target = selected && files.find(f => f.rel === selected.rel);
+      if (!userPinned && followRel) { const ff = files.find(f => sameFile(f.rel, followRel)); if (ff) target = ff; }
+      if (!target) target = files[0];
+      const preserve = !!(selected && target.rel === selected.rel);
+      await selectFile(target, { preserveView: preserve, changedRels });
+    } finally {
+      busy = false;
+      if (queued) { queued = false; const f = queuedFollow; queuedFollow = null; refresh({ followRel: f }); }
+    }
   }
+
+  // Debounced external trigger — the ACP layer calls window.__diffPoke(editedPath) on
+  // every code-change diff and at turn end, plus a light visible-only fallback poll.
+  function poke(rel) { if (rel) pokeFollow = rel; clearTimeout(pokeTimer); pokeTimer = setTimeout(() => { const f = pokeFollow; pokeFollow = null; refresh({ followRel: f }); }, 350); }
+  function startPoll() { if (!pollTimer) pollTimer = setInterval(() => { if (panelVisible() && !document.hidden) refresh(); }, 2000); }
+  function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+  // Tab decorations (change-count badge + working pulse) — re-applied after renderViewTabs
+  // rebuilds the tab buttons, so they survive tab edits.
+  function diffTabBtn() {
+    const t = tabsConfig.find(x => x.type === 'diff'); if (!t) return null;
+    const id = (window.CSS && CSS.escape) ? CSS.escape(t.id) : t.id;
+    return document.querySelector('.view-tab[data-view="' + id + '"]');
+  }
+  function applyBadge() {
+    const btn = diffTabBtn(); if (!btn) return;
+    let b = btn.querySelector('.vt-badge');
+    if (!lastCount) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('span'); b.className = 'vt-badge'; btn.appendChild(b); }
+    b.textContent = lastCount > 99 ? '99+' : String(lastCount);
+  }
+  function applyWorking() { const btn = diffTabBtn(); if (btn) btn.classList.toggle('diff-working', workCount > 0); }
+
+  window.__diffPoke = poke;
+  window.__diffUnpin = () => { userPinned = false; };
+  window.__diffSetWorking = (on) => { workCount = Math.max(0, workCount + (on ? 1 : -1)); applyWorking(); };
+  window.__diffRefreshTabDeco = () => { applyBadge(); applyWorking(); };
 
   listEl.addEventListener('click', (e) => {
     const row = e.target.closest('.diff-file'); if (!row) return;
-    const f = files[+row.dataset.i]; if (f) selectFile(f);
+    const f = files[+row.dataset.i]; if (f) { userPinned = true; selectFile(f, { preserveView: false }); }   // manual pick pins until next turn
   });
   document.getElementById('diff-refresh').addEventListener('click', refresh);
   sendBtn.addEventListener('click', () => {
@@ -7543,7 +7668,8 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
       : 'No active session', { duration: 1500 });
   });
 
-  window.__onDiffTabActive = () => { refresh(); if (diffEditor) setTimeout(() => diffEditor.layout(), 0); };
+  window.__onDiffTabActive = () => { refresh(); startPoll(); if (diffEditor) setTimeout(() => diffEditor.layout(), 0); };
+  window.__onDiffTabInactive = () => { stopPoll(); };
 })();
 
 // Composite draw canvas over page screenshot in the renderer (has Canvas API)

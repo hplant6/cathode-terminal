@@ -929,6 +929,13 @@
             <button id="console-clear" title="Clear console">Clear</button>
           </div>
         </div>
+        <!-- Staged send — say what the agent should do before the errors go over -->
+        <div id="console-ask" hidden>
+          <span id="console-ask-label"></span>
+          <textarea id="console-ask-input" rows="1" placeholder="What should the agent do with this?"></textarea>
+          <button id="console-ask-send" title="Send to agent (Enter)">Send</button>
+          <button id="console-ask-cancel" title="Cancel (Esc)">Cancel</button>
+        </div>
         <div id="console-list"></div>
         <div id="console-empty">No output captured yet.<br>Interact with the page in <b>Browser</b> — console logs, errors, and failed requests appear here.</div>
       </div>

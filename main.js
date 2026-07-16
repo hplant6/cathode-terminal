@@ -3399,17 +3399,88 @@ function localAssetNote(items) {
     + '\n\nCopy each of these into the working project directory (e.g. an assets/ folder within the project) and update the url() references to point at the copied paths relative to the project.';
 }
 
+// ── Selection screenshot ─────────────────────────────────────────
+// Runs IN the page: outline + number each selected element, and report the union box to
+// capture. Numbers match the [n] markers in the text, so the agent can tie a described
+// element to what it actually looks like. Stringified into executeJavaScript — it must
+// not close over anything in main.js.
+function selectionOverlayScript(rects, id) {
+  const old = document.getElementById(id); if (old) old.remove();
+  const root = document.createElement('div');
+  root.id = id;
+  root.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  rects.forEach(function (r, i) {
+    // Rects are page-absolute; capturePage wants viewport coords.
+    const x = r.x - window.scrollX, y = r.y - window.scrollY;
+    if (x + r.w < 0 || y + r.h < 0 || x > vw || y > vh) return;   // scrolled out of frame
+    const o = document.createElement('div');
+    o.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid #ff5720;'
+      + 'box-shadow:0 0 0 1px rgba(0,0,0,.55);left:' + x + 'px;top:' + y + 'px;width:' + r.w + 'px;height:' + r.h + 'px';
+    const b = document.createElement('div');
+    b.textContent = String(i + 1);
+    b.style.cssText = 'position:fixed;box-sizing:border-box;min-width:18px;height:18px;padding:0 4px;'
+      + 'background:#ff5720;color:#fff;border-radius:3px;text-align:center;'
+      + 'font:700 12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;'
+      + 'left:' + x + 'px;top:' + Math.max(0, y - 20) + 'px';
+    root.appendChild(o); root.appendChild(b);
+    minX = Math.min(minX, x); minY = Math.min(minY, y - 20);
+    maxX = Math.max(maxX, x + r.w); maxY = Math.max(maxY, y + r.h);
+  });
+  document.documentElement.appendChild(root);
+  if (minX === Infinity) return null;   // every element off-screen — nothing worth shooting
+  const PAD = 24;
+  const x0 = Math.max(0, minX - PAD), y0 = Math.max(0, minY - PAD);
+  const x1 = Math.min(vw, maxX + PAD), y1 = Math.min(vh, maxY + PAD);
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+}
+const SEL_SHOT_ID = '__cathode_selection_shot__';
+async function clearSelectionOverlay(view) {
+  try {
+    await view.webContents.executeJavaScript(
+      `(function(){var e=document.getElementById(${JSON.stringify(SEL_SHOT_ID)});if(e)e.remove();return true;})()`);
+  } catch (_) {}
+}
+async function captureSelectionShot(view, items) {
+  const rects = (items || []).map(it => it.rect).filter(r => r && r.w > 0 && r.h > 0);
+  if (!rects.length) return null;
+  let box = null;
+  try {
+    box = await view.webContents.executeJavaScript(
+      `(${selectionOverlayScript})(${JSON.stringify(rects)},${JSON.stringify(SEL_SHOT_ID)})`);
+  } catch (_) { await clearSelectionOverlay(view); return null; }
+  if (!box || !box.w || !box.h) { await clearSelectionOverlay(view); return null; }
+  try {
+    const image = await view.webContents.capturePage({
+      x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.w), height: Math.round(box.h),
+    });
+    const dir = path.join(app.getPath('userData'), 'screenshots');
+    fs.mkdirSync(dir, { recursive: true });
+    const fp = path.join(dir, `selection-${Date.now()}.png`);
+    fs.writeFileSync(fp, image.toPNG());
+    return fp;
+  } catch (_) {
+    return null;
+  } finally {
+    await clearSelectionOverlay(view);   // never leave the marks on the user's page
+  }
+}
+
 ipcMain.on(IPC.PICK_PANEL_SEND, async (_, { instruction = '', items = [] } = {}) => {
   const p = pendingPanelPick;
   pendingPanelPick = null;
   if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   await clearPanelHighlight(p.view);
+  // Shoot before the picker tears down, while the page is still laid out exactly as it
+  // was when the rects were measured.
+  const shot = items.length ? await captureSelectionShot(p.view, items) : null;
   uiSend(IPC.PICK_CANCELLED);
   if (!items.length && !instruction.trim()) return;
   const note = localAssetNote(items);
   let pageUrl = ''; try { pageUrl = p.view.webContents.getURL(); } catch (_) {}   // the page being viewed
-  const text   = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction,      pageUrl }) + note;   // full → agent
-  const detail = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction: '',  pageUrl }) + note;   // CSS/DOM without the typed note → drawer
+  const text   = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction,      pageUrl, shot }) + note;   // full → agent
+  const detail = formatSourceMessage({ items, cssRefs: p.cssRefs || [], instruction: '',  pageUrl, shot }) + note;   // CSS/DOM without the typed note → drawer
   uiSend(IPC.PICK_SEND_TO_SESSION, { text, body: instruction.trim(), detail, label: 'Element Context' });
 });
 ipcMain.on(IPC.PICK_PANEL_CANCEL, async () => {
@@ -4233,7 +4304,7 @@ function renderExtract(key, data) {
   }
 }
 
-function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media = null, mediaSummary = null, pageUrl = null }) {
+function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media = null, mediaSummary = null, pageUrl = null, shot = null }) {
   // ── Extract mode: the app already read the live page; hand the agent the
   // actual data / downloaded files (it should NOT re-fetch — this is the
   // current DOM).
@@ -4292,23 +4363,38 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
 
   // ── Standard pick mode format ─────────────────────────────────────
   const lines = ['───── Selected Elements ─────'];
-  lines.push(`Live elements I picked in ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}. Find each element below by its selector and update it in the source code. A value shown as "prop: A → B" means change that property from A to B; lines marked "(current)" are context, not changes to make.`);
-
-  for (const item of items) {
+  lines.push(`Live elements I picked in ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}. Find each element below in the source code and update it. A value shown as "prop: A → B" means change that property from A to B; lines marked "(current)" are context, not changes to make.`);
+  lines.push('');
+  lines.push('To locate each element, use the strongest handle first: a test id (data-testid and friends) is usually a 1:1 match in source; the opening tag shown under each bullet is greppable as a literal string; the React component chain narrows the file. The selector on the bullet line itself is a display label and is often NOT unique — use the "path:" line to disambiguate in the DOM.');
+  if (shot) {
     lines.push('');
-    // Identity line: the CSS selector (tag#id.class) is the primary handle.
-    lines.push(`• ${item.cssSelector || item.label || 'element'}`);
+    lines.push(`Screenshot of the selection, each element outlined and numbered to match the list below: ${shot}`);
+    lines.push('Read that image to see what these elements actually look like and how they relate on the page.');
+  }
+
+  items.forEach((item, i) => {
+    lines.push('');
+    // Identity line: number ties the item to its outline in the screenshot.
+    lines.push(`• [${i + 1}] ${item.cssSelector || item.label || 'element'}`);
     const meta = [];
     if (item.descriptor) meta.push(item.descriptor);
     if (item.label && item.label !== item.cssSelector) meta.push(`“${item.label}”`);
-    if (item.reactComponent) meta.push(`<${item.reactComponent}>`);
+    if (item.testId) meta.push(item.testId);
+    if (item.reactPath) meta.push(`<${item.reactPath}>`);
+    else if (item.reactComponent) meta.push(`<${item.reactComponent}>`);
     if (item.rect) meta.push(`at (${item.rect.x}, ${item.rect.y}) on the page, ${item.rect.w}×${item.rect.h}px`);
     if (item.debugSource) meta.push(`source ${shortPath(item.debugSource.file)}:${item.debugSource.line}`);
     if (meta.length) lines.push(`    ${meta.join('  ·  ')}`);
+    if (item.openTag) lines.push(`    ${item.openTag}`);
+    if (item.domPath) lines.push(`    path: ${item.domPath}`);
+    // Only attributes the opening tag didn't already show — it's clipped at 300 chars,
+    // so a long class list can push the identifying attributes out of view.
+    const extra = (item.markers || []).filter(m => !item.openTag || item.openTag.indexOf(m.split('=')[0] + '=') === -1);
+    if (extra.length) lines.push(`    ${extra.join('  ·  ')}`);
     if (item.selectedCSS && item.selectedCSS.length > 0) {
       for (const css of item.selectedCSS) lines.push(`    ${css}`);
     }
-  }
+  });
 
   if (cssRefs.length > 0) {
     lines.push('');

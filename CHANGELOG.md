@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.38] - 2026-07-16
+
+### Added
+- **Changes tab updates live, like Cursor.** The tab now refreshes in place as the agent edits instead of only when you switch to it. Three signals drive it: every code change the agent writes (the view follows that file), the end of a turn (a final, accurate refresh), and a light 2-second poll while the tab is visible (so terminal commands, formatters, and git operations get picked up too). Refreshes are non-destructive — your selected file, scroll position, and cursor are preserved, and the diff editor is only rebuilt when the selected file's diff actually changed, so nothing flickers while other files update.
+- **Changes tab: live change-count badge.** The tab shows how many files have changed, updating even while you're on another tab, and pulses while a turn is running. A file's row flashes when its diff changes.
+- **Changes tab: auto-follow.** The tab jumps to the file the agent is currently editing. Each new turn re-enables following; clicking a file to inspect it pins the view so you don't get yanked away mid-read, until the next turn starts.
+- **Box/Lasso: a screenshot of your selection goes to the agent.** On send, each selected element is outlined and numbered in the live page, the region is captured, and the image is handed to the agent alongside the text — with the numbers matching the `[n]` markers in the element list, so the agent can see what each element actually looks like and how they relate on the page.
+- **Box/Lasso: far stronger element identification.** Selected elements previously carried only `tag#id.class` — rarely unique, which left the agent hunting through source. Each element now also passes any **test id** (`data-testid`, `data-test-id`, `data-test`, `data-cy`, `data-qa`, `data-automation-id`, `data-pw`), its **verbatim opening tag** with every attribute (greppable as a literal string), a **unique DOM path**, all other `data-*` and semantic attributes (`role`, `aria-label`, `name`, `type`, `href`, `alt`, `placeholder`, `title`, `for`), and the **enclosing React component chain** (e.g. `LoginForm › Button`) rather than just the nearest component.
+- **Console: send errors with your own message.** "Send errors to agent" no longer fires a canned "Investigate and fix these." — it opens a message bar (over the console toolbar) pre-filled with that default and pre-selected, so you can say what you actually want done. Enter sends, Shift+Enter adds a newline, Esc cancels. The per-row send buttons work the same way.
+
+### Fixed
+- **Color picker no longer gets clipped in the Box/Lasso and Lasso tools.** The picker opened to the *right* of the swatch, which pushed it out over the native browser view — and native views always paint above the app's HTML, so the picker was silently cut off. It now anchors its bottom-right corner at the swatch and grows up-and-left, staying inside the tool panel, and flips back only when there's genuinely no room. Its size is measured rather than assumed, so it re-places correctly once the picker loads and when switching HEX/RGB/HSL.
+- **Color picker's focused input uses shade 1** instead of orange.
+
 ## [1.0.37] - 2026-07-16
 
 ### Added
