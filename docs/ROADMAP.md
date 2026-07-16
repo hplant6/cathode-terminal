@@ -120,9 +120,11 @@ From hplan:
 - **d) Framework-aware Storybook scaffolding** — spin up a Storybook with shadcn / Tailwind /
   MUI / Chakra. Mostly an agent-driven scaffold recipe per framework + registering the result.
   Pairs with (a) and the Design-drift scanner (scaffold with tokens, then enforce them).
-- **e) Localhost server scanner** — list what's running on localhost (port → process → URL),
-  open in the Browser, or kill it. Quick win; solves the "zombie dev servers eating RAM" pain.
-  Uses the platform layer (`lsof`/`netstat`) + the System panel's process-kill pattern.
+- **e) Localhost server scanner** — ✅ *Built* (shipped v1.0.30). **Settings → Localhost Servers…**
+  lists listening ports (port → process → pid), filtered to dev-server runtimes by default with a
+  "Show all" toggle. Per row: **Open** in the in-app Browser, **Copy** the URL, or **Kill** the
+  process (tree-kill, two-step confirm). Platform layer: `listPorts()` (`lsof` on macOS, `ss` on
+  Linux, `Get-NetTCPConnection` on Windows) + `killPid()`.
 - **f) AI spend management** — a mode / set of tools to see and control model spend. Cathode
   already has the raw signals (context-window fill, 5-hour / weekly usage gauges, per-session
   token totals), so this is largely surfacing + acting on them.
