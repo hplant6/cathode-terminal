@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.37] - 2026-07-16
+
+### Added
+- **Collapsible tool cards.** Every tool/terminal card now has a chevron in its header and **starts collapsed** — a terminal command shows just its `TERMINAL … DONE` bar until you click to expand the full output, so a busy turn no longer buries the chat in command output. **Code-change (diff) cards open by default** instead, since the diff is usually what you want to see. The chevron points left when closed and rotates down when open; a card you manually collapse stays collapsed even as later output streams in.
+- **Scroll-to-bottom button.** A down-arrow button appears in the chat whenever you're scrolled up (or a turn is streaming below the fold); click it to jump back to the latest message. It stays clear of the tool rail — sliding left only when it would otherwise sit behind the toolbar — and remains visible while the agent is working.
+- **Chat scrollbar fades in on hover.** The chat scrollbar is hidden until your pointer is over the chat, then fades in (and back out), keeping the reading surface clean.
+
+### Changed
+- **Sticky question header shows up to 3 lines.** The pinned current-turn question now displays at least three lines before truncating (was one), so longer questions stay readable.
+
+### Fixed
+- **Close (✕) button restored on the last/only agent tab.** The button was gated on there being more than one tab; closing the final tab now starts a fresh session instead of leaving you with none, and the ✕ always renders.
+- **Links in chat now open in the browser.** Clicking a URL in an agent message navigates the in-app browser (switching to the project view if needed) instead of doing nothing.
+- **Budget warning no longer false-triggers at session reset**, and gained a dismiss **✕**. It was reading the usage utilization as a fraction and multiplying by 100 (turning a fresh 1% into 100%); it now uses the real 0–100 value, and you can dismiss the chip for the current limit window.
+
 ## [1.0.36] - 2026-07-15
 
 ### Added

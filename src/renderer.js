@@ -547,7 +547,22 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   permStack.className = 'acp-perm-stack';
   permStack.hidden = true;
   chatEl.appendChild(permStack);
-  msgsEl.addEventListener('scroll', () => { updateMsgsFade(msgsEl); updateStickyUser(msgsEl, stickyUser); }, { passive: true });
+
+  // Scroll-to-bottom button — appears when scrolled up, jumps to the newest message.
+  const scrollBtn = document.createElement('button');
+  scrollBtn.className = 'acp-scroll-bottom';
+  scrollBtn.title = 'Scroll to bottom';
+  scrollBtn.hidden = true;
+  scrollBtn.innerHTML = '<svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M11.7549 10.5049C12.0283 10.2315 12.4718 10.2315 12.7451 10.5049C13.0185 10.7782 13.0185 11.2217 12.7451 11.4951L9.49513 14.7451C9.22176 15.0185 8.77826 15.0185 8.50489 14.7451L5.25489 11.4951C4.98152 11.2217 4.98152 10.7782 5.25489 10.5049C5.52826 10.2315 5.97176 10.2315 6.24513 10.5049L9.00001 13.2598L11.7549 10.5049Z"/><path d="M8.2998 14.25V3.75C8.2998 3.3634 8.6134 3.0498 9 3.0498C9.3866 3.0498 9.7002 3.3634 9.7002 3.75V14.25C9.7002 14.6366 9.3866 14.9502 9 14.9502C8.6134 14.9502 8.2998 14.6366 8.2998 14.25Z"/></svg>';
+  scrollBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    msgsEl._stick = true;                                              // resume following new content
+    msgsEl.scrollTo({ top: msgsEl.scrollHeight, behavior: 'smooth' });
+    scrollBtn.hidden = true;
+  });
+  chatEl.appendChild(scrollBtn);
+
+  msgsEl.addEventListener('scroll', () => { updateMsgsFade(msgsEl); updateStickyUser(msgsEl, stickyUser); updateScrollBtn(msgsEl, scrollBtn); }, { passive: true });
 
   // Terminal view — real xterm PTY (lazy-spawned on first switch)
   const termEl = document.createElement('div');
@@ -594,7 +609,7 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   eq.start();   // the session opens in "Connecting…" — animate until ready/error
 
   sessions.set(id, {
-    id, name, type: 'acp', agent, command, el, chatEl, msgsEl, stickyUserEl: stickyUser, permStackEl: permStack, specEl, eq, statusEl, statusTextEl,
+    id, name, type: 'acp', agent, command, el, chatEl, msgsEl, stickyUserEl: stickyUser, permStackEl: permStack, scrollBtnEl: scrollBtn, specEl, eq, statusEl, statusTextEl,
     resumeTitle: (resume && resume.title) || null,   // original session title, shown as the tab tooltip
     termEl, term: acpTerm, fitAddon: acpFit, ro: acpRo, _ptySpawned: false,
     viewMode: 'chat',
@@ -608,10 +623,15 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
 }
 
 function closeSession(id) {
-  if (sessions.size <= 1) return;
   const s = sessions.get(id);
   if (!s) return;
-  if (activeId === id) {
+  if (sessions.size <= 1) {
+    // Last session — keep the app's ≥1-session invariant by opening a fresh one to take over.
+    let newId = null;
+    try { newId = createSession(); } catch (_) {}
+    if (newId == null || newId === id) return;   // couldn't replace it → don't strand the user with zero sessions
+    if (activeId !== newId) switchSession(newId);
+  } else if (activeId === id) {
     const ids = [...sessions.keys()];
     const idx = ids.indexOf(id);
     switchSession(ids[idx + 1] ?? ids[idx - 1]);
@@ -652,9 +672,11 @@ function switchAcpView(id, view) {
   if (view !== 'chat') {   // don't float the overlays over the terminal view
     if (s.stickyUserEl) s.stickyUserEl.hidden = true;
     if (s.permStackEl)  s.permStackEl.hidden = true;
+    if (s.scrollBtnEl)  s.scrollBtnEl.hidden = true;
   } else {
     updateStickyUser(s.msgsEl, s.stickyUserEl);
     showTopPerm(s);
+    updateScrollBtn(s.msgsEl, s.scrollBtnEl);
   }
   if (view === 'term') {
     if (!s._ptySpawned) {
@@ -806,6 +828,7 @@ let usageOpen = false;
 let usageMini = localStorage.getItem(LS.usageMini) === '1';
 let _lastUsage = null;
 let _usageSeq  = 0;   // discard out-of-order refreshUsage() resolutions
+let _budgetChipDismissed = null;   // resetsAt the budget chip was dismissed for (re-shows next limit window)
 
 function fmtTokens(n) {
   n = n || 0;
@@ -968,14 +991,23 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
   // Budget Guard chip — a passive nudge at the top of the panel once usage crosses
   // the configured threshold (so the guard is visible without the modal popping).
   const bg = (lim && lim.ok) ? budgetGovern(lim) : null;
-  const chipHtml = (bg && bg.over)
-    ? `<button class="usage-budget-chip" title="Open Budget Guard — hand off to a budget agent">Budget · ${Math.round(bg.pct)}% of your ${bg.label} limit — hand off ›</button>`
+  const chipKey = bg ? (bg.reset || '_') : null;
+  const showChip = !!(bg && bg.over) && _budgetChipDismissed !== chipKey;
+  const chipHtml = showChip
+    ? `<div class="usage-budget-chip"><button class="ubc-main" title="Open Budget Guard — hand off to a budget agent">Budget · ${Math.round(bg.pct)}% of your ${bg.label} limit — hand off ›</button><button class="ubc-x" title="Dismiss until your limit resets" aria-label="Dismiss">✕</button></div>`
     : '';
 
   usageBody.innerHTML = chipHtml + (usageMini
     ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub)).join('')}</div>`
     : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow;
-  if (chipHtml) usageBody.querySelector('.usage-budget-chip')?.addEventListener('click', () => openBudgetModal && openBudgetModal());
+  if (showChip) {
+    usageBody.querySelector('.ubc-main')?.addEventListener('click', () => openBudgetModal && openBudgetModal());
+    usageBody.querySelector('.ubc-x')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _budgetChipDismissed = chipKey;                            // stays hidden until this limit window resets
+      usageBody.querySelector('.usage-budget-chip')?.remove();
+    });
+  }
 }
 
 async function refreshUsage() {
@@ -1687,13 +1719,12 @@ function renderPtyTabs() {
     tab.appendChild(settingsBtn);
     tab.appendChild(nameEl);
 
-    if (sessions.size > 1) {
-      const x = document.createElement('button');
-      x.className = 'pty-tab-close';
-      x.textContent = '✕';
-      x.addEventListener('click', e => { e.stopPropagation(); closeSession(id); });
-      tab.appendChild(x);
-    }
+    const x = document.createElement('button');
+    x.className = 'pty-tab-close';
+    x.textContent = '✕';
+    x.title = 'Close session';
+    x.addEventListener('click', e => { e.stopPropagation(); closeSession(id); });
+    tab.appendChild(x);
 
     tab.addEventListener('click', () => switchSession(id));
     ptyTabsEl.appendChild(tab);
@@ -2530,6 +2561,34 @@ function updateStickyUser(msgsEl, stickyEl) {
   stickyEl.hidden = false;
 }
 
+// Scroll-to-bottom button. Visible whenever the user has scrolled away from the bottom
+// (stays put while the agent streams — not just a raw pixel threshold). Positioned to
+// clear the tool rail's actual tools (#toolbar, which is display:none on Code/Console
+// etc.) — so it hugs the natural edge when there are no page tools.
+function updateScrollBtn(msgsEl, btn) {
+  if (!msgsEl || !btn) return;
+  const fromBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight;
+  btn.hidden = !(msgsEl._stick === false || fromBottom > 120);
+  if (btn.hidden) return;
+  const chat = btn.parentElement;
+  const pr = btn.getBoundingClientRect();
+  // Only clear tool buttons that actually sit *beside* the scroll button (the rail's
+  // icons are a column at the top; grips fill the rest). If none overlap the button's
+  // vertical band, there's nothing to clear → hug the natural edge.
+  let toolLeft = Infinity;
+  document.querySelectorAll('#toolbar .pick-btn').forEach(b => {
+    if (b.offsetParent === null) return;   // hidden (no-page-tools, panel open, …)
+    const rb = b.getBoundingClientRect();
+    if (rb.width > 0 && rb.bottom > pr.top && rb.top < pr.bottom) toolLeft = Math.min(toolLeft, rb.left);
+  });
+  let right = 12;   // natural edge
+  if (chat && toolLeft < Infinity) {
+    const overhang = chat.getBoundingClientRect().right - toolLeft;
+    if (overhang > 6) right = Math.round(overhang) + 12;   // clear the beside-it tool with a gap
+  }
+  btn.style.right = right + 'px';
+}
+
 function updateMsgsFade(el) {
   if (!el) return;
   const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -2577,6 +2636,7 @@ function acpScrollEnd(s) {
     if (s.msgsEl._stick !== false) s.msgsEl.scrollTop = s.msgsEl.scrollHeight;
     updateMsgsFade(s.msgsEl);
     updateStickyUser(s.msgsEl, s.stickyUserEl);
+    updateScrollBtn(s.msgsEl, s.scrollBtnEl);
   });
 }
 
@@ -2704,8 +2764,14 @@ function appendLinkified(container, plain) {
       e.preventDefault();
       e.stopPropagation();                          // don't trigger the bubble's copy-on-click
       ipcRenderer.send(IPC.BROWSER_NAVIGATE, url);
-      // If the chat is filling the view (single-pane chat), the browser is off-screen —
-      // restore the split so the freshly-loaded page is actually visible.
+      // Surface the browser so the page is actually visible: if a non-browser view tab
+      // (Storybook / Code / Console / Changes) is active, switch to the browser tab…
+      const cur = tabsConfig.find(t => t.id === activeViewTabId);
+      if (!cur || cur.type !== 'project') {
+        const proj = tabsConfig.find(t => t.type === 'project');
+        if (proj) activateViewTab(proj.id);
+      }
+      // …and if the chat is filling the pane (single-pane chat), restore the split.
       if (panelCollapsed && activePane === 'chat') setSinglePane(null);
     });
     container.appendChild(a);
@@ -2988,7 +3054,7 @@ function acpAppendChunk(s, text, messageId) {
 // status) over a body. Returns the parts each caller wires up further.
 function makeToolCard(name) {
   const card = document.createElement('div');
-  card.className = 'acp-tool';
+  card.className = 'acp-tool collapsed';   // closed by default; diff cards re-open in appendToolDiff
   const header = document.createElement('div');
   header.className = 'acp-tool-header';
   const nameEl = document.createElement('span');
@@ -2997,8 +3063,13 @@ function makeToolCard(name) {
   const statusEl = document.createElement('span');
   statusEl.className = 'acp-tool-status running';
   statusEl.textContent = 'Running';
+  const chevron = document.createElement('span');
+  chevron.className = 'acp-tool-chevron';
+  chevron.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>';
   header.appendChild(nameEl);
   header.appendChild(statusEl);
+  header.appendChild(chevron);
+  header.addEventListener('click', () => card.classList.toggle('collapsed'));
   const bodyEl = document.createElement('div');
   bodyEl.className = 'acp-tool-body';
   card.appendChild(header);
@@ -3038,6 +3109,10 @@ function collapseHunks(rows, ctx = 3) {
   return out;
 }
 function appendToolDiff(body, path, oldText, newText) {
+  // Code changes are open by default. Auto-expand the parent card the first time a diff
+  // lands (marked so a later diff update won't fight a manual collapse the user made).
+  const card = body.closest && body.closest('.acp-tool');
+  if (card && !card.dataset.diffSeen) { card.dataset.diffSeen = '1'; card.classList.remove('collapsed'); }
   let block = body.querySelector('.acp-tool-diff');
   if (!block) { block = document.createElement('div'); block.className = 'acp-tool-diff'; body.appendChild(block); }
   block.innerHTML = '';
@@ -3085,12 +3160,6 @@ function acpAddToolCard(s, update) {
   const { card, header, statusEl, bodyEl } = makeToolCard(name);
   if (update.toolCallId) card.dataset.toolKey = update.toolCallId;   // lets acpTrim drop the toolCards entry
   renderToolContent(bodyEl, update.content);
-
-  let collapsed = false;
-  header.addEventListener('click', () => {
-    collapsed = !collapsed;
-    bodyEl.style.display = collapsed ? 'none' : '';
-  });
 
   s.msgsEl.appendChild(card);
   acpScrollEnd(s);
@@ -3724,7 +3793,7 @@ let openSpendModal = null;
   const refreshBtn = document.getElementById('spend-refresh');
   const handoffBtn = document.getElementById('spend-handoff');
   let report = null, busy = false, limits = null;
-  const limitPct = (m) => m && typeof m.utilization === 'number' ? (m.utilization > 1 ? m.utilization : m.utilization * 100) : null;
+  const limitPct = (m) => m && typeof m.utilization === 'number' ? m.utilization : null;   // utilization is already a 0–100 %
 
   const usd = (n) => { n = n || 0; return n >= 100 ? '$' + Math.round(n).toLocaleString() : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(n < 0.01 ? 4 : 2); };
   const tok = (n) => { n = n || 0; return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); };
@@ -3844,7 +3913,9 @@ function saveBudgetConfig(cfg) { localStorage.setItem(BUDGET_CFG_KEY, JSON.strin
 function budgetGovern(limits) {
   if (!limits || !limits.ok) return null;
   const c = budgetConfig();
-  const p = m => m && typeof m.utilization === 'number' ? (m.utilization > 1 ? m.utilization : m.utilization * 100) : null;
+  // utilization is already a 0–100 percentage (the Usage panel shows it verbatim, e.g. 1%),
+  // so use it as-is — do NOT rescale, or a fresh 1% reads as 100%.
+  const p = m => m && typeof m.utilization === 'number' ? m.utilization : null;
   const five = p(limits.fiveHour);
   const week = c.watchWeekly ? p(limits.sevenDay) : null;
   let pick = { pct: five, label: '5-hour', reset: limits.fiveHour && limits.fiveHour.resetsAt };
@@ -4641,7 +4712,14 @@ function activateViewTab(tabId, silent = false) {
     ipcRenderer.send(IPC.RIGHT_PANEL_MODE, mode);
     updateWfEmpty();   // re-evaluate when the user switches view tabs (guarded to user actions to avoid init TDZ)
   }
+  // The tool rail shows/hides with the view → reposition the active chat's scroll button.
+  const _sess = sessions.get(activeId);
+  if (_sess && _sess.type === 'acp') updateScrollBtn(_sess.msgsEl, _sess.scrollBtnEl);
 }
+window.addEventListener('resize', () => {
+  const s = sessions.get(activeId);
+  if (s && s.type === 'acp') updateScrollBtn(s.msgsEl, s.scrollBtnEl);
+});
 
 // Each tab icon's art sits differently inside its viewBox, so a fixed flex gap
 // yields inconsistent visual spacing. Measure each glyph's real bbox and pull

@@ -1233,6 +1233,11 @@ html, body {
   flex-direction: column;
   gap: 10px;
 }
+/* Chat scrollbar: fades in/out as the mouse enters/leaves the chat. The 6px gutter
+   stays reserved (only the thumb colour animates), so there's no layout shift. */
+.acp-messages::-webkit-scrollbar-thumb { background-color: transparent; transition: background-color 0.28s ease; }
+.acp-chat:hover .acp-messages::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb); }
+.acp-chat:hover .acp-messages::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 /* Edge fade — applied only when content is scrolled past that edge (toggled in JS),
    so the banner at the very top is never faded at startup. */
 .acp-messages.fade-bot:not(.fade-top) {
@@ -1483,14 +1488,28 @@ html, body {
 .usage-empty { font-size: 11px; color: var(--spec-text-dim); padding: 2px 0; }
 /* Budget Guard nudge chip — shown in the usage panel once over threshold. */
 .usage-budget-chip {
-  display: flex; align-items: center; width: 100%; box-sizing: border-box;
-  margin: 0 0 10px; padding: 7px 10px; gap: 6px;
+  display: flex; align-items: stretch; width: 100%; box-sizing: border-box;
+  margin: 0 0 10px; overflow: hidden;
   background: var(--spec-accent-dark); border: 1px solid var(--spec-accent); border-radius: var(--radius-md);
+  transition: background 0.12s;
+}
+.usage-budget-chip:hover { background: var(--spec-accent); }
+.ubc-main {
+  flex: 1; min-width: 0; height: auto; text-align: left;
+  padding: 7px 6px 7px 10px; background: transparent; border: none; border-radius: 0;
   color: var(--spec-text); font-family: var(--font-title); font-stretch: 112.5%;
   font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
-  text-align: left; cursor: pointer; transition: background 0.12s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
 }
-.usage-budget-chip:hover { background: var(--spec-accent); color: var(--text-on-accent); }
+.usage-budget-chip:hover .ubc-main { color: var(--text-on-accent); }
+.ubc-x {
+  flex-shrink: 0; min-width: 0; width: 26px; height: auto; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 0;
+  color: var(--spec-text); font-size: 11px; cursor: pointer; opacity: 0.7;
+  transition: opacity 0.12s, background 0.12s;
+}
+.ubc-x:hover { opacity: 1; background: rgba(0,0,0,0.18); color: var(--text-on-accent); }
 #btn-usage.active { color: var(--accent); }
 
 /* ── Toasts (transient, auto-dismiss) ── */
@@ -1608,12 +1627,32 @@ html, body {
   border-bottom: 1px solid var(--spec-structural);
   color: var(--spec-text);
   font-size: var(--chat-font-size, 12px); line-height: 1.4;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Up to 3 lines, then ellipsis (short messages still collapse to 1). */
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;   /* break long unbroken URLs so they wrap instead of overflowing */
   box-shadow: 0 6px 14px -9px rgba(0,0,0,0.65);
   cursor: pointer; transition: background 0.12s;
 }
 .acp-sticky-user:hover { background: var(--spec-structural); }
 .acp-sticky-user[hidden] { display: none; }
+
+/* Scroll-to-bottom button — bottom-right of the chat, above the status bar. Its `right`
+   is set from JS to exactly clear the tool rail's live overhang (updateScrollBtn). */
+.acp-scroll-bottom {
+  position: absolute; right: 12px; bottom: 48px; z-index: 6;
+  width: 40px; height: 40px; min-width: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 50%;
+  color: var(--spec-text-dim); cursor: pointer;
+  box-shadow: 0 4px 14px -2px rgba(0,0,0,0.55);
+  transition: background 0.12s, color 0.12s;
+}
+.acp-scroll-bottom:hover { background: var(--spec-structural); color: var(--spec-text); }
+.acp-scroll-bottom[hidden] { display: none; }
+/* Permission stack: sit at the natural right edge when the tool rail is hidden. */
+#app:has(#toolbar.no-page-tools) .acp-perm-stack,
+#app:has(#toolbar.hidden-by-pick) .acp-perm-stack,
+#app:has(.tool-panel.tp-framed:not([hidden])) .acp-perm-stack { right: 12px; }
 /* Collapsed drawer for tool-injected context (CSS / logs / code) — keeps the chat clean */
 .acp-msg-detail {
   margin-top: 6px;
@@ -1798,6 +1837,16 @@ html, body {
 /* Keep the card header (tool name + Running/Done) visible for live feedback; only
    the body collapses when there's nothing in it (avoids a thin empty box). */
 .acp-tool-body:empty { display: none; }
+/* ── Collapse chevron ── points left when closed, rotates down when open ── */
+.acp-tool-chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--spec-text-dim);
+  transition: transform 0.2s ease;
+}
+.acp-tool:not(.collapsed) .acp-tool-chevron { transform: rotate(-90deg); }
+.acp-tool.collapsed .acp-tool-body { display: none; }
 /* ── Inline code diffs inside a tool card (CLI-style edit preview) ── */
 .acp-tool-diff { margin-top: 2px; }
 .acp-tool-diff-path { font: 10px var(--font-mono); color: var(--spec-text-dim); padding: 2px 0 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
