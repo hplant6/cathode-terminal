@@ -27,6 +27,7 @@ const { getDrawScript }           = require('./src/draw-inject');
 const { getEyedropperScript }     = require('./src/eyedropper-inject');
 const { getA11yScript }           = require('./src/a11y-inject');
 const { getDriftScript }          = require('./src/drift-inject');
+const watchApproval               = require('./src/watch-approval');
 const http = require('http');
 const { iconB64 } = require('./src/read-icon');
 
@@ -1641,6 +1642,14 @@ ipcMain.on(IPC.ACP_PERMISSION_RESPONSE, (_, { reqId, decision } = {}) => {
   if (r) { acpPermResolvers.delete(reqId); r.resolve(decision || 'deny'); }
 });
 
+// One-line summary for the Watch Approval notification, built from the ACP toolCall.
+function watchSummary(kind, toolCall) {
+  const verb = { execute: 'Run', edit: 'Edit', delete: 'Delete', move: 'Move', fetch: 'Fetch' }[kind] || 'Allow';
+  const title = (toolCall && toolCall.title) ? String(toolCall.title) : '';
+  const t = title.length > 100 ? title.slice(0, 100) + '…' : title;
+  return t ? `${verb}: ${t}` : `${verb} (${kind})`;
+}
+
 // ── Per-agent ACP launch ──────────────────────────────────────────
 // The ACP client/protocol below is agent-agnostic; only *launching* the agent
 // differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
@@ -1819,8 +1828,24 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
 
       const reqId = `perm${++acpPermSeq}`;
       send(IPC.ACP_PERMISSION_REQUEST, { id, reqId, kind, title: params.toolCall?.title || '', canAlways: !!allowAlways });
+
+      // Mirror the prompt to the Watch Approval phone app (best-effort, no-op when
+      // disabled). A wrist decision resolves the *same* promise the in-app modal does,
+      // so the two race — first answer wins. onDecision also tells the renderer to
+      // clear its now-stale card.
+      const watch = watchApproval.begin({
+        kind,
+        summary: watchSummary(kind, params.toolCall),
+        onDecision: (d) => {
+          const r = acpPermResolvers.get(reqId);
+          if (r) { acpPermResolvers.delete(reqId); r.resolve(d); }
+          send(IPC.ACP_PERMISSION_RESOLVED, { id, reqId });
+        },
+      });
+
       const decision = await new Promise(resolve => acpPermResolvers.set(reqId, { resolve, id }));
       acpPermResolvers.delete(reqId);
+      watch.done();   // stop polling; if the in-app side won, cancel the wrist prompt
       if (decision === 'always' && allowAlways) return approve(allowAlways);
       if (decision === 'approve') return approve(allowOnce);
       return sel(rejectOpt);   // deny (or session gone)

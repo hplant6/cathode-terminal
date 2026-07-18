@@ -3362,10 +3362,20 @@ ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlwa
   const keys = { '1': () => decide('approve'), [denyKey]: () => decide('deny') };
   if (canAlways) keys['2'] = () => decide('always');
   card._permKeys = keys;
+  card._reqId = reqId;
   s.permStackEl.appendChild(card);
   showTopPerm(s);
   if (document.activeElement === uiTextarea) uiTextarea.blur();   // so 1/2/3 drive the prompt immediately
   if (!s._replaying) Notif.play('permission');   // distinct cue: the agent is paused waiting on you
+});
+
+// A parallel decider (the Watch Approval app) already answered this prompt — remove
+// its card without re-sending a decision (main.js has already resolved it).
+ipcRenderer.on(IPC.ACP_PERMISSION_RESOLVED, (_, { id, reqId }) => {
+  const s = acpSession(id);
+  if (!s || !s.permStackEl) return;
+  const card = [...s.permStackEl.querySelectorAll('.acp-permission')].find(c => c._reqId === reqId);
+  if (card) { card.remove(); showTopPerm(s); }
 });
 
 // Show the oldest pending prompt (the rest queue, one visible at a time), animate it
