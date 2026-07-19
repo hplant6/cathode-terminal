@@ -1399,6 +1399,33 @@
     </div>
   </div>
 
+  <div id="watch-approval-modal" class="modal-backdrop">
+    <div class="modal-box budget-box">
+      <button id="wa-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Watch Approval</div>
+      <p class="modal-desc">Mirror risky tool-permission prompts to the Watch Approval phone/watch app, so you can approve or deny from your wrist. Runs alongside the in-app prompt — whichever you answer first wins. Needs the relay server running (see the watch-approval repo).</p>
+
+      <div class="budget-section">
+        <label class="budget-check"><input type="checkbox" id="wa-enabled"/> <span>Enable Watch Approval</span></label>
+        <div class="wa-field">
+          <label class="budget-flabel" for="wa-url">Relay URL</label>
+          <input id="wa-url" class="modal-input" placeholder="http://localhost:8420" spellcheck="false" autocomplete="off"/>
+        </div>
+        <div class="wa-field">
+          <label class="budget-flabel" for="wa-secret">Shared secret (optional)</label>
+          <input id="wa-secret" type="password" class="modal-input" placeholder="matches the relay's WATCH_APPROVAL_SECRET" spellcheck="false" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div id="wa-status" class="budget-status" data-state="idle">Not tested yet.</div>
+
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="wa-test">Test connection</button>
+        <button class="modal-btn-cancel" id="wa-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="spend-modal" class="modal-backdrop">
     <div class="modal-box spend-box">
       <button id="spend-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>

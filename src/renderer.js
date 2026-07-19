@@ -3674,8 +3674,60 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'localhost':     openLocalhostModal?.(); break;
     case 'spend':         openSpendModal?.();     break;
     case 'budget':        openBudgetModal?.();    break;
+    case 'watch-approval': openWatchApprovalModal?.(); break;
   }
 });
+
+// ── Watch Approval modal (Settings → Watch Approval) ──────────────
+// Reads/writes <userData>/watch-approval.json via main; the bridge picks the file
+// up per prompt, so a Save takes effect without a restart.
+let openWatchApprovalModal = null;
+(function initWatchApproval() {
+  const modal = document.getElementById('watch-approval-modal');
+  if (!modal) return;
+  const ctl = wireModal(modal);
+  const enabledEl = document.getElementById('wa-enabled');
+  const urlEl = document.getElementById('wa-url');
+  const secretEl = document.getElementById('wa-secret');
+  const statusEl = document.getElementById('wa-status');
+  const testBtn = document.getElementById('wa-test');
+  const saveBtn = document.getElementById('wa-save');
+
+  const setStatus = (text, state = 'idle') => { statusEl.textContent = text; statusEl.dataset.state = state; };
+  const patch = () => ({ enabled: enabledEl.checked, url: urlEl.value.trim(), secret: secretEl.value });
+
+  document.getElementById('wa-close')?.addEventListener('click', ctl.close);
+
+  testBtn.addEventListener('click', async () => {
+    setStatus('Testing…', 'idle');
+    try {
+      const ok = await ipcRenderer.invoke(IPC.WATCH_APPROVAL_TEST, patch());
+      setStatus(ok ? 'Relay reachable ✓' : 'Relay not reachable ✗', ok ? 'ok' : 'error');
+    } catch (_) {
+      setStatus('Relay not reachable ✗', 'error');
+    }
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    try {
+      await ipcRenderer.invoke(IPC.WATCH_APPROVAL_SET, patch());
+      setStatus('Saved.', 'ok');
+    } catch (_) {
+      setStatus('Could not save settings.', 'error');
+    }
+  });
+
+  openWatchApprovalModal = async () => {
+    try {
+      const cfg = await ipcRenderer.invoke(IPC.WATCH_APPROVAL_GET);
+      enabledEl.checked = !!cfg?.enabled;
+      urlEl.value = cfg?.url || '';
+      secretEl.value = cfg?.secret || '';
+    } catch (_) {}
+    setStatus('Not tested yet.', 'idle');
+    ctl.open();
+  };
+})();
 
 // ── About modal (Settings → About Cathode) ────────────────────────
 const aboutModalCtl = wireModal(document.getElementById('about-modal'));

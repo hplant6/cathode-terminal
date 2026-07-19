@@ -31,7 +31,10 @@ The relay from the `watch-approval` repo must be running and reachable (default
 `http://localhost:8420` — reachable from Windows even when the relay runs WSL-side, since
 WSL2 forwards localhost).
 
-Create a `watch-approval.json` in Cathode's user-data directory:
+**Easiest:** open **Settings → Watch Approval**, tick *Enable*, set the relay URL (and
+secret, if any), hit **Test connection**, then **Save**. Takes effect immediately.
+
+Or edit the config file directly — a `watch-approval.json` in Cathode's user-data directory:
 
 | OS | Path |
 |---|---|
@@ -66,5 +69,4 @@ Environment overrides also work: `WATCH_APPROVAL_ENABLED=1`, `WATCH_APPROVAL_URL
 - LAN-only for now: the phone receives the push anywhere (APNs), but its decision POST has
   to reach the relay — so the round-trip needs the phone on the same network as the relay
   until a tunnel/Tailscale layer is added.
-- A per-`kind` matcher and an in-app settings toggle are planned; today the switch is this
-  config file.
+- A per-`kind` matcher (push only for e.g. execute/delete) is a planned follow-up.

@@ -38,6 +38,24 @@ function isEnabled() {
   return loadConfig().enabled;
 }
 
+// Merge a patch into the on-disk config (used by the Settings modal). Returns the
+// written object. main.js re-reads the file per prompt, so no restart is needed.
+function writeConfig(patch) {
+  let cur = {};
+  try { cur = JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch (_) {}
+  const next = { ...cur, ...patch };
+  try { fs.writeFileSync(configPath(), JSON.stringify(next, null, 2)); } catch (_) {}
+  return next;
+}
+
+// Health-check the relay (used by the modal's "Test connection" button). Accepts a
+// patch so the UI can test unsaved field values.
+async function testConnection(patch) {
+  const cfg = { ...loadConfig(), ...(patch || {}) };
+  const r = await apiCall(cfg, 'GET', '/health');
+  return !!(r && r.status === 'ok');
+}
+
 async function apiCall(cfg, method, apiPath, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (cfg.secret) headers['Authorization'] = `Bearer ${cfg.secret}`;
@@ -118,4 +136,4 @@ function begin({ summary, kind, onDecision }) {
   };
 }
 
-module.exports = { isEnabled, loadConfig, begin };
+module.exports = { isEnabled, loadConfig, writeConfig, testConnection, begin };

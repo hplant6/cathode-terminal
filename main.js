@@ -1650,6 +1650,11 @@ function watchSummary(kind, toolCall) {
   return t ? `${verb}: ${t}` : `${verb} (${kind})`;
 }
 
+// Settings modal ↔ <userData>/watch-approval.json (read fresh per prompt, no restart).
+ipcMain.handle(IPC.WATCH_APPROVAL_GET, () => watchApproval.loadConfig());
+ipcMain.handle(IPC.WATCH_APPROVAL_SET, (_, patch) => watchApproval.writeConfig(patch || {}));
+ipcMain.handle(IPC.WATCH_APPROVAL_TEST, (_, patch) => watchApproval.testConnection(patch || {}));
+
 // ── Per-agent ACP launch ──────────────────────────────────────────
 // The ACP client/protocol below is agent-agnostic; only *launching* the agent
 // differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
@@ -3097,6 +3102,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'AI Spend…',          click: act('spend') },
     { label: 'Budget Guard…',      click: act('budget') },
     { label: 'Localhost Servers…', click: act('localhost') },
+    { label: 'Watch Approval…',    click: act('watch-approval') },
     { type: 'separator' },
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'New Window',         click: act('new-window') },
