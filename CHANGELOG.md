@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.39] - 2026-07-22
+
+### Added
+- **Watch Approval — approve tool calls from your phone or Apple Watch.** When an agent asks to run a risky tool (execute, edit, delete, move, fetch), Cathode can push the prompt to your phone with **Approve / Deny** buttons, in parallel with the in-app permission card — whichever you answer first wins, and the other is dismissed. Turn it on in **Settings → Watch Approval** (off by default): point it at a small approval relay you run and enter its URL. Everything is best-effort — if the feature is off or the relay is unreachable, Cathode falls back to the in-app prompt with no change in behavior, and read-only tools still auto-approve. See `docs/watch-approval.md` and the companion app + relay in the [watch-approval](https://github.com/hplant6/watch-approval) repo.
+
 ## [1.0.38] - 2026-07-16
 
 ### Added
