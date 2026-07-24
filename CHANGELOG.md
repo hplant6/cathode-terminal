@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Permission modes (Claude Code's Shift+Tab) in the chat.** A mode pill in the composer toolbar lets you switch the Claude Code session's permission mode — **Ask** (default), **Auto-edit** (`acceptEdits`), and **Plan** (read-only) — and **Shift+Tab** cycles them just like the CLI. Driven by the agent's native ACP session modes, so Plan mode genuinely prevents edits/commands. **Bypass Permissions** is available from the pill menu behind a confirmation (kept out of the Shift+Tab cycle). The pill highlights and labels modes where the agent stops asking permission — a reminder that in those modes neither the in-app prompt nor the Watch Approval notification will fire. The pill appears only for agents that advertise modes.
+
 ## [1.0.39] - 2026-07-22
 
 ### Added

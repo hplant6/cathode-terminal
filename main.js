@@ -1856,6 +1856,12 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
       return sel(rejectOpt);   // deny (or session gone)
     },
     async sessionUpdate(params) {
+      // Keep main's cached mode in sync when the agent switches modes itself (e.g. a
+      // plan→code "switch mode" tool), so a later set-mode revert uses the right value.
+      if (params.update?.sessionUpdate === 'current_mode_update') {
+        const e = acpSessions.get(id);
+        if (e?.modes) e.modes.currentModeId = params.update.currentModeId;
+      }
       send(IPC.ACP_UPDATE, { id, update: params.update });
     },
     async createTerminal(params) {
@@ -1936,7 +1942,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     }
     // WSL-side agents (Claude/Gemini/Codex/Hermes on Windows) chdir into this cwd
     // and fail to launch on a raw `C:\…` path — hand them the /mnt path.
-    let sessionId;
+    let sessionId, modes = null;
     const caps = (initResult && initResult.agentCapabilities) || {};
     if (resume && resume.sessionId) {
       // Resume a past conversation. cwd MUST match the session's original project;
@@ -1944,21 +1950,26 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
       const rcwd = resume.cwd || platform.toWslPath(sessionCwd());
       if (caps.loadSession) {
         // loadSession replays the prior turns via session/update — the chat repopulates.
-        await conn.loadSession({ sessionId: resume.sessionId, cwd: rcwd, mcpServers: [] });
+        const r = await conn.loadSession({ sessionId: resume.sessionId, cwd: rcwd, mcpServers: [] });
         sessionId = resume.sessionId;
+        modes = (r && r.modes) || null;
       } else {
         // Adapter can't replay — start fresh in that project (can't restore history).
-        ({ sessionId } = await conn.newSession({ cwd: rcwd, mcpServers: [] }));
+        const r = await conn.newSession({ cwd: rcwd, mcpServers: [] });
+        sessionId = r.sessionId; modes = (r && r.modes) || null;
         send(IPC.APP_TOAST, { message: "This agent can't replay history — started a fresh session in that project." });
       }
     } else {
-      ({ sessionId } = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] }));
+      const r = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] });
+      sessionId = r.sessionId; modes = (r && r.modes) || null;
     }
     clearTimeout(connectTimer);
     connected = true;
-    const entry = { proc, conn, sessionId };
+    // ACP session modes (Claude Code's permission modes: default/acceptEdits/plan/
+    // bypassPermissions). Advertised by capable agents; absent for the rest.
+    const entry = { proc, conn, sessionId, modes };
     acpSessions.set(id, entry);
-    send(IPC.ACP_READY, { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey });
+    send(IPC.ACP_READY, { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey, modes });
     conn.closed.then(() => {
       // Guard: a model-switch respawn reuses the id — a stale close from the
       // killed session must not delete the replacement (or report it closed).
@@ -1980,6 +1991,23 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     safeKill(proc);
   }
 }
+
+// Switch a session's ACP permission mode (Claude Code default/acceptEdits/plan/
+// bypassPermissions). Optimistically confirmed by the renderer; on failure we echo
+// the previous mode back so the pill reverts.
+ipcMain.on(IPC.ACP_SET_MODE, async (_, { id, modeId } = {}) => {
+  const s = acpSessions.get(id);
+  if (!s || !s.conn || !modeId) return;
+  const prev = s.modes && s.modes.currentModeId;
+  try {
+    await s.conn.setSessionMode({ sessionId: s.sessionId, modeId });
+    if (s.modes) s.modes.currentModeId = modeId;
+    uiSend(IPC.ACP_MODE_CHANGED, { id, currentModeId: modeId });
+  } catch (e) {
+    console.error('[acp] setSessionMode failed:', (e && e.message) || e);
+    uiSend(IPC.ACP_MODE_CHANGED, { id, currentModeId: prev, error: (e && e.message) || 'set mode failed' });
+  }
+});
 
 ipcMain.on(IPC.ACP_SPAWN, (_, { id, model, agent, resume } = {}) => {
   spawnAcpSession(id, model || '', agent || 'claude', resume || null).catch(err => {
