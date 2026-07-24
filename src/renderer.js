@@ -1176,11 +1176,12 @@ const modeWrap  = document.getElementById('mode-wrap');
 const btnMode   = document.getElementById('btn-mode');
 const modeLabel = document.getElementById('btn-mode-label');
 const modeMenu  = document.getElementById('mode-menu');
+const uiHintEl  = document.querySelector('#ui-footer .ui-hint');   // mode link replaces this
 const MODE_META = {
-  default:           { short: 'Ask',       warn: false },
-  acceptEdits:       { short: 'Auto-edit', warn: true  },
-  plan:              { short: 'Plan',      warn: false },
-  bypassPermissions: { short: 'Bypass',    warn: true  },
+  default:           { short: 'Ask',    warn: false },
+  acceptEdits:       { short: 'Auto',   warn: true  },
+  plan:              { short: 'Plan',   warn: false },
+  bypassPermissions: { short: 'Bypass', warn: true  },
 };
 const MODE_CYCLE = ['default', 'acceptEdits', 'plan'];   // Shift+Tab ring (bypass is menu-only)
 
@@ -1193,12 +1194,20 @@ function activeModeSession() {
 function updateModePill() {
   if (!modeWrap) return;
   const s = activeModeSession();
-  if (!s) { modeWrap.style.display = 'none'; closeModeMenu(); return; }
+  // The mode link and the keyboard-hint share the footer's left slot: show the mode
+  // for sessions that have modes, fall back to the hint otherwise (never empty).
+  if (!s) {
+    modeWrap.style.display = 'none';
+    if (uiHintEl) uiHintEl.style.display = '';
+    closeModeMenu();
+    return;
+  }
   modeWrap.style.display = '';
+  if (uiHintEl) uiHintEl.style.display = 'none';
   const cur = s.modes.currentModeId;
   const curMode = s.modes.availableModes.find(m => m.id === cur);
   const meta = MODE_META[cur] || {};
-  modeLabel.textContent = meta.short || curMode?.name || cur;
+  modeLabel.textContent = meta.short ? `${meta.short} Mode` : (curMode?.name || cur);
   btnMode.classList.toggle('mode-warn', !!meta.warn);
   btnMode.title = (curMode?.description ? `${curMode.name} — ${curMode.description}` : (curMode?.name || cur))
     + '  ·  Shift+Tab to cycle';
