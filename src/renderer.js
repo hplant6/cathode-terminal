@@ -1167,6 +1167,111 @@ document.addEventListener('click', (e) => {
 });
 if (btnPersona) registerPersonaControl({ wrap: personaWrap, btn: btnPersona, label: personaLabel, menu: personaMenu });
 
+// ── Permission-mode pill (composer) — Claude Code's Shift+Tab modes ──
+// Drives the ACP session's native modes: default (Ask), acceptEdits, plan, and
+// bypassPermissions. Reflects the ACTIVE session; hidden for agents that don't
+// advertise modes. `warn` marks modes where the agent stops asking permission — so
+// neither the in-app prompt NOR the watch-approval notification will fire.
+const modeWrap  = document.getElementById('mode-wrap');
+const btnMode   = document.getElementById('btn-mode');
+const modeLabel = document.getElementById('btn-mode-label');
+const modeMenu  = document.getElementById('mode-menu');
+const uiHintEl  = document.querySelector('#ui-footer .ui-hint');   // mode link replaces this
+const MODE_META = {
+  default:           { short: 'Ask',    warn: false },
+  acceptEdits:       { short: 'Auto',   warn: true  },
+  plan:              { short: 'Plan',   warn: false },
+  bypassPermissions: { short: 'Bypass', warn: true  },
+};
+const MODE_CYCLE = ['default', 'acceptEdits', 'plan'];   // Shift+Tab ring (bypass is menu-only)
+
+function activeModeSession() {
+  const s = sessions.get(activeId);
+  return (s && s.type === 'acp' && (s.agent || 'claude') === 'claude'
+    && s.modes && Array.isArray(s.modes.availableModes) && s.modes.availableModes.length) ? s : null;
+}
+
+function updateModePill() {
+  if (!modeWrap) return;
+  const s = activeModeSession();
+  // The mode link and the keyboard-hint share the footer's left slot: show the mode
+  // for sessions that have modes, fall back to the hint otherwise (never empty).
+  if (!s) {
+    modeWrap.style.display = 'none';
+    if (uiHintEl) uiHintEl.style.display = '';
+    closeModeMenu();
+    return;
+  }
+  modeWrap.style.display = '';
+  if (uiHintEl) uiHintEl.style.display = 'none';
+  const cur = s.modes.currentModeId;
+  const curMode = s.modes.availableModes.find(m => m.id === cur);
+  const meta = MODE_META[cur] || {};
+  modeLabel.textContent = meta.short ? `${meta.short} Mode` : (curMode?.name || cur);
+  btnMode.classList.toggle('mode-warn', !!meta.warn);
+  btnMode.title = (curMode?.description ? `${curMode.name} — ${curMode.description}` : (curMode?.name || cur))
+    + '  ·  Shift+Tab to cycle';
+}
+
+function renderModeMenu() {
+  const s = activeModeSession();
+  if (!s) return;
+  modeMenu.innerHTML = '';
+  for (const m of s.modes.availableModes) {
+    const item = document.createElement('div');
+    item.className = 'mode-item'
+      + (m.id === s.modes.currentModeId ? ' selected' : '')
+      + (MODE_META[m.id]?.warn ? ' warn' : '');
+    const label = document.createElement('div');
+    label.className = 'mode-item-label';
+    label.textContent = m.name;
+    item.appendChild(label);
+    if (m.description) {
+      const d = document.createElement('div');
+      d.className = 'mode-item-desc';
+      d.textContent = m.description;
+      item.appendChild(d);
+    }
+    item.addEventListener('click', () => { closeModeMenu(); requestMode(s, m.id); });
+    modeMenu.appendChild(item);
+  }
+}
+
+function openModeMenu()  { renderModeMenu(); modeMenu.classList.add('open'); btnMode.classList.add('open'); }
+function closeModeMenu() { if (modeMenu) { modeMenu.classList.remove('open'); btnMode.classList.remove('open'); } }
+
+// Ask main to switch mode. bypassPermissions is gated behind a confirm and never in
+// the Shift+Tab ring. Optimistic: update the pill now; main echoes back / reverts.
+function requestMode(s, modeId) {
+  if (!s || modeId === s.modes.currentModeId) return;
+  if (modeId === 'bypassPermissions' &&
+      !confirm('Switch to Bypass Permissions?\n\nThe agent will run every tool — edits, commands, deletes — WITHOUT asking, and NO approval will be requested (in-app or on your watch). Use with caution.')) {
+    return;
+  }
+  s.modes.currentModeId = modeId;
+  updateModePill();
+  ipcRenderer.send(IPC.ACP_SET_MODE, { id: s.id, modeId });
+}
+
+function cycleMode() {
+  const s = activeModeSession();
+  if (!s) return false;
+  const avail = new Set(s.modes.availableModes.map(m => m.id));
+  const ring = MODE_CYCLE.filter(id => avail.has(id));
+  if (!ring.length) return false;
+  const i = ring.indexOf(s.modes.currentModeId);   // -1 (e.g. from bypass) → start of ring
+  requestMode(s, ring[(i + 1) % ring.length]);
+  return true;
+}
+
+if (btnMode) {
+  btnMode.addEventListener('click', e => {
+    e.stopPropagation();
+    modeMenu.classList.contains('open') ? closeModeMenu() : openModeMenu();
+  });
+  document.addEventListener('click', e => { if (modeWrap && !modeWrap.contains(e.target)) closeModeMenu(); });
+}
+
 // ── Caveman mode toggle (composer toolbar) ────────────────────────
 const btnCaveman = document.getElementById('btn-caveman');
 function syncCaveman() {
@@ -1689,6 +1794,7 @@ function switchSession(id) {
   ensureSessionModel();
   refreshUsage();
   renderPtyTabs();
+  updateModePill();   // the mode pill reflects the active session
   saveOpenSessions();   // remember the active tab across launches
 }
 
@@ -3228,6 +3334,13 @@ function handleAcpUpdate(s, update) {
         if (sessions.get(activeId) === s) refreshUsage();
       }
       break;
+    case 'current_mode_update':
+      // The agent switched modes itself (e.g. a plan→code "switch mode" tool).
+      if (s.modes && update.currentModeId) {
+        s.modes.currentModeId = update.currentModeId;
+        if (s === sessions.get(activeId)) updateModePill();
+      }
+      break;
     case 'available_commands_update':
       // The session advertises which slash commands actually work in this headless
       // ACP session — CLI/TUI-only ones (/help, /login, /doctor, /exit…) are simply
@@ -3265,7 +3378,7 @@ ipcRenderer.on(IPC.ACP_INSTALL_PROGRESS, (_, { id, text }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent }) => {
+ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes }) => {
   const s = acpSession(id);
   if (!s) return;
   if (agent) s.agent = agent;
@@ -3274,9 +3387,19 @@ ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent }) => {
     s._installEl = null;
   }
   s.cwd = cwd || s.cwd || '';
+  s.modes = modes || null;   // ACP permission modes (may be absent for some agents)
   acpSetStatus(s, 'ready');
   renderAcpBanner(s, version || '', model || '', cwd || '');
+  if (s === sessions.get(activeId)) updateModePill();
   finishModelSwitch(s);  // dismiss "switching…" toast + confirm, if a model switch is pending
+});
+
+ipcRenderer.on(IPC.ACP_MODE_CHANGED, (_, { id, currentModeId, error }) => {
+  const s = acpSession(id);
+  if (!s) return;
+  if (s.modes && currentModeId) s.modes.currentModeId = currentModeId;
+  if (s === sessions.get(activeId)) updateModePill();
+  if (error) showToast(`Couldn't switch mode: ${error}`, { duration: 3000 });
 });
 
 ipcRenderer.on(IPC.ACP_UPDATE, (_, { id, update }) => {
@@ -8825,6 +8948,12 @@ uiTextarea.addEventListener('keydown', e => {
       }
       if (e.key === 'Escape') { e.preventDefault(); hideSlashMenu(); return; }
     }
+  }
+
+  // Shift+Tab cycles Claude Code permission modes (Ask → Auto-edit → Plan), like the
+  // CLI. No-op (and lets Tab behave normally) when the session has no modes.
+  if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (cycleMode()) { e.preventDefault(); return; }
   }
 
   // Esc while typing → stop the agent (slash menu already handled above).

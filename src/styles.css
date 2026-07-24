@@ -2460,7 +2460,7 @@ html, body {
 .model-item:hover { background: var(--bg-input); color: var(--text); }
 
 /* All HTML dropdown menus → shade-7 bg, shade-0 text, shade-5 row hover */
-#settings-menu, #model-menu, #figma-menu, #audit-menu, #profile-menu, #slash-menu, #persona-menu { background: var(--spec-input-bg); border: none; }   /* shade 7 */
+#settings-menu, #model-menu, #figma-menu, #audit-menu, #profile-menu, #slash-menu, #persona-menu, #mode-menu { background: var(--spec-input-bg); border: none; }   /* shade 7 */
 .sm-item, .model-item, .figma-menu-item, .audit-item, .profile-item, .slash-item, .persona-item { font-family: var(--font-mono); color: var(--spec-text); }   /* shade 0 */
 .sm-item:hover, .model-item:hover, .figma-menu-item:hover,
 .audit-item:hover, .profile-item:hover, .slash-item:hover, .persona-item:hover { background: var(--spec-toolbar-bg); color: var(--spec-text); }   /* shade 5 */
@@ -2500,6 +2500,37 @@ html, body {
 .persona-item-label { font-size: 12px; font-weight: 500; }
 .persona-item-desc { font-size: 10.5px; color: var(--spec-text-dim); }   /* shade 1 */
 .persona-item.selected .persona-item-label { color: var(--spec-accent); }
+
+/* ── Permission-mode link (footer, left) — Claude Code's Shift+Tab modes ── */
+#mode-wrap { position: relative; flex-shrink: 0; align-self: center; margin-right: auto; }   /* push save/send to the right (replaces the hidden hint's flex:1) */
+#btn-mode {
+  display: flex; align-items: center; gap: 8px;
+  width: auto; height: auto; min-width: 0; padding: 4px 10px 4px 15px;   /* left pad clears the rounded corner */
+  background: transparent; border: none;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+  cursor: pointer; transition: color 0.12s;
+}
+#btn-mode:hover { background: transparent; color: var(--spec-text); }
+#btn-mode.mode-warn { color: var(--spec-accent); }                        /* approvals off in this mode */
+#btn-mode-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode-caret { flex-shrink: 0; width: 9px; height: 9px; transform: rotate(-90deg); transition: transform 0.14s ease; }   /* points right (mockup) */
+#btn-mode.open .mode-caret { transform: rotate(-180deg); }   /* menu opens upward → point up */
+#mode-menu {
+  display: none; position: absolute; bottom: calc(100% + 5px); left: 0;
+  min-width: 240px; max-height: 340px; overflow-y: auto;
+  border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 200;
+}
+#mode-menu.open { display: block; }
+.mode-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 8px 12px; cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.mode-item:hover { background: var(--spec-toolbar-bg); }   /* shade 5 */
+.mode-item-label { font-size: 12px; font-weight: 500; }
+.mode-item-desc { font-size: 10.5px; color: var(--spec-text-dim); }   /* shade 1 */
+.mode-item.selected .mode-item-label { color: var(--spec-accent); }
+.mode-item.warn .mode-item-label::after { content: " · approvals off"; font-weight: 400; color: var(--spec-text-dim); }
 
 /* ── Session-tab kebab dropdown (HTML, design-system styled) ── */
 #tab-settings-menu {
