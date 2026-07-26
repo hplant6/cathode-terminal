@@ -56,6 +56,8 @@ const LS = {
   hermesSetup:    'cathode-hermes-setup-dismissed', // Hermes setup card dismissed
   profilesAcpV2:  'cathode-profiles-acpv2',         // one-time profile→ACP migration flag
   codeTabRetired: 'cathode-code-tab-retired',       // one-time code-tab retirement flag
+  projects:       'cathode-projects',               // project registry [{id,name,rootDir,lastActiveAt}]
+  activeProject:  'cathode-active-project',          // id of the active project
 };
 
 // First-run UI defaults — seeded once, before the panels below read these keys,
@@ -9054,6 +9056,127 @@ async function detectStorybook() {
 // Init — re-adopt the remembered Storybook only if it's actually still running.
 ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: (sbConfig && sbConfig.projectDir) || '' });
 if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-folder'); if (sf) sf.value = sbConfig.projectDir; }
+
+// ── Project switcher ──────────────────────────────────────────────
+// Titlebar chip that swaps the active project — the folder new agent
+// sessions spawn in. Promotes the single global project dir into a
+// persistent, switchable registry (roadmap: "b) Project switcher").
+// Tab-per-project + server suspend/resume layer on top in later slices.
+(function initProjectSwitcher() {
+  const wrap  = document.getElementById('project-switch');
+  const btn   = document.getElementById('btn-project');
+  const label = document.getElementById('btn-project-label');
+  const menu  = document.getElementById('project-menu');
+  if (!wrap || !btn || !menu) return;
+  const path = require('path');
+
+  const loadProjects = () => { try { return JSON.parse(localStorage.getItem(LS.projects) || '[]'); } catch (_) { return []; } };
+  const saveProjects = (l) => { try { localStorage.setItem(LS.projects, JSON.stringify(l)); } catch (_) {} };
+  const getActiveId  = () => { try { return localStorage.getItem(LS.activeProject) || ''; } catch (_) { return ''; } };
+  const setActiveId  = (id) => { try { localStorage.setItem(LS.activeProject, id || ''); } catch (_) {} };
+  const projId  = (dir) => 'p_' + dir.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  const nameFor = (dir) => path.basename(dir.replace(/[\\/]+$/, '')) || dir;
+  const activeProject = () => { const id = getActiveId(); return loadProjects().find(p => p.id === id) || null; };
+
+  // Register (or refresh) a project by directory; returns the entry.
+  function registerProject(dir, name) {
+    if (!dir) return null;
+    dir = dir.replace(/[\\/]+$/, '');
+    const list = loadProjects();
+    const id = projId(dir);
+    let entry = list.find(p => p.id === id);
+    if (!entry) { entry = { id, name: name || nameFor(dir), rootDir: dir }; list.push(entry); }
+    else if (name) entry.name = name;
+    entry.lastActiveAt = Date.now();
+    saveProjects(list);
+    return entry;
+  }
+
+  // Make a project active: persist, point the agent cwd at it, reflect in the chip.
+  function activateProject(dir, name) {
+    const entry = registerProject(dir, name);
+    if (!entry) return;
+    setActiveId(entry.id);
+    ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
+    try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
+    updateChip();
+  }
+
+  function removeProject(id) {
+    const list = loadProjects().filter(p => p.id !== id);
+    saveProjects(list);
+    if (getActiveId() === id) {
+      const next = list.slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))[0];
+      if (next) activateProject(next.rootDir);
+      else { setActiveId(''); ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: '' }); updateChip(); }
+    }
+    renderMenu();
+  }
+
+  function updateChip() {
+    const p = activeProject();
+    label.textContent = p ? p.name : 'No project';
+    btn.title = p ? ('Project: ' + p.rootDir + ' — click to switch') : 'Pick a project folder';
+  }
+
+  const CHECK = '<svg class="ps-check" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4,9.5 7.5,13 14,5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function renderMenu() {
+    const list = loadProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+    const activeId = getActiveId();
+    menu.innerHTML = '';
+    if (!list.length) {
+      const e = document.createElement('div'); e.className = 'ps-empty';
+      e.textContent = 'No projects yet — open one below.';
+      menu.appendChild(e);
+    }
+    list.forEach(p => {
+      const item = document.createElement('button');
+      item.className = 'ps-item' + (p.id === activeId ? ' active' : '');
+      item.innerHTML = CHECK +
+        '<span class="ps-item-body"><span class="ps-item-name"></span><span class="ps-item-path"></span></span>' +
+        '<span class="ps-item-remove" title="Remove from list">×</span>';
+      item.querySelector('.ps-item-name').textContent = p.name;
+      item.querySelector('.ps-item-path').textContent = p.rootDir;
+      item.addEventListener('click', (ev) => {
+        if (ev.target.closest('.ps-item-remove')) return;
+        activateProject(p.rootDir); closeMenu();
+      });
+      item.querySelector('.ps-item-remove').addEventListener('click', (ev) => {
+        ev.stopPropagation(); removeProject(p.id);
+      });
+      menu.appendChild(item);
+    });
+    const sep = document.createElement('div'); sep.className = 'ps-sep'; menu.appendChild(sep);
+    const open = document.createElement('button');
+    open.className = 'ps-item ps-action';
+    open.innerHTML = '<svg width="14" height="14" viewBox="0 0 18 18" fill="none"><path d="M9 4.5v9M4.5 9h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="ps-item-body"><span class="ps-item-name">Open project…</span></span>';
+    open.addEventListener('click', async () => {
+      closeMenu();
+      const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
+      if (dir) activateProject(dir);
+    });
+    menu.appendChild(open);
+  }
+
+  const openMenu   = () => { renderMenu(); wrap.classList.add('open'); };
+  const closeMenu  = () => wrap.classList.remove('open');
+  const toggleMenu = () => wrap.classList.contains('open') ? closeMenu() : openMenu();
+
+  btn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+  // Init: adopt the saved active project; else seed from the legacy/Storybook dir.
+  const existing = activeProject();
+  if (existing) { activateProject(existing.rootDir); }
+  else {
+    let seed = '';
+    try { seed = (typeof sbConfig !== 'undefined' && sbConfig && sbConfig.projectDir) || localStorage.getItem(LS.projectDir) || ''; } catch (_) {}
+    if (seed) activateProject(seed);
+    else updateChip();
+  }
+})();
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)
     const { instances, activeId } = await ipcRenderer.invoke(IPC.STORYBOOK_LIST);
