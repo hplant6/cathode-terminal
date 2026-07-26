@@ -404,11 +404,11 @@ html, body {
 .ps-empty { padding: 10px; font-size: 11px; opacity: 0.5; text-align: center; }
 
 /* ── Mission Control modal ───────────────────────────────────────── */
-#mc-box { width: 640px; max-width: 92vw; }
-.mc-head { margin-bottom: 14px; }
-.mc-title { display: block; font-family: var(--font-mono); font-size: 15px; color: var(--text); }
+#mc-box { width: 96vw; max-width: none; height: 92vh; display: flex; flex-direction: column; padding: 22px 24px; }
+.mc-head { margin-bottom: 16px; flex-shrink: 0; }
+.mc-title { display: block; font-family: var(--font-mono); font-size: 16px; color: var(--text); }
 .mc-sub { display: block; font-size: 11px; opacity: 0.55; margin-top: 2px; }
-.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 52vh; overflow-y: auto; }
+.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-content: start; overflow-y: auto; flex: 1; min-height: 0; }
 .mc-card { display: flex; flex-direction: column; gap: 4px; padding: 12px; background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .mc-card.active { border-color: var(--accent); }
 .mc-card-name { font-family: var(--font-mono); font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 6px; overflow: hidden; }
@@ -421,7 +421,7 @@ html, body {
 .mc-card-btn:disabled { opacity: 0.4; cursor: default; }
 .mc-card-btn.primary { border-color: var(--accent); color: var(--accent); }
 .mc-empty { grid-column: 1 / -1; padding: 28px; text-align: center; opacity: 0.5; font-size: 12px; }
-.mc-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
+.mc-foot { margin-top: 16px; display: flex; justify-content: flex-end; flex-shrink: 0; }
 
 /* Mission Control — per-project server rows */
 .mc-servers { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
@@ -429,9 +429,9 @@ html, body {
 .mc-srv { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .mc-srv-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--spec-text-faint); }   /* shade 2 = stopped */
 .mc-srv.up .mc-srv-dot { background: #3ecf6a; box-shadow: 0 0 5px #3ecf6a88; }
-.mc-srv-name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 84px; }
-.mc-srv-port { font-family: var(--font-mono); opacity: 0.45; font-size: 10px; }
-.mc-srv-actions { margin-left: auto; display: flex; gap: 3px; }
+.mc-srv-name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 0; }
+.mc-srv-port { font-family: var(--font-mono); opacity: 0.45; font-size: 10px; flex-shrink: 0; }
+.mc-srv-actions { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
 .mc-srv-btn { padding: 2px 6px; font-size: 10px; font-family: var(--font-ui); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; transition: background 0.1s; white-space: nowrap; }
 .mc-srv-btn:hover:not(:disabled) { background: var(--btn-hover); }
 .mc-srv-btn:disabled { opacity: 0.35; cursor: default; }
