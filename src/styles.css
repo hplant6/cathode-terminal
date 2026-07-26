@@ -352,17 +352,27 @@ html, body {
 .sm-chevron { margin-left: auto; opacity: 0.5; transition: transform 0.15s; }
 
 /* ── Project switcher chip (app-bar, top-left) ───────────────────── */
-#project-switch { position: relative; display: flex; align-items: center; -webkit-app-region: no-drag; margin-left: 2px; }
+#project-switch { position: relative; display: flex; align-items: center; -webkit-app-region: no-drag; }
 #btn-project {
-  display: flex; align-items: center; gap: 6px;
-  height: 26px; padding: 0 8px;
-  background: transparent; border: none; border-radius: var(--radius-md);
-  color: var(--text); font-family: var(--font-ui); font-size: 12px;
-  cursor: pointer; transition: background 0.1s; white-space: nowrap;
+  display: flex; align-items: center; gap: 10px;
+  height: 32px; padding: 0 12px;
+  background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  color: var(--text); font-family: var(--font-mono); font-size: 12px;
+  cursor: pointer; transition: background 0.1s, border-color 0.1s; white-space: nowrap;
 }
 #btn-project:hover, #project-switch.open #btn-project { background: var(--btn-hover); }
-#btn-project .ps-icon { flex-shrink: 0; opacity: 0.7; }
-#btn-project-label { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+#btn-project-label { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+
+/* Mission Control button — square, pairs with the project pill */
+#btn-mission {
+  -webkit-app-region: no-drag;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; margin-left: -2px;
+  background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  color: var(--text); cursor: pointer; transition: background 0.1s;
+}
+#btn-mission:hover { background: var(--btn-hover); }
+#btn-mission svg { opacity: 0.85; }
 #btn-project .ps-chev { display: inline-flex; opacity: 0.5; transition: transform 0.15s; }
 #project-switch.open #btn-project .ps-chev { transform: rotate(180deg); }
 
@@ -392,6 +402,26 @@ html, body {
 .ps-item-remove:hover { opacity: 1 !important; background: var(--btn-hover); }
 .ps-sep { height: 1px; background: var(--spec-header-bg); margin: 4px 0; }
 .ps-empty { padding: 10px; font-size: 11px; opacity: 0.5; text-align: center; }
+
+/* ── Mission Control modal ───────────────────────────────────────── */
+#mc-box { width: 640px; max-width: 92vw; }
+.mc-head { margin-bottom: 14px; }
+.mc-title { display: block; font-family: var(--font-mono); font-size: 15px; color: var(--text); }
+.mc-sub { display: block; font-size: 11px; opacity: 0.55; margin-top: 2px; }
+.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: 52vh; overflow-y: auto; }
+.mc-card { display: flex; flex-direction: column; gap: 4px; padding: 12px; background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.mc-card.active { border-color: var(--accent); }
+.mc-card-name { font-family: var(--font-mono); font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.mc-card-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-card-badge { flex-shrink: 0; font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; }
+.mc-card-path { font-size: 10px; opacity: 0.5; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-card-actions { display: flex; gap: 6px; margin-top: 8px; }
+.mc-card-btn { flex: 1; padding: 6px; font-size: 11px; font-family: var(--font-ui); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; transition: background 0.1s; }
+.mc-card-btn:hover:not(:disabled) { background: var(--btn-hover); }
+.mc-card-btn:disabled { opacity: 0.4; cursor: default; }
+.mc-card-btn.primary { border-color: var(--accent); color: var(--accent); }
+.mc-empty { grid-column: 1 / -1; padding: 28px; text-align: center; opacity: 0.5; font-size: 12px; }
+.mc-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
 .sm-has-sub.open .sm-chevron { transform: rotate(90deg); }
 .sm-submenu { display: none; padding-left: 28px; }
 .sm-has-sub.open .sm-submenu { display: block; }

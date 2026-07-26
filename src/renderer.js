@@ -9167,6 +9167,54 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) closeMenu(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
+  // ── Mission Control (projects overview) ─────────────────────────
+  const mcBtn   = document.getElementById('btn-mission');
+  const mcModal = document.getElementById('mission-control');
+  const mcGrid  = document.getElementById('mc-grid');
+  if (mcModal && mcGrid) {
+    const mc = wireModal(mcModal);
+    function renderMC() {
+      const list = loadProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+      const activeId = getActiveId();
+      mcGrid.innerHTML = '';
+      if (!list.length) {
+        const e = document.createElement('div'); e.className = 'mc-empty';
+        e.textContent = 'No projects yet — open one to get started.';
+        mcGrid.appendChild(e);
+        return;
+      }
+      list.forEach(p => {
+        const isActive = p.id === activeId;
+        const card = document.createElement('div');
+        card.className = 'mc-card' + (isActive ? ' active' : '');
+        card.innerHTML =
+          '<div class="mc-card-name"><span></span></div>' +
+          '<div class="mc-card-path"></div>' +
+          '<div class="mc-card-actions"></div>';
+        card.querySelector('.mc-card-name > span').textContent = p.name;
+        if (isActive) { const b = document.createElement('span'); b.className = 'mc-card-badge'; b.textContent = 'active'; card.querySelector('.mc-card-name').appendChild(b); }
+        card.querySelector('.mc-card-path').textContent = p.rootDir;
+        const actions = card.querySelector('.mc-card-actions');
+        const sw = document.createElement('button');
+        sw.className = 'mc-card-btn' + (isActive ? '' : ' primary');
+        sw.textContent = isActive ? 'Current' : 'Switch';
+        sw.disabled = isActive;
+        sw.addEventListener('click', () => { if (!isActive) { activateProject(p.rootDir); mc.close(); } });
+        const rm = document.createElement('button');
+        rm.className = 'mc-card-btn';
+        rm.textContent = 'Remove';
+        rm.addEventListener('click', () => { removeProject(p.id); renderMC(); });
+        actions.appendChild(sw); actions.appendChild(rm);
+        mcGrid.appendChild(card);
+      });
+    }
+    mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); renderMC(); mc.open(); });
+    document.getElementById('mc-open')?.addEventListener('click', async () => {
+      const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
+      if (dir) { activateProject(dir); renderMC(); }
+    });
+  }
+
   // Init: adopt the saved active project; else seed from the legacy/Storybook dir.
   const existing = activeProject();
   if (existing) { activateProject(existing.rootDir); }
