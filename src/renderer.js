@@ -9247,6 +9247,38 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       });
     }
 
+    const pauseBehaviorOf = (p) => (p.pauseBehavior === 'keep' ? 'keep' : 'suspend');
+
+    // Pause: stop the project's running servers (if it suspends on pause),
+    // recording which were up so Resume can restart exactly those.
+    async function pauseProject(p) {
+      const servers = p.servers || [];
+      let stopped = [];
+      if (pauseBehaviorOf(p) === 'suspend' && servers.length) {
+        const ports = servers.filter(s => s.port).map(s => s.port);
+        let running = {};
+        try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
+        for (const s of servers) {
+          if (s.port && running[s.port]) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); stopped.push(s.id); }
+        }
+      }
+      updateProject(p.id, x => { x.state = 'paused'; x.pausedServers = stopped; });
+      renderMC();
+    }
+
+    // Resume: restart the servers that were running when the project was paused.
+    async function resumeProject(p) {
+      const servers = p.servers || [];
+      for (const sid of (p.pausedServers || [])) {
+        const s = servers.find(x => x.id === sid);
+        if (!s) continue;
+        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port }).catch(() => null);
+        if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
+      }
+      updateProject(p.id, x => { x.state = 'active'; x.pausedServers = []; });
+      renderMC();
+    }
+
     function serverRow(p, s) {
       const row = document.createElement('div'); row.className = 'mc-srv';
       if (s.port) row.dataset.port = s.port;
@@ -9308,6 +9340,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           '<div class="mc-card-actions"></div>';
         card.querySelector('.mc-card-name > span').textContent = p.name;
         if (isActive) { const b = document.createElement('span'); b.className = 'mc-card-badge'; b.textContent = 'active'; card.querySelector('.mc-card-name').appendChild(b); }
+        if (p.state === 'paused') { const pb = document.createElement('span'); pb.className = 'mc-card-badge paused'; pb.textContent = 'paused'; card.querySelector('.mc-card-name').appendChild(pb); card.classList.add('paused'); }
         card.querySelector('.mc-card-path').textContent = p.rootDir;
 
         const srvWrap = card.querySelector('.mc-servers');
@@ -9317,9 +9350,21 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           srvWrap.appendChild(none);
         } else {
           servers.forEach(s => srvWrap.appendChild(serverRow(p, s)));
+          const beh = document.createElement('button');
+          beh.className = 'mc-srv-behavior';
+          beh.textContent = 'On pause: ' + (pauseBehaviorOf(p) === 'keep' ? 'keep servers running' : 'suspend servers');
+          beh.title = 'Toggle what happens to this project’s servers when paused';
+          beh.addEventListener('click', () => { updateProject(p.id, x => { x.pauseBehavior = pauseBehaviorOf(x) === 'keep' ? 'suspend' : 'keep'; }); renderMC(); });
+          srvWrap.appendChild(beh);
         }
 
         const actions = card.querySelector('.mc-card-actions');
+        const pr = document.createElement('button');
+        const paused = p.state === 'paused';
+        pr.className = 'mc-card-btn' + (paused ? ' primary' : '');
+        pr.textContent = paused ? 'Resume' : 'Pause';
+        pr.addEventListener('click', async () => { pr.disabled = true; pr.textContent = paused ? 'Resuming…' : 'Pausing…'; if (paused) await resumeProject(p); else await pauseProject(p); });
+        actions.appendChild(pr);
         const sw = document.createElement('button');
         sw.className = 'mc-card-btn' + (isActive ? '' : ' primary');
         sw.textContent = isActive ? 'Current' : 'Switch';

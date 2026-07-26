@@ -438,6 +438,13 @@ html, body {
 .mc-srv.up .mc-srv-toggle { border-color: var(--accent); color: var(--accent); }
 .mc-srv-del { border: none; opacity: 0.4; padding: 2px 4px; font-size: 13px; line-height: 1; }
 .mc-srv-del:hover:not(:disabled) { opacity: 1; background: var(--btn-hover); }
+
+/* Pause / resume */
+.mc-card.paused { opacity: 0.62; }
+.mc-card.paused:hover { opacity: 0.85; }
+.mc-card-badge.paused { color: var(--text-dim); border-color: var(--text-dim); }
+.mc-srv-behavior { align-self: flex-start; margin-top: 4px; padding: 2px 4px; font-size: 10px; font-family: var(--font-ui); background: transparent; border: none; border-radius: var(--radius-md); color: var(--text); opacity: 0.5; cursor: pointer; }
+.mc-srv-behavior:hover { opacity: 0.9; background: var(--btn-hover); }
 .sm-has-sub.open .sm-chevron { transform: rotate(90deg); }
 .sm-submenu { display: none; padding-left: 28px; }
 .sm-has-sub.open .sm-submenu { display: block; }
