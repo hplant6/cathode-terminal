@@ -445,6 +445,18 @@ html, body {
 .mc-card-badge.paused { color: var(--text-dim); border-color: var(--text-dim); }
 .mc-srv-behavior { align-self: flex-start; margin-top: 4px; padding: 2px 4px; font-size: 10px; font-family: var(--font-ui); background: transparent; border: none; border-radius: var(--radius-md); color: var(--text); opacity: 0.5; cursor: pointer; }
 .mc-srv-behavior:hover { opacity: 0.9; background: var(--btn-hover); }
+
+/* Per-server env chip (Windows) + manual add-server form */
+.mc-srv-env { padding: 1px 5px; font-size: 9px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.03em; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); opacity: 0.5; cursor: pointer; }
+.mc-srv-env:hover { opacity: 1; background: var(--btn-hover); }
+.mc-srv-addwrap { margin-top: 6px; }
+.mc-srv-addbtn { padding: 3px 7px; font-size: 10px; font-family: var(--font-ui); background: transparent; border: 1px dashed var(--border); border-radius: var(--radius-md); color: var(--text); opacity: 0.6; cursor: pointer; }
+.mc-srv-addbtn:hover { opacity: 1; background: var(--btn-hover); }
+.mc-srv-form { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.mc-srv-form-row { display: flex; gap: 5px; }
+.mc-srv-input { background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); font-size: 11px; font-family: var(--font-mono); padding: 5px 7px; min-width: 0; }
+.mc-srv-input-port { width: 64px; flex-shrink: 0; }
+.mc-srv-form-row .mc-srv-btn { padding: 5px 10px; }
 .sm-has-sub.open .sm-chevron { transform: rotate(90deg); }
 .sm-submenu { display: none; padding-left: 28px; }
 .sm-has-sub.open .sm-submenu { display: block; }

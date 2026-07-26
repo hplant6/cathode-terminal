@@ -1246,6 +1246,12 @@ function probePort(port, timeout = 800) {
 
 function killServerProc(inst) {
   const proc = inst.proc;
+  // Windows-native server: tree-kill by pid (taskkill /T), no WSL involved.
+  if (IS_WIN_HOST && inst.runIn === 'win') {
+    if (proc && proc.pid) platform.killPid(proc.pid);
+    else if (proc) { try { proc.kill(); } catch (_) {} }
+    return;
+  }
   if (proc && proc.pid) {
     try { process.kill(-proc.pid, 'SIGTERM'); }        // process-group kill (unix; needs detached)
     catch (_) { try { proc.kill(); } catch (_) {} }     // fallback: kill the launcher
@@ -1256,21 +1262,20 @@ function killServerProc(inst) {
   }
 }
 
-async function startProjectServer({ id, projectId, name, cmd, cwd, port } = {}) {
+async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn } = {}) {
   if (!id || !cmd || !cwd) return { ok: false, error: 'missing id/cmd/cwd' };
   const prev = projectServers.get(id);
   if (prev && prev.proc && prev.status !== 'stopped' && prev.status !== 'error') {
     return { ok: true, already: true, port: prev.port };
   }
   const usePort = safePort(port) || await findFreePort(3000);
-  const inst = { id, projectId: projectId || '', name: name || 'server', cmd, cwd, port: usePort, proc: null, status: 'starting', log: '' };
+  const winNative = IS_WIN_HOST && runIn === 'win';   // per-server override: run Windows-side instead of WSL
+  const inst = { id, projectId: projectId || '', name: name || 'server', cmd, cwd, port: usePort, runIn: winNative ? 'win' : 'wsl', proc: null, status: 'starting', log: '' };
   projectServers.set(id, inst);
+  const spawnOpts = { cwd, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' } };
   let proc;
   try {
-    proc = platform.nixSpawn(['bash', '-lic', cmd], {
-      cwd, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' },
-    });
+    proc = winNative ? platform.cmdSpawn(['/c', cmd], spawnOpts) : platform.nixSpawn(['bash', '-lic', cmd], spawnOpts);
   } catch (e) {
     projectServers.delete(id);
     return { ok: false, error: e.message };

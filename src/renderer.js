@@ -9157,6 +9157,12 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function removeServer(projectId, sid) {
     updateProject(projectId, p => { p.servers = (p.servers || []).filter(x => x.id !== sid); });
   }
+  function addServer(projectId, def) {
+    updateProject(projectId, p => {
+      p.servers = p.servers || [];
+      p.servers.push({ id: genId(), name: def.name || 'server', cmd: def.cmd || '', port: def.port || null, runIn: def.runIn || 'wsl' });
+    });
+  }
   // Seed a project's servers from its package.json scripts (once, if none defined).
   async function seedServers(project) {
     if (!project || (project.servers && project.servers.length)) return;
@@ -9272,7 +9278,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       for (const sid of (p.pausedServers || [])) {
         const s = servers.find(x => x.id === sid);
         if (!s) continue;
-        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port }).catch(() => null);
+        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' }).catch(() => null);
         if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
       }
       updateProject(p.id, x => { x.state = 'active'; x.pausedServers = []; });
@@ -9287,7 +9293,17 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       row.querySelector('.mc-srv-name').title = s.cmd || '';
       row.querySelector('.mc-srv-port').textContent = s.port ? (':' + s.port) : '';
       const acts = row.querySelector('.mc-srv-actions');
-      const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port });
+      const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' });
+
+      // Windows only: per-server env override (WSL agent env vs Windows-native).
+      if (typeof process !== 'undefined' && process.platform === 'win32') {
+        const envChip = document.createElement('button');
+        envChip.className = 'mc-srv-env';
+        envChip.textContent = (s.runIn === 'win' ? 'win' : 'wsl');
+        envChip.title = 'Runs in ' + (s.runIn === 'win' ? 'Windows-native' : 'WSL') + ' — click to switch';
+        envChip.addEventListener('click', () => { updateServer(p.id, s.id, { runIn: (s.runIn === 'win' ? 'wsl' : 'win') }); renderMC(); });
+        acts.appendChild(envChip);
+      }
 
       const toggle = document.createElement('button'); toggle.className = 'mc-srv-btn mc-srv-toggle'; toggle.textContent = 'Start';
       toggle.addEventListener('click', async () => {
@@ -9357,6 +9373,30 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           beh.addEventListener('click', () => { updateProject(p.id, x => { x.pauseBehavior = pauseBehaviorOf(x) === 'keep' ? 'suspend' : 'keep'; }); renderMC(); });
           srvWrap.appendChild(beh);
         }
+
+        // + Add server (manual) — inline form
+        const addWrap = document.createElement('div'); addWrap.className = 'mc-srv-addwrap';
+        const addBtn = document.createElement('button'); addBtn.className = 'mc-srv-addbtn'; addBtn.textContent = '+ Add server';
+        const form = document.createElement('div'); form.className = 'mc-srv-form'; form.hidden = true;
+        const nameIn = document.createElement('input'); nameIn.className = 'mc-srv-input'; nameIn.placeholder = 'name (e.g. dev)';
+        const cmdIn  = document.createElement('input'); cmdIn.className  = 'mc-srv-input'; cmdIn.placeholder  = 'command (e.g. npm run dev)';
+        const portIn = document.createElement('input'); portIn.className = 'mc-srv-input mc-srv-input-port'; portIn.placeholder = 'port'; portIn.inputMode = 'numeric';
+        const save   = document.createElement('button'); save.className = 'mc-srv-btn primary'; save.textContent = 'Add';
+        const cancel = document.createElement('button'); cancel.className = 'mc-srv-btn'; cancel.textContent = 'Cancel';
+        const formRow2 = document.createElement('div'); formRow2.className = 'mc-srv-form-row';
+        formRow2.append(portIn, save, cancel);
+        form.append(nameIn, cmdIn, formRow2);
+        addBtn.addEventListener('click', () => { form.hidden = !form.hidden; if (!form.hidden) nameIn.focus(); });
+        cancel.addEventListener('click', () => { form.hidden = true; nameIn.value = cmdIn.value = portIn.value = ''; });
+        save.addEventListener('click', () => {
+          const cmd = cmdIn.value.trim();
+          if (!cmd) { cmdIn.focus(); return; }
+          const port = parseInt(portIn.value, 10);
+          addServer(p.id, { name: nameIn.value.trim() || 'server', cmd, port: (port >= 1 && port <= 65535) ? port : null });
+          renderMC();
+        });
+        addWrap.append(addBtn, form);
+        srvWrap.appendChild(addWrap);
 
         const actions = card.querySelector('.mc-card-actions');
         const pr = document.createElement('button');
