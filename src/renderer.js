@@ -9113,6 +9113,32 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     renderMenu();
   }
 
+  // ── Per-project dev servers ─────────────────────────────────────
+  const genId = () => 's_' + Math.random().toString(36).slice(2, 9);
+  const getProject = (id) => loadProjects().find(p => p.id === id) || null;
+  function updateProject(id, mut) {
+    const list = loadProjects(); const p = list.find(x => x.id === id);
+    if (!p) return; mut(p); saveProjects(list);
+  }
+  function updateServer(projectId, sid, patch) {
+    updateProject(projectId, p => { const s = (p.servers || []).find(x => x.id === sid); if (s) Object.assign(s, patch); });
+  }
+  function removeServer(projectId, sid) {
+    updateProject(projectId, p => { p.servers = (p.servers || []).filter(x => x.id !== sid); });
+  }
+  // Seed a project's servers from its package.json scripts (once, if none defined).
+  async function seedServers(project) {
+    if (!project || (project.servers && project.servers.length)) return;
+    try {
+      const r = await ipcRenderer.invoke(IPC.SERVER_DETECT, { dir: project.rootDir });
+      if (r && r.servers && r.servers.length) {
+        updateProject(project.id, p => {
+          if (!p.servers || !p.servers.length) p.servers = r.servers.slice(0, 5).map(s => ({ id: genId(), name: s.name, cmd: s.cmd, port: s.port || null }));
+        });
+      }
+    } catch (_) {}
+  }
+
   function updateChip() {
     const p = activeProject();
     label.textContent = p ? p.name : 'No project';
@@ -9172,7 +9198,64 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   const mcModal = document.getElementById('mission-control');
   const mcGrid  = document.getElementById('mc-grid');
   if (mcModal && mcGrid) {
-    const mc = wireModal(mcModal);
+    let statusTimer = null;
+    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; } });
+
+    // Probe every configured port and reflect running state on the rows.
+    async function refreshStatus() {
+      const ports = [];
+      loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
+      if (!ports.length) return;
+      let running = {};
+      try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) { return; }
+      mcGrid.querySelectorAll('.mc-srv[data-port]').forEach(el => {
+        const up = !!running[el.dataset.port];
+        el.classList.toggle('up', up);
+        const t = el.querySelector('.mc-srv-toggle');
+        if (t && !t.disabled) t.textContent = up ? 'Stop' : 'Start';
+      });
+    }
+
+    function serverRow(p, s) {
+      const row = document.createElement('div'); row.className = 'mc-srv';
+      if (s.port) row.dataset.port = s.port;
+      row.innerHTML = '<span class="mc-srv-dot"></span><span class="mc-srv-name"></span><span class="mc-srv-port"></span><span class="mc-srv-actions"></span>';
+      row.querySelector('.mc-srv-name').textContent = s.name;
+      row.querySelector('.mc-srv-name').title = s.cmd || '';
+      row.querySelector('.mc-srv-port').textContent = s.port ? (':' + s.port) : '';
+      const acts = row.querySelector('.mc-srv-actions');
+      const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port });
+
+      const toggle = document.createElement('button'); toggle.className = 'mc-srv-btn mc-srv-toggle'; toggle.textContent = 'Start';
+      toggle.addEventListener('click', async () => {
+        const up = row.classList.contains('up');
+        toggle.disabled = true; toggle.textContent = up ? 'Stopping…' : 'Starting…';
+        if (up) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); }
+        else {
+          const r = await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null);
+          if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-srv-port').textContent = ':' + r.port; }
+        }
+        setTimeout(() => { toggle.disabled = false; refreshStatus(); }, up ? 700 : 1400);
+      });
+
+      const restart = document.createElement('button'); restart.className = 'mc-srv-btn'; restart.textContent = 'Restart';
+      restart.addEventListener('click', async () => {
+        restart.disabled = true; const label = restart.textContent; restart.textContent = '…';
+        const r = await ipcRenderer.invoke(IPC.SERVER_RESTART, arg()).catch(() => null);
+        if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-srv-port').textContent = ':' + r.port; }
+        setTimeout(() => { restart.disabled = false; restart.textContent = label; refreshStatus(); }, 1400);
+      });
+
+      const open = document.createElement('button'); open.className = 'mc-srv-btn'; open.textContent = 'Open'; open.disabled = !s.port;
+      open.addEventListener('click', () => { if (s.port) { ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + s.port); mc.close(); } });
+
+      const del = document.createElement('button'); del.className = 'mc-srv-btn mc-srv-del'; del.textContent = '×'; del.title = 'Remove server';
+      del.addEventListener('click', () => { removeServer(p.id, s.id); renderMC(); });
+
+      acts.append(toggle, restart, open, del);
+      return row;
+    }
+
     function renderMC() {
       const list = loadProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
       const activeId = getActiveId();
@@ -9190,10 +9273,21 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         card.innerHTML =
           '<div class="mc-card-name"><span></span></div>' +
           '<div class="mc-card-path"></div>' +
+          '<div class="mc-servers"></div>' +
           '<div class="mc-card-actions"></div>';
         card.querySelector('.mc-card-name > span').textContent = p.name;
         if (isActive) { const b = document.createElement('span'); b.className = 'mc-card-badge'; b.textContent = 'active'; card.querySelector('.mc-card-name').appendChild(b); }
         card.querySelector('.mc-card-path').textContent = p.rootDir;
+
+        const srvWrap = card.querySelector('.mc-servers');
+        const servers = p.servers || [];
+        if (!servers.length) {
+          const none = document.createElement('div'); none.className = 'mc-srv-none'; none.textContent = 'No servers detected';
+          srvWrap.appendChild(none);
+        } else {
+          servers.forEach(s => srvWrap.appendChild(serverRow(p, s)));
+        }
+
         const actions = card.querySelector('.mc-card-actions');
         const sw = document.createElement('button');
         sw.className = 'mc-card-btn' + (isActive ? '' : ' primary');
@@ -9207,11 +9301,22 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         actions.appendChild(sw); actions.appendChild(rm);
         mcGrid.appendChild(card);
       });
+      refreshStatus();
     }
-    mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); renderMC(); mc.open(); });
+
+    async function openMC() {
+      // seed servers for any project that has none, then render + poll
+      for (const p of loadProjects()) { await seedServers(p); }
+      renderMC();
+      mc.open();
+      clearInterval(statusTimer);
+      statusTimer = setInterval(refreshStatus, 3000);
+    }
+
+    mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
-      if (dir) { activateProject(dir); renderMC(); }
+      if (dir) { activateProject(dir); await seedServers(getProject(getActiveId())); renderMC(); }
     });
   }
 

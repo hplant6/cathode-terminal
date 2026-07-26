@@ -422,6 +422,22 @@ html, body {
 .mc-card-btn.primary { border-color: var(--accent); color: var(--accent); }
 .mc-empty { grid-column: 1 / -1; padding: 28px; text-align: center; opacity: 0.5; font-size: 12px; }
 .mc-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
+
+/* Mission Control — per-project server rows */
+.mc-servers { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.mc-srv-none { font-size: 10px; opacity: 0.4; padding: 2px 0; }
+.mc-srv { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.mc-srv-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--spec-text-faint); }   /* shade 2 = stopped */
+.mc-srv.up .mc-srv-dot { background: #3ecf6a; box-shadow: 0 0 5px #3ecf6a88; }
+.mc-srv-name { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 84px; }
+.mc-srv-port { font-family: var(--font-mono); opacity: 0.45; font-size: 10px; }
+.mc-srv-actions { margin-left: auto; display: flex; gap: 3px; }
+.mc-srv-btn { padding: 2px 6px; font-size: 10px; font-family: var(--font-ui); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; transition: background 0.1s; white-space: nowrap; }
+.mc-srv-btn:hover:not(:disabled) { background: var(--btn-hover); }
+.mc-srv-btn:disabled { opacity: 0.35; cursor: default; }
+.mc-srv.up .mc-srv-toggle { border-color: var(--accent); color: var(--accent); }
+.mc-srv-del { border: none; opacity: 0.4; padding: 2px 4px; font-size: 13px; line-height: 1; }
+.mc-srv-del:hover:not(:disabled) { opacity: 1; background: var(--btn-hover); }
 .sm-has-sub.open .sm-chevron { transform: rotate(90deg); }
 .sm-submenu { display: none; padding-left: 28px; }
 .sm-has-sub.open .sm-submenu { display: block; }

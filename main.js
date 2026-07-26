@@ -1222,6 +1222,117 @@ function adoptPort(port) {
 ipcMain.handle(IPC.STORYBOOK_SCAN,  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
 ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port } = {}) => { const i = adoptPort(port); return i ? { ok: true, id: i.id, url: i.url } : { ok: false, error: 'invalid-port' }; });
 
+// ── Project dev servers (multi-project workspaces, Increment 2) ────
+// App-managed dev servers per project. Spawned in the agent env
+// (platform.nixSpawn → WSL on Windows, native shell on macOS), so the
+// project's toolchain resolves the same way it does for the agent.
+// Status is a raw TCP probe of the port (WSL forwards localhost, so this
+// works where Get-NetTCPConnection can't see WSL-internal listeners).
+const projectServers = new Map();   // defId → { id, projectId, name, cmd, cwd, port, proc, status, log }
+const IS_WIN_HOST = process.platform === 'win32';
+
+function probePort(port, timeout = 800) {
+  const sp = safePort(port);
+  if (!sp) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const netmod = require('net');
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; try { sock.destroy(); } catch (_) {} resolve(v); } };
+    const sock = netmod.connect({ host: '127.0.0.1', port: sp }, () => finish(true));
+    sock.on('error', () => finish(false));
+    sock.setTimeout(timeout, () => finish(false));
+  });
+}
+
+function killServerProc(inst) {
+  const proc = inst.proc;
+  if (proc && proc.pid) {
+    try { process.kill(-proc.pid, 'SIGTERM'); }        // process-group kill (unix; needs detached)
+    catch (_) { try { proc.kill(); } catch (_) {} }     // fallback: kill the launcher
+  }
+  // Windows/WSL: killing wsl.exe can leave the VM-side server alive — also free the port inside WSL.
+  if (IS_WIN_HOST && inst.port) {
+    try { platform.nixSpawn(['bash', '-lic', `fuser -k ${safePort(inst.port)}/tcp`], { stdio: 'ignore', windowsHide: true }); } catch (_) {}
+  }
+}
+
+async function startProjectServer({ id, projectId, name, cmd, cwd, port } = {}) {
+  if (!id || !cmd || !cwd) return { ok: false, error: 'missing id/cmd/cwd' };
+  const prev = projectServers.get(id);
+  if (prev && prev.proc && prev.status !== 'stopped' && prev.status !== 'error') {
+    return { ok: true, already: true, port: prev.port };
+  }
+  const usePort = safePort(port) || await findFreePort(3000);
+  const inst = { id, projectId: projectId || '', name: name || 'server', cmd, cwd, port: usePort, proc: null, status: 'starting', log: '' };
+  projectServers.set(id, inst);
+  let proc;
+  try {
+    proc = platform.nixSpawn(['bash', '-lic', cmd], {
+      cwd, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' },
+    });
+  } catch (e) {
+    projectServers.delete(id);
+    return { ok: false, error: e.message };
+  }
+  inst.proc = proc; inst.status = 'running';
+  const onLog = (d) => { inst.log = (inst.log + d).slice(-4000); };
+  proc.stdout?.on('data', onLog);
+  proc.stderr?.on('data', onLog);
+  proc.on('exit', (code) => { if (inst.status !== 'stopped') inst.status = code ? 'error' : 'stopped'; inst.proc = null; });
+  return { ok: true, port: usePort };
+}
+
+function stopProjectServer(id) {
+  const inst = projectServers.get(id);
+  if (!inst) return { ok: true };
+  inst.status = 'stopped';
+  killServerProc(inst);
+  inst.proc = null;
+  return { ok: true };
+}
+
+// Read a project's package.json → server-ish scripts, with a guessed port.
+function detectServers(dir) {
+  function guessPort(cmd) {
+    const m = /(?:-p|--port|PORT=)\s*=?\s*(\d{2,5})/.exec(cmd || '');
+    if (m) return safePort(m[1]);
+    if (/\bnext\b/.test(cmd)) return 3000;
+    if (/\bvite\b/.test(cmd)) return 5173;
+    if (/\bastro\b/.test(cmd)) return 4321;
+    if (/\bstorybook\b/.test(cmd)) return 6006;
+    return null;
+  }
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    const scripts = pkg.scripts || {};
+    const prefer = ['dev', 'start', 'serve', 'preview', 'storybook'];
+    const out = [];
+    for (const key of Object.keys(scripts)) {
+      const val = scripts[key] || '';
+      const serverish = prefer.includes(key) || /(dev|serve|start|storybook|watch|preview)/.test(key)
+        || /(vite|next|astro|webpack(-dev-server)?|serve\b|storybook|nodemon|http-server|remix)/.test(val);
+      if (!serverish) continue;
+      out.push({ name: key, cmd: `npm run ${key}`, port: guessPort(val) });
+    }
+    out.sort((a, b) => (prefer.indexOf(a.name) + 1 || 99) - (prefer.indexOf(b.name) + 1 || 99));
+    return { ok: true, name: pkg.name || path.basename(dir), servers: out };
+  } catch (e) {
+    return { ok: false, error: e.message, servers: [] };
+  }
+}
+
+ipcMain.handle(IPC.SERVER_START,   (_, def) => startProjectServer(def || {}));
+ipcMain.handle(IPC.SERVER_STOP,    (_, { id } = {}) => stopProjectServer(id));
+ipcMain.handle(IPC.SERVER_RESTART, async (_, def) => { stopProjectServer(def && def.id); await new Promise(r => setTimeout(r, 400)); return startProjectServer(def || {}); });
+ipcMain.handle(IPC.SERVER_STATUS,  async (_, { ports } = {}) => {
+  const running = {};
+  await Promise.all((Array.isArray(ports) ? ports : []).map(async p => { const sp = safePort(p); if (sp) running[sp] = await probePort(sp); }));
+  return { running };
+});
+ipcMain.handle(IPC.SERVER_DETECT,  (_, { dir } = {}) => detectServers(dir));
+app.on('before-quit', () => { for (const inst of projectServers.values()) killServerProc(inst); });
+
 // Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
 ipcMain.handle(IPC.STORYBOOK_OPEN_SWITCHER, async () => {
   const items = [...sbServers.values()].map(s => ({

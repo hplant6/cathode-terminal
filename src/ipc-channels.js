@@ -18,6 +18,11 @@ const IPC = Object.freeze({
   PERF_REPORT_OPEN: 'perf-report-open',
   PORTS_LIST: 'ports-list',
   PORTS_KILL: 'ports-kill',
+  SERVER_START: 'server-start',       // start a project dev server (agent env)
+  SERVER_STOP: 'server-stop',         // stop a running project server
+  SERVER_RESTART: 'server-restart',   // stop + start
+  SERVER_STATUS: 'server-status',     // probe a set of ports → running map
+  SERVER_DETECT: 'server-detect',     // read a project's package.json scripts
   SPEND_REPORT: 'spend-report',
   SESSIONS_LIST: 'sessions-list',
   ACP_CANCEL: 'acp-cancel',
