@@ -352,26 +352,26 @@ html, body {
 .sm-chevron { margin-left: auto; opacity: 0.5; transition: transform 0.15s; }
 
 /* ── Project switcher chip (app-bar, top-left) ───────────────────── */
-#project-switch { position: relative; display: flex; align-items: center; -webkit-app-region: no-drag; }
+#project-switch { position: relative; top: 10px; display: flex; align-items: center; -webkit-app-region: no-drag; }
 #btn-project {
   display: flex; align-items: center; gap: 10px;
   height: 32px; padding: 0 12px;
-  background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--spec-structural); border: none; border-radius: var(--radius-lg);   /* shade 3 */
   color: var(--text); font-family: var(--font-mono); font-size: 12px;
-  cursor: pointer; transition: background 0.1s, border-color 0.1s; white-space: nowrap;
+  cursor: pointer; transition: background 0.1s; white-space: nowrap;
 }
-#btn-project:hover, #project-switch.open #btn-project { background: var(--btn-hover); }
+#btn-project:hover, #project-switch.open #btn-project { background: var(--spec-text-faint); }   /* shade 2 */
 #btn-project-label { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
 /* Mission Control button — square, pairs with the project pill */
 #btn-mission {
-  -webkit-app-region: no-drag;
+  -webkit-app-region: no-drag; position: relative; top: 10px;
   display: inline-flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; margin-left: -2px;
-  background: var(--spec-input-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--spec-structural); border: none; border-radius: var(--radius-lg);   /* shade 3 */
   color: var(--text); cursor: pointer; transition: background 0.1s;
 }
-#btn-mission:hover { background: var(--btn-hover); }
+#btn-mission:hover { background: var(--spec-text-faint); }   /* shade 2 */
 #btn-mission svg { opacity: 0.85; }
 #btn-project .ps-chev { display: inline-flex; opacity: 0.5; transition: transform 0.15s; }
 #project-switch.open #btn-project .ps-chev { transform: rotate(180deg); }
@@ -3937,6 +3937,7 @@ html, body {
   display: flex; align-items: flex-start;   /* tabs hang from the top edge */
   height: 100%;
   gap: 4px;
+  margin-left: 48px;   /* clear the project pill + Mission Control cluster on the left */
   -webkit-app-region: no-drag;
 }
 #view-tab-thumb { display: none; }            /* active styling replaces the sliding thumb */
