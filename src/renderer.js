@@ -441,9 +441,13 @@ const PTY_MODEL_SWITCH_SETTLE_MS = 1300; // PTY has no "ready" signal — confir
 // ── PTY Sessions ──────────────────────────────────────────────────
 const ptySessionsEl = document.getElementById('pty-sessions');
 const ptyTabsEl     = document.getElementById('pty-tabs-container');
-const sessions      = new Map(); // id → { name, term, fitAddon, el, ro }
+const sessions      = new Map(); // id → { name, term, fitAddon, el, ro, projectId }
 let activeId        = null;
 let nextId          = 1;
+
+// The active project's id (from the project switcher). Sessions are tagged
+// with this at creation so the tab strip can filter to one project at a time.
+function currentProjectId() { try { return localStorage.getItem(LS.activeProject) || ''; } catch (_) { return ''; } }
 
 function getDefaultProfile() {
   return sessionProfiles[0] || { name: 'Claude Code', command: 'claude' };
@@ -469,13 +473,13 @@ function saveOpenSessions() {
   try {
     const entries = [...sessions.entries()].filter(([, s]) => !s.transient);
     localStorage.setItem(OPEN_SESSIONS_KEY, JSON.stringify({
-      list: entries.map(([, s]) => ({ name: s.name, command: s.command, acp: s.type === 'acp' })),
+      list: entries.map(([, s]) => ({ name: s.name, command: s.command, acp: s.type === 'acp', projectId: s.projectId || '' })),
       active: entries.findIndex(([sid]) => sid === activeId),
     }));
   } catch (_) {}
 }
 
-function createSession(name, command, acp, transient, resume) {
+function createSession(name, command, acp, transient, resume, projectId) {
   const profile = getDefaultProfile();
   const cmd     = command != null ? command : profile.command;
   const wantAcp = acp != null ? (acp === true) : (command == null && profile.acp === true);
@@ -483,10 +487,12 @@ function createSession(name, command, acp, transient, resume) {
   const isAcp   = wantAcp && !!agent;   // only ACP-capable agents get chat
   const id      = nextId++;
   const sName   = name || profile.name;
+  const pid     = projectId !== undefined ? projectId : currentProjectId();   // tag the session to a project
 
   if (isAcp) {
     createAcpSession(id, sName, agent, cmd, resume);
-    if (transient) sessions.get(id).transient = true;
+    const cs = sessions.get(id);
+    if (cs) { cs.projectId = pid; if (transient) cs.transient = true; }
     saveOpenSessions();
     return id;
   }
@@ -512,7 +518,7 @@ function createSession(name, command, acp, transient, resume) {
   ro.observe(termEl);
 
   ipcRenderer.send(IPC.PTY_SPAWN, { id, command: cmd });
-  const sess = { id, name: sName, command: cmd, term, fitAddon, el, termEl, ro, transient: transient === true };
+  const sess = { id, name: sName, command: cmd, term, fitAddon, el, termEl, ro, transient: transient === true, projectId: pid };
   sessions.set(id, sess);
   saveOpenSessions();
   switchSession(id);
@@ -634,9 +640,12 @@ function closeSession(id) {
     if (newId == null || newId === id) return;   // couldn't replace it → don't strand the user with zero sessions
     if (activeId !== newId) switchSession(newId);
   } else if (activeId === id) {
-    const ids = [...sessions.keys()];
-    const idx = ids.indexOf(id);
-    switchSession(ids[idx + 1] ?? ids[idx - 1]);
+    // Prefer another session in the same project; if none remain, open a fresh
+    // one there rather than jumping to a different project's session.
+    const others  = [...sessions.keys()].filter(sid => sid !== id);
+    const sameProj = others.filter(sid => sessionInActiveProject(sessions.get(sid)));
+    if (sameProj.length) switchSession(sameProj[0]);
+    else { const nid = createSession(); if (nid != null && nid !== activeId) switchSession(nid); }
   }
   if (s._modelToast) { s._modelToast.dismiss(); s._modelToast = null; }   // else the duration:0 spinner toast outlives the tab
   if (s.type === 'acp') {
@@ -1694,9 +1703,17 @@ function switchSession(id) {
   saveOpenSessions();   // remember the active tab across launches
 }
 
+// A session belongs to the active project if it's tagged with it, is untagged
+// (migration / no active project), or no project is active at all.
+function sessionInActiveProject(s) {
+  const pid = currentProjectId();
+  return !pid || !s || !s.projectId || s.projectId === pid;
+}
+
 function renderPtyTabs() {
   ptyTabsEl.innerHTML = '';
   for (const [id, s] of sessions) {
+    if (!sessionInActiveProject(s)) continue;   // show only the active project's tabs
     const tab = document.createElement('div');
     tab.className = 'pty-tab' + (id === activeId ? ' active' : '');
 
@@ -1731,6 +1748,19 @@ function renderPtyTabs() {
     tab.addEventListener('click', () => switchSession(id));
     ptyTabsEl.appendChild(tab);
   }
+}
+
+// Called when the active project changes: swap the visible session tabs to that
+// project's sessions, and make sure the active session belongs to it (opening a
+// fresh one if the project has none yet).
+function onProjectChanged() {
+  const active = sessions.get(activeId);
+  if (active && sessionInActiveProject(active)) { renderPtyTabs(); return; }
+  let target = null;
+  for (const [id, s] of sessions) { if (sessionInActiveProject(s)) { target = id; break; } }
+  if (target != null) switchSession(target);
+  else createSession();   // no session for this project yet → open one (inherits the active project)
+  renderPtyTabs();
 }
 
 ipcRenderer.on(IPC.PTY_OUTPUT, (_, { id, data }) => {
@@ -3472,7 +3502,7 @@ ipcRenderer.on(IPC.ACP_TERM_RELEASE, (_, { id, termId }) => {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(OPEN_SESSIONS_KEY) || 'null'); } catch (_) {}
   if (saved && Array.isArray(saved.list) && saved.list.length) {
-    const ids = saved.list.map(t => { try { return createSession(t.name, t.command, t.acp); } catch (_) { return null; } }).filter(v => v != null);
+    const ids = saved.list.map(t => { try { return createSession(t.name, t.command, t.acp, false, null, t.projectId); } catch (_) { return null; } }).filter(v => v != null);
     if (!ids.length) { createSession(); return; }
     switchSession(ids[saved.active] ?? ids[0]);
   } else {
@@ -9100,6 +9130,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
     updateChip();
+    if (typeof onProjectChanged === 'function') onProjectChanged();   // swap the visible session tabs to this project
   }
 
   function removeProject(id) {
