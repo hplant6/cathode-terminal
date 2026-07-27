@@ -9129,8 +9129,6 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function activateProject(dir, name) {
     const entry = registerProject(dir, name);
     if (!entry) return;
-    const leaving = getActiveId();
-    if (leaving && leaving !== entry.id) ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: leaving }).catch(() => {});   // snapshot the project we're leaving
     setActiveId(entry.id);
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
@@ -9298,8 +9296,13 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         el.classList.toggle('paused', paused);
         const st = el.querySelector('.mc-row-state');
         if (st) st.textContent = up ? 'ACTIVE' : (starting ? 'STARTING' : (paused ? 'PAUSED' : 'INACTIVE'));
-        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open) + snapshot it for the preview.
-        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); const pid = getActiveId(); setTimeout(() => ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: pid }).catch(() => {}), 4000); }
+        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open) + snapshot THAT project's server for its preview (the only time we capture).
+        if (up && el.dataset.openWhenUp && el.dataset.port) {
+          el.dataset.openWhenUp = '';
+          ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port);
+          const pid = getActiveId();
+          setTimeout(() => ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: pid }).then(r => { if (r && r.ok) updateProject(pid, x => { x.hasPreview = true; }); }).catch(() => {}), 4000);
+        }
       });
       mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
         const p = projects.find(x => x.id === card.dataset.project);
@@ -9497,7 +9500,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       card.appendChild(headerEl(p, false));
       const prev = document.createElement('div'); prev.className = 'mc-preview';
       const img = document.createElement('img'); img.src = emptyStateFor(p.id); img.alt = '';   // branded fallback…
-      ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the cached screenshot if we have one
+      if (p.hasPreview) ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the screenshot only if a server was actually started for this project
       prev.appendChild(img);
       card.appendChild(prev);
       const meta = document.createElement('div'); meta.className = 'mc-meta';
@@ -9563,9 +9566,6 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     if (seed) activateProject(seed);
     else updateChip();
   }
-
-  // Periodically snapshot the active project's browser pane for its idle-card preview.
-  setInterval(() => { const id = getActiveId(); if (id) ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: id }).catch(() => {}); }, 30000);
 })();
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)
