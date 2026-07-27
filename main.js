@@ -1401,9 +1401,9 @@ function measureRam(port, runIn) {
       });
     });
   }
-  return new Promise((resolve) => {   // macOS / Linux
-    execFile('sh', ['-c', `lsof -ti tcp:${sp} -sTCP:LISTEN 2>/dev/null | head -5 | xargs -r ps -o rss= -p 2>/dev/null | awk '{s+=$1} END{print s}'`], { timeout: 5000 }, (err, o) => {
-      const kb = parseInt((o || '').trim(), 10); resolve(!err && Number.isFinite(kb) && kb > 0 ? kb * 1024 : null);
+  return new Promise((resolve) => {   // macOS / Linux (no `xargs -r` — BSD/macOS xargs rejects it)
+    execFile('sh', ['-c', `pids=$(lsof -ti tcp:${sp} -sTCP:LISTEN 2>/dev/null | head -5 | tr '\\n' ' '); [ -n "$pids" ] && ps -o rss= -p $pids 2>/dev/null | awk '{s+=$1} END{print s}'`], { timeout: 5000 }, (err, o) => {
+      const kb = parseInt((o || '').trim(), 10); resolve(Number.isFinite(kb) && kb > 0 ? kb * 1024 : null);
     });
   });
 }
