@@ -9253,6 +9253,11 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()} ${h}:${String(d.getMinutes()).padStart(2, '0')}${ap}`;
     }
     const hasStorybook = (p) => (p.servers || []).some(s => /storybook/i.test((s.name || '') + ' ' + (s.cmd || '')));
+    // Deterministic empty-state image per project (varied across the grid, stable per card).
+    const emptyStateFor = (id) => {
+      let h = 0; for (let i = 0; i < (id || '').length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+      return 'icons/empty-states/empty-' + (Math.abs(h) % 6 + 1) + '.png';
+    };
 
     // Probe ports; reflect running/paused/inactive on rows + the Pause button.
     async function refreshStatus() {
@@ -9451,7 +9456,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const card = document.createElement('div'); card.className = 'mc-card mc-card-idle'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, false));
       const prev = document.createElement('div'); prev.className = 'mc-preview';
-      const img = document.createElement('img'); img.src = p.preview || 'icons/empty-state.png'; img.alt = '';   // p.preview = cached screenshot (Slice 2)
+      const img = document.createElement('img'); img.src = p.preview || emptyStateFor(p.id); img.alt = '';   // p.preview = cached screenshot (Slice 2)
       if (!p.preview) prev.classList.add('mc-preview-blank');
       prev.appendChild(img);
       card.appendChild(prev);
