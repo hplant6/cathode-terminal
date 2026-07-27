@@ -9293,8 +9293,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         el.classList.toggle('paused', paused);
         const st = el.querySelector('.mc-row-state');
         if (st) st.textContent = up ? 'ACTIVE' : (starting ? 'STARTING' : (paused ? 'PAUSED' : 'INACTIVE'));
-        // A server the user just started/resumed came up → show it in the browser.
-        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); mc.close(); }
+        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open).
+        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); }
       });
       mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
         const p = projects.find(x => x.id === card.dataset.project);
