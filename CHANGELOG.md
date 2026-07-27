@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-27
+
+### Added
+- **Multi-project workspaces.** Cathode now juggles many projects instead of revolving around one. A **project switcher pill** in the Views bar swaps the active project — its folder, its chat/agent tabs, and its servers — with a dropdown of your projects plus **Open project…**. Each chat/terminal session is tagged to a project and the tab strip filters to the active one, so switching brings back exactly the tabs you left, persisted across launches.
+- **Mission Control** — a full-screen *Your Projects* command center (the grid button beside the pill). Every project is a card: the active one expands into a live **server table** (status · port · RAM · start / reload / pause / remove, plus *Start all*), and idle projects show a **preview card** (screenshot · server count · Storybook detection · *Switch to project*).
+- **Per-project dev servers.** Auto-detected from each project's `package.json`, with per-server **start / stop / restart / pause**, live status (running · paused · inactive · starting), a real **per-process RAM** readout, and a manual **Add server** form for anything not in `package.json`. Each server runs in the correct environment automatically — Windows-native vs WSL is detected from the project's installed `node_modules`.
+- **Pause / resume that follows you.** Servers can be paused individually, and switching projects **auto-pauses** the one you leave and **auto-resumes** the one you return to — so each project's dev environment frees its resources when idle and comes back up on its own.
+- **Project preview screenshots.** Starting a server snapshots that project's running app for its Mission Control card; projects without a started server show a branded placeholder.
+- **Address-bar loading / error indicator.** A spinner while the browser loads a page and a pulsing red dot when a load fails.
+
+### Changed
+- The **project switcher and Mission Control** live in the Views bar; the **VIEWS** label and the **Terminal** view toggle were removed to declutter it, and the left panel can no longer be dragged narrower than its controls.
+- **DevTools** now opens as a detached popout via the browser pane's right-click → **Inspect Element** (the Views-bar DevTools toggle is gone).
+
 ## [1.0.39] - 2026-07-22
 
 ### Added
