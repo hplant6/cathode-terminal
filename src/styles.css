@@ -407,7 +407,7 @@ html, body {
 .ps-empty { padding: 10px; font-size: 11px; opacity: 0.5; text-align: center; }
 
 /* ── Mission Control — full-screen "Your Projects" ───────────────── */
-#mission-control { padding: 0; }
+#mission-control { padding: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(16px); }
 .mc-screen { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; padding: 28px 40px 0; box-sizing: border-box; }
 .mc-topbar { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; margin-bottom: 22px; }
 .mc-topbar-title { font-family: var(--font-title); font-weight: 600; font-size: 22px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }
