@@ -1268,6 +1268,25 @@ function killServerProc(inst) {
   }
 }
 
+// Guess whether a project's deps were installed under Windows or WSL, so its
+// server runs in the matching environment — Windows-native node_modules can't
+// run under WSL and vice-versa (rollup/esbuild ship per-platform native binaries).
+function detectRunIn(cwd) {
+  if (!IS_WIN_HOST) return 'wsl';   // POSIX host: nixSpawn is already the native shell
+  const scan = (scope) => {
+    try {
+      const dirs = fs.readdirSync(path.join(cwd, 'node_modules', scope));
+      if (dirs.some(d => /win32/.test(d))) return 'win';
+      if (dirs.some(d => /linux/.test(d))) return 'wsl';
+    } catch (_) {}
+    return null;
+  };
+  return scan('@rollup') || scan('@esbuild') || (() => {
+    try { if (fs.readdirSync(path.join(cwd, 'node_modules', '.bin')).some(e => e.toLowerCase().endsWith('.cmd'))) return 'win'; } catch (_) {}
+    return 'wsl';
+  })();
+}
+
 async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn } = {}) {
   if (!id || !cmd || !cwd) return { ok: false, error: 'missing id/cmd/cwd' };
   const prev = projectServers.get(id);
@@ -1275,7 +1294,9 @@ async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn }
     return { ok: true, already: true, port: prev.port };
   }
   const usePort = safePort(port) || await findFreePort(3000);
-  const winNative = IS_WIN_HOST && runIn === 'win';   // per-server override: run Windows-side instead of WSL
+  // Explicit override ('win'/'wsl') wins; otherwise auto-detect from the project's node_modules.
+  const mode = (runIn === 'win' || runIn === 'wsl') ? runIn : detectRunIn(cwd);
+  const winNative = IS_WIN_HOST && mode === 'win';
   const inst = { id, projectId: projectId || '', name: name || 'server', cmd, cwd, port: usePort, runIn: winNative ? 'win' : 'wsl', proc: null, status: 'starting', log: '' };
   projectServers.set(id, inst);
   // detached → own process group for the unix group-kill; on Windows it forces

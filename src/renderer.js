@@ -9313,7 +9313,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
       for (const s of (p.servers || [])) {
         if (s.port && running[s.port]) continue;
-        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' }).catch(() => null);
+        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
         if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
       }
       setTimeout(refreshStatus, 1500);
@@ -9336,7 +9336,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     async function resumeProject(p) {
       for (const s of (p.servers || [])) {
         if (!s.paused) continue;
-        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' }).catch(() => null);
+        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
         if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
         updateServer(p.id, s.id, { paused: false });
       }
@@ -9359,7 +9359,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       row.querySelector('.mc-row-name').title = s.cmd || '';
       row.querySelector('.mc-row-port').textContent = s.port || '';
       const acts = row.querySelector('.mc-row-acts');
-      const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' });
+      const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn });
       const statusCell = row.querySelector('.mc-row-status');
       statusCell.title = 'Click to view this server’s output'; statusCell.style.cursor = 'pointer';
       statusCell.addEventListener('click', () => showServerLog(s));
