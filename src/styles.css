@@ -4161,6 +4161,16 @@ html, body {
 #address-bar:focus,
 #tab-bar #address-bar:focus { border-color: var(--spec-text-dim); background: var(--spec-toolbar-bg); }   /* shade 1 active outline */
 
+/* Address-bar loading / error indicator (far right of the field) */
+#address-wrap { position: relative; flex: 1; min-width: 60px; display: flex; }
+#address-wrap #address-bar { padding-right: 28px; }
+#browser-load { position: absolute; right: 10px; top: 50%; width: 13px; height: 13px; box-sizing: border-box; pointer-events: none; }
+#browser-load.idle { display: none; }
+#browser-load.loading { border: 2px solid var(--spec-structural); border-top-color: var(--accent); border-radius: 50%; animation: browser-spin 0.7s linear infinite; }
+#browser-load.error { border-radius: 50%; background: #E5484D; box-shadow: 0 0 6px rgba(229, 72, 77, 0.55); animation: browser-err-pulse 1.4s ease-in-out infinite; }
+@keyframes browser-spin { from { transform: translateY(-50%) rotate(0); } to { transform: translateY(-50%) rotate(360deg); } }
+@keyframes browser-err-pulse { 0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; } 50% { transform: translateY(-50%) scale(0.82); opacity: 0.45; } }
+
 #btn-reload {
   flex-shrink: 0;
   width: 34px; height: 34px;             /* square — matches the dropdown height */

@@ -108,6 +108,7 @@ function saveLastURL(url) {
 
 let mainWindow;
 let browserView;
+let browserLoadFailed = false;   // suppress the 'done' indicator when a load failed
 let figmaView      = null;
 let storybookView  = null;
 let devToolsView   = null;  // WebContentsView hosting the embedded DevTools frontend
@@ -434,6 +435,10 @@ function createWindow() {
     "::-webkit-scrollbar-button:single-button:horizontal:increment { background-image: url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%23212026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='5,3 8,6 5,9'/></svg>\"); }",
   ].join('\n');
   browserView.webContents.on('did-finish-load', () => { browserView.webContents.insertCSS(WF_SCROLLBAR_CSS).catch(() => {}); installHoverTracker(browserView); });
+  // Address-bar loading/error indicator.
+  browserView.webContents.on('did-start-loading', () => { browserLoadFailed = false; uiSend(IPC.BROWSER_LOADING, 'loading'); });
+  browserView.webContents.on('did-stop-loading',  () => { if (!browserLoadFailed) uiSend(IPC.BROWSER_LOADING, 'done'); });
+  browserView.webContents.on('did-fail-load', (_, code, desc, url, isMainFrame) => { if (isMainFrame && code !== -3) { browserLoadFailed = true; uiSend(IPC.BROWSER_LOADING, 'error'); } });   // -3 = ABORTED (navigation replaced), ignore
 
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();

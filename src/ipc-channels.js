@@ -63,6 +63,7 @@ const IPC = Object.freeze({
   BROWSER_RELOAD: 'browser-reload',
   BROWSER_TOGGLE_DEVTOOLS: 'browser-toggle-devtools',
   BROWSER_URL_CHANGED: 'browser-url-changed',
+  BROWSER_LOADING: 'browser-loading',   // 'loading' | 'done' | 'error' for the address-bar indicator
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',

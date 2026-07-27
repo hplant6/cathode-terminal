@@ -5340,6 +5340,15 @@ ipcRenderer.on(IPC.BROWSER_URL_CHANGED, (_, url) => {
   updateWfEmpty();
 });
 
+// Address-bar loading / error indicator.
+const browserLoadEl = document.getElementById('browser-load');
+ipcRenderer.on(IPC.BROWSER_LOADING, (_, state) => {
+  if (!browserLoadEl) return;
+  const cls = state === 'loading' ? 'loading' : state === 'error' ? 'error' : 'idle';
+  browserLoadEl.className = cls;
+  browserLoadEl.title = cls === 'loading' ? 'Loading…' : cls === 'error' ? 'Failed to load' : '';
+});
+
 ipcRenderer.on(IPC.TAB_TITLE_UPDATED, (_, title) => {
   const tab = tabs.find(t => t.id === activeTabId);
   if (tab && title) { tab.title = title; renderTabs(); }
