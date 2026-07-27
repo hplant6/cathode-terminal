@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-27
+
 ### Added
 - **Permission modes (Claude Code's Shift+Tab) in the chat.** A mode control at the bottom of the chat switches the Claude Code session's permission mode — **Ask** (default), **Auto-edit** (`acceptEdits`), and **Plan** (read-only) — and **Shift+Tab** cycles them just like the CLI. Driven by the agent's native ACP session modes, so Plan mode genuinely prevents edits/commands. **Bypass Permissions** is available behind a confirmation (kept out of the Shift+Tab cycle). Modes where the agent stops asking permission are highlighted — a reminder that in those modes neither the in-app prompt nor the Watch Approval notification will fire. Shown only for agents that advertise modes.
 
