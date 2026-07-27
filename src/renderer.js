@@ -9126,6 +9126,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function activateProject(dir, name) {
     const entry = registerProject(dir, name);
     if (!entry) return;
+    const leaving = getActiveId();
+    if (leaving && leaving !== entry.id) ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: leaving }).catch(() => {});   // snapshot the project we're leaving
     setActiveId(entry.id);
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
@@ -9235,9 +9237,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   const mcModal = document.getElementById('mission-control');
   const mcGrid  = document.getElementById('mc-grid');
   if (mcModal && mcGrid) {
-    let statusTimer = null;
+    let statusTimer = null, ramTimer = null;
     let addFormProject = null;   // project id whose active card is showing the Add-server form
-    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; addFormProject = null; } });
+    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); clearInterval(ramTimer); statusTimer = ramTimer = null; addFormProject = null; } });
 
     // Icons (from final icons/) — currentColor so CSS controls color per state.
     const ICON_CLOSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg>';
@@ -9293,8 +9295,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         el.classList.toggle('paused', paused);
         const st = el.querySelector('.mc-row-state');
         if (st) st.textContent = up ? 'ACTIVE' : (starting ? 'STARTING' : (paused ? 'PAUSED' : 'INACTIVE'));
-        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open).
-        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); }
+        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open) + snapshot it for the preview.
+        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); const pid = getActiveId(); setTimeout(() => ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: pid }).catch(() => {}), 4000); }
       });
       mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
         const p = projects.find(x => x.id === card.dataset.project);
@@ -9305,6 +9307,20 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         if (anyRunning) { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.hidden = false; }
         else if (anyPaused) { btn.textContent = 'Resume'; btn.dataset.mode = 'resume'; btn.hidden = false; }
         else { btn.hidden = true; }   // nothing running/paused → hide it entirely
+      });
+    }
+
+    const fmtRam = (bytes) => { if (!bytes) return '—'; const mb = bytes / 1048576; return mb >= 1024 ? (mb / 1024).toFixed(1) + 'gb' : Math.round(mb) + 'mb'; };
+    // Poll RAM for the running servers and fill the RAM column.
+    async function refreshRam() {
+      const ports = [];
+      mcGrid.querySelectorAll('.mc-row.up[data-port]').forEach(el => ports.push(el.dataset.port));
+      mcGrid.querySelectorAll('.mc-row:not(.up)[data-port] .mc-row-ram').forEach(c => { c.textContent = '—'; });
+      if (!ports.length) return;
+      let ram = {};
+      try { ({ ram } = await ipcRenderer.invoke(IPC.SERVER_RAM, { ports })); } catch (_) { return; }
+      mcGrid.querySelectorAll('.mc-row.up[data-port]').forEach(el => {
+        const cell = el.querySelector('.mc-row-ram'); if (cell) cell.textContent = fmtRam(ram[el.dataset.port]);
       });
     }
 
@@ -9477,8 +9493,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const card = document.createElement('div'); card.className = 'mc-card mc-card-idle'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, false));
       const prev = document.createElement('div'); prev.className = 'mc-preview';
-      const img = document.createElement('img'); img.src = p.preview || emptyStateFor(p.id); img.alt = '';   // p.preview = cached screenshot (Slice 2)
-      if (!p.preview) prev.classList.add('mc-preview-blank');
+      const img = document.createElement('img'); img.src = emptyStateFor(p.id); img.alt = '';   // branded fallback…
+      ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the cached screenshot if we have one
       prev.appendChild(img);
       card.appendChild(prev);
       const meta = document.createElement('div'); meta.className = 'mc-meta';
@@ -9521,8 +9537,10 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       for (const p of loadProjects()) { await seedServers(p); }
       renderMC();
       mc.open();
-      clearInterval(statusTimer);
+      clearInterval(statusTimer); clearInterval(ramTimer);
       statusTimer = setInterval(refreshStatus, 3000);
+      ramTimer = setInterval(refreshRam, 5000);
+      refreshRam();
     }
 
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
@@ -9542,6 +9560,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     if (seed) activateProject(seed);
     else updateChip();
   }
+
+  // Periodically snapshot the active project's browser pane for its idle-card preview.
+  setInterval(() => { const id = getActiveId(); if (id) ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: id }).catch(() => {}); }, 30000);
 })();
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)

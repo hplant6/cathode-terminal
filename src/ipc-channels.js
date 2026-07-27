@@ -24,6 +24,9 @@ const IPC = Object.freeze({
   SERVER_STATUS: 'server-status',     // probe a set of ports → running map
   SERVER_DETECT: 'server-detect',     // read a project's package.json scripts
   SERVER_LOG: 'server-log',           // captured stdout/stderr tail for a server
+  SERVER_RAM: 'server-ram',           // per-server memory (RSS) by port
+  PROJECT_CAPTURE: 'project-capture', // snapshot the browser pane → project preview
+  PROJECT_PREVIEW: 'project-preview', // path to a project's cached preview image
   SPEND_REPORT: 'spend-report',
   SESSIONS_LIST: 'sessions-list',
   ACP_CANCEL: 'acp-cancel',

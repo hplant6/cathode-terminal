@@ -1368,6 +1368,67 @@ ipcMain.handle(IPC.SERVER_STATUS,  async (_, { ports } = {}) => {
 });
 ipcMain.handle(IPC.SERVER_DETECT,  (_, { dir } = {}) => detectServers(dir));
 ipcMain.handle(IPC.SERVER_LOG,     (_, { id } = {}) => { const i = projectServers.get(id); return { log: (i && i.log) || '', status: (i && i.status) || 'never started' }; });
+
+// Best-effort RAM (bytes) of the process listening on a server's port + its
+// direct children — measured in whichever environment the server runs in.
+function measureRam(port, runIn) {
+  const sp = safePort(port);
+  if (!sp) return Promise.resolve(null);
+  if (IS_WIN_HOST && runIn !== 'win') {   // WSL: sum RSS (KB) inside the VM
+    return new Promise((resolve) => {
+      let out = '', done = false;
+      const fin = (v) => { if (!done) { done = true; resolve(v); } };
+      const script = `pid=$(ss -tlnpH "sport = :${sp}" 2>/dev/null | grep -oP 'pid=\\K[0-9]+' | head -1); if [ -n "$pid" ]; then kids=$(pgrep -P $pid 2>/dev/null | tr '\\n' ' '); ps -o rss= -p $pid $kids 2>/dev/null | awk '{s+=$1} END{print s}'; fi`;
+      try {
+        const p = platform.nixSpawn(['bash', '-lc', script], { windowsHide: true });
+        if (p.stdout) p.stdout.on('data', d => out += d);
+        p.on('close', () => { const kb = parseInt(out.trim(), 10); fin(Number.isFinite(kb) && kb > 0 ? kb * 1024 : null); });
+        p.on('error', () => fin(null));
+        setTimeout(() => { try { p.kill(); } catch (_) {} fin(null); }, 4000);
+      } catch (_) { fin(null); }
+    });
+  }
+  if (IS_WIN_HOST) {   // Windows-native: WorkingSet of the owning process + children
+    return new Promise((resolve) => {
+      const cmd = `$c=Get-NetTCPConnection -State Listen -LocalPort ${sp} -ErrorAction SilentlyContinue | Select-Object -First 1; if($c){ $ids=@([int]$c.OwningProcess) + @(Get-CimInstance Win32_Process -Filter ("ParentProcessId="+$c.OwningProcess) -ErrorAction SilentlyContinue | ForEach-Object { $_.ProcessId }); ($ids | ForEach-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).WorkingSet64 } | Measure-Object -Sum).Sum }`;
+      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true, timeout: 6000 }, (err, o) => {
+        const n = parseInt((o || '').trim(), 10); resolve(!err && Number.isFinite(n) && n > 0 ? n : null);
+      });
+    });
+  }
+  return new Promise((resolve) => {   // macOS / Linux
+    execFile('sh', ['-c', `lsof -ti tcp:${sp} -sTCP:LISTEN 2>/dev/null | head -5 | xargs -r ps -o rss= -p 2>/dev/null | awk '{s+=$1} END{print s}'`], { timeout: 5000 }, (err, o) => {
+      const kb = parseInt((o || '').trim(), 10); resolve(!err && Number.isFinite(kb) && kb > 0 ? kb * 1024 : null);
+    });
+  });
+}
+ipcMain.handle(IPC.SERVER_RAM, async (_, { ports } = {}) => {
+  const ram = {};
+  await Promise.all((Array.isArray(ports) ? ports : []).map(async (port) => {
+    const sp = safePort(port); if (!sp) return;
+    const inst = [...projectServers.values()].find(i => i.port === sp);   // use the tracked env if we started it
+    const bytes = await measureRam(sp, inst ? inst.runIn : 'wsl');
+    if (bytes != null) ram[sp] = bytes;
+  }));
+  return { ram };
+});
+
+// ── Project preview screenshots ───────────────────────────────────
+function previewDir() { const d = path.join(app.getPath('userData'), 'project-previews'); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} return d; }
+function previewPath(projectId) { return path.join(previewDir(), String(projectId).replace(/[^a-z0-9_-]/gi, '_') + '.png'); }
+ipcMain.handle(IPC.PROJECT_CAPTURE, async (_, { projectId } = {}) => {
+  if (!projectId || !browserView || browserView.webContents.isDestroyed()) return { ok: false };
+  try {
+    const img = await browserView.webContents.capturePage();
+    if (img.isEmpty()) return { ok: false };
+    fs.writeFileSync(previewPath(projectId), img.resize({ width: 640 }).toPNG());
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle(IPC.PROJECT_PREVIEW, (_, { projectId } = {}) => {
+  try { const fp = previewPath(projectId); const st = fs.statSync(fp); return { url: 'file://' + fp.replace(/\\/g, '/') + '?t=' + Math.round(st.mtimeMs) }; }
+  catch (_) { return { url: null }; }
+});
 app.on('before-quit', () => { for (const inst of projectServers.values()) killServerProc(inst); });
 
 // Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
