@@ -1272,7 +1272,9 @@ async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn }
   const winNative = IS_WIN_HOST && runIn === 'win';   // per-server override: run Windows-side instead of WSL
   const inst = { id, projectId: projectId || '', name: name || 'server', cmd, cwd, port: usePort, runIn: winNative ? 'win' : 'wsl', proc: null, status: 'starting', log: '' };
   projectServers.set(id, inst);
-  const spawnOpts = { cwd, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' } };
+  // detached → own process group for the unix group-kill; on Windows it forces
+  // wsl.exe to open a visible console window, so keep it off there (windowsHide + piped stdio run it silently).
+  const spawnOpts = { cwd, detached: !IS_WIN_HOST, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' } };
   let proc;
   try {
     proc = winNative ? platform.cmdSpawn(['/c', cmd], spawnOpts) : platform.nixSpawn(['bash', '-lic', cmd], spawnOpts);
