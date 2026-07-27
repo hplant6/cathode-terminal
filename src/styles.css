@@ -4720,9 +4720,10 @@ button:active { background: var(--btn-active); }
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--spec-text-dim);  /* shade 1 */
   flex-shrink: 0;
-  margin-left: auto;   /* push VIEWS + toggles to the right; project pill/MC sit at the left */
+  display: none;   /* hidden — spacing handled by #views-toggles margin */
 }
-#views-toggles { display: flex; align-items: center; gap: 16px; }
+#views-toggles { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.view-toggle:has(.vt-switch[data-view="devtools"]) { display: none; }   /* DevTools opens via right-click → Inspect Element */
 .view-toggle { display: flex; align-items: center; gap: 7px; }
 .vt-label {
   font-family: var(--font-mono); font-weight: 700; font-size: 11px;

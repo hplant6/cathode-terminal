@@ -495,7 +495,7 @@ function createWindow() {
       { label: 'Reload',      click: () => browserView.webContents.reload() },
       { label: 'Hard Reload', click: () => browserView.webContents.reloadIgnoringCache() },
       { type: 'separator' },
-      { label: 'Inspect Element', click: () => openDevToolsPanel(p.x, p.y) }
+      { label: 'Inspect Element', click: () => { const wc = browserView.webContents; try { if (!wc.isDevToolsOpened()) wc.openDevTools({ mode: 'detach' }); wc.inspectElement(p.x, p.y); } catch (e) { logErr('inspect element', e); } } }
     );
 
     Menu.buildFromTemplate(tpl).popup({ window: mainWindow });
