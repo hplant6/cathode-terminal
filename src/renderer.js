@@ -9259,6 +9259,22 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       return 'icons/empty-states/empty-' + (Math.abs(h) % 6 + 1) + '.png';
     };
 
+    // Peek a server's captured output (click a row's status) — for diagnosing starts.
+    async function showServerLog(s) {
+      const r = await ipcRenderer.invoke(IPC.SERVER_LOG, { id: s.id }).catch(() => null);
+      const log = (r && r.log && r.log.trim()) || '(no output captured — the server process may not have started at all)';
+      document.getElementById('mc-logpop')?.remove();
+      const pop = document.createElement('div'); pop.id = 'mc-logpop'; pop.className = 'mc-logpop';
+      const head = document.createElement('div'); head.className = 'mc-logpop-head';
+      const title = document.createElement('span'); title.textContent = (s.name || 'server') + ' — output · ' + ((r && r.status) || '?');
+      const close = document.createElement('button'); close.className = 'mc-logpop-close'; close.innerHTML = ICON_CLOSE;
+      close.addEventListener('click', () => pop.remove());
+      head.append(title, close);
+      const body = document.createElement('pre'); body.className = 'mc-logpop-body'; body.textContent = log;
+      pop.append(head, body);
+      (document.querySelector('.mc-screen') || document.body).appendChild(pop);
+    }
+
     // Probe ports; reflect running/paused/inactive on rows + the Pause button.
     async function refreshStatus() {
       const projects = loadProjects();
@@ -9344,6 +9360,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       row.querySelector('.mc-row-port').textContent = s.port || '';
       const acts = row.querySelector('.mc-row-acts');
       const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' });
+      const statusCell = row.querySelector('.mc-row-status');
+      statusCell.title = 'Click to view this server’s output'; statusCell.style.cursor = 'pointer';
+      statusCell.addEventListener('click', () => showServerLog(s));
       const capturePort = (r) => { if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-row-port').textContent = r.port; } };
       const busy = (fn) => async () => { row.querySelectorAll('.mc-icn').forEach(b => b.disabled = true); await fn(); setTimeout(() => { row.querySelectorAll('.mc-icn').forEach(b => b.disabled = false); refreshStatus(); }, 1400); };
       const clearPaused = () => { updateServer(p.id, s.id, { paused: false }); s.paused = false; row.dataset.paused = ''; };

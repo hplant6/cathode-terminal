@@ -522,6 +522,14 @@ html, body {
 /* Open Project button */
 .mc-open-fab { position: absolute; right: 40px; bottom: 24px; padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 .mc-open-fab:hover { filter: brightness(1.08); }
+
+/* Server output viewer (click a row's status) */
+.mc-logpop { position: absolute; inset: 64px 40px 84px; z-index: 10; display: flex; flex-direction: column; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); overflow: hidden; }
+.mc-logpop-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--spec-structural); flex-shrink: 0; }
+.mc-logpop-head > span { font-family: var(--font-mono); font-size: 13px; color: #fff; }
+.mc-logpop-close { background: transparent; border: none; color: var(--spec-text); cursor: pointer; display: inline-flex; padding: 0; }
+.mc-logpop-close svg { width: 18px; height: 18px; }
+.mc-logpop-body { flex: 1; margin: 0; overflow: auto; padding: 14px 16px; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--spec-text); white-space: pre-wrap; word-break: break-word; }
 .sm-has-sub.open .sm-chevron { transform: rotate(90deg); }
 .sm-submenu { display: none; padding-left: 28px; }
 .sm-has-sub.open .sm-submenu { display: block; }

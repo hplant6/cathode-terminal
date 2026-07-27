@@ -23,6 +23,7 @@ const IPC = Object.freeze({
   SERVER_RESTART: 'server-restart',   // stop + start
   SERVER_STATUS: 'server-status',     // probe a set of ports → running map
   SERVER_DETECT: 'server-detect',     // read a project's package.json scripts
+  SERVER_LOG: 'server-log',           // captured stdout/stderr tail for a server
   SPEND_REPORT: 'spend-report',
   SESSIONS_LIST: 'sessions-list',
   ACP_CANCEL: 'acp-cancel',

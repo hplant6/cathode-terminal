@@ -1280,7 +1280,8 @@ async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn }
   projectServers.set(id, inst);
   // detached → own process group for the unix group-kill; on Windows it forces
   // wsl.exe to open a visible console window, so keep it off there (windowsHide + piped stdio run it silently).
-  const spawnOpts = { cwd, detached: !IS_WIN_HOST, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' } };
+  // stdin is a live pipe (not ignore): with `bash -lic`, a closed stdin can EOF the interactive shell and kill the server.
+  const spawnOpts = { cwd, detached: !IS_WIN_HOST, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PORT: String(usePort), BROWSER: 'none', FORCE_COLOR: '0' } };
   let proc;
   try {
     proc = winNative ? platform.cmdSpawn(['/c', cmd], spawnOpts) : platform.nixSpawn(['bash', '-lic', cmd], spawnOpts);
@@ -1292,7 +1293,8 @@ async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn }
   const onLog = (d) => { inst.log = (inst.log + d).slice(-4000); };
   proc.stdout?.on('data', onLog);
   proc.stderr?.on('data', onLog);
-  proc.on('exit', (code) => { if (inst.status !== 'stopped') inst.status = code ? 'error' : 'stopped'; inst.proc = null; });
+  proc.on('exit', (code) => { inst.log = (inst.log + '\n[process exited, code ' + code + ']').slice(-4000); if (inst.status !== 'stopped') inst.status = code ? 'error' : 'stopped'; inst.proc = null; });
+  proc.on('error', (e) => { inst.log = (inst.log + '\n[spawn error: ' + e.message + ']').slice(-4000); inst.status = 'error'; });
   return { ok: true, port: usePort };
 }
 
@@ -1344,6 +1346,7 @@ ipcMain.handle(IPC.SERVER_STATUS,  async (_, { ports } = {}) => {
   return { running };
 });
 ipcMain.handle(IPC.SERVER_DETECT,  (_, { dir } = {}) => detectServers(dir));
+ipcMain.handle(IPC.SERVER_LOG,     (_, { id } = {}) => { const i = projectServers.get(id); return { log: (i && i.log) || '', status: (i && i.status) || 'never started' }; });
 app.on('before-quit', () => { for (const inst of projectServers.values()) killServerProc(inst); });
 
 // Native instance switcher (HTML can't overlay the WebContentsView, so use Menu.popup).
