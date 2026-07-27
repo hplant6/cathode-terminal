@@ -3629,7 +3629,6 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
     sw.classList.toggle('on', !!on);
     sw.setAttribute('aria-checked', on ? 'true' : 'false');
   };
-  const isOn  = (v) => !!(toggles[v] && toggles[v].classList.contains('on'));
   const proxy = (id) => { const b = document.getElementById(id); if (b) b.click(); };
   const sysOn = () => { const b = document.getElementById('btn-sysperf-toggle'); return !!b && b.classList.contains('active'); };   // active class is set synchronously; panel display lags behind the grow/shrink animation
   window.__setViewToggle = setOn;   // allow other code (e.g. session sync) to keep these in step
@@ -3639,15 +3638,6 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
   toggles.devtools && toggles.devtools.addEventListener('click', () => proxy('btn-devtools'));
   ipcRenderer.on(IPC.DEVTOOLS_OPENED, () => setOn('devtools', true));
   ipcRenderer.on(IPC.DEVTOOLS_CLOSED, () => setOn('devtools', false));
-  toggles.terminal && toggles.terminal.addEventListener('click', () => {
-    const s = sessions.get(activeId);
-    if (!s || s.type !== 'acp') return;   // PTY sessions are terminal-only — toggling the LED would just desync it
-    const wantTerm = !isOn('terminal');
-    const tab = document.querySelector('#session-view-toggle .svt-tab[data-view="' + (wantTerm ? 'term' : 'chat') + '"]');
-    if (tab) tab.click();
-    setOn('terminal', wantTerm);
-  });
-
   // Reflect actual panel state once all panel inits have run.
   setTimeout(() => {
     if (!usageOpen) proxy('btn-usage');     // start the usage graph on
