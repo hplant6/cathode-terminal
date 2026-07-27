@@ -9130,8 +9130,10 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const entry = registerProject(dir, name);
     if (!entry) return;
     const leaving = getActiveId();
-    if (leaving && leaving !== entry.id) { const lp = getProject(leaving); if (lp) pauseProjectServers(lp); }   // auto-pause the project we're leaving
+    const switching = leaving !== entry.id;
+    if (switching && leaving) { const lp = getProject(leaving); if (lp) pauseProjectServers(lp); }   // auto-pause the project we're leaving
     setActiveId(entry.id);
+    if (switching) resumeProjectServers(getProject(entry.id) || entry);   // auto-resume the project we're entering (no-op at startup: same project)
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
     updateChip();
@@ -9181,6 +9183,17 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {});
         updateServer(project.id, s.id, { paused: true });
       }
+    }
+  }
+
+  // Resume a project's paused servers (restart + clear flag) — used by the manual
+  // Resume button and automatically when you switch into a project.
+  async function resumeProjectServers(project) {
+    for (const s of ((project && project.servers) || [])) {
+      if (!s.paused) continue;
+      const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: project.id, name: s.name, cmd: s.cmd, cwd: project.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
+      if (r && r.ok && r.port && r.port !== s.port) updateServer(project.id, s.id, { port: r.port });
+      updateServer(project.id, s.id, { paused: false });
     }
   }
 
@@ -9364,16 +9377,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // Bulk pause every running server in the project (shared with switch-away).
     async function pauseProject(p) { await pauseProjectServers(p); renderMC(); }
 
-    // Bulk resume every paused server in the project.
-    async function resumeProject(p) {
-      for (const s of (p.servers || [])) {
-        if (!s.paused) continue;
-        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
-        if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
-        updateServer(p.id, s.id, { paused: false });
-      }
-      renderMC();
-    }
+    // Bulk resume every paused server in the project (shared with switch-in).
+    async function resumeProject(p) { await resumeProjectServers(p); renderMC(); }
 
     // One server row. Icons shown per state (CSS): running/paused → reload +
     // pause + close; inactive → start + close.
