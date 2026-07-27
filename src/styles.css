@@ -492,7 +492,8 @@ html, body {
 
 /* Footer (both cards) */
 .mc-foot { display: flex; align-items: stretch; gap: 10px; margin-top: auto; }
-.mc-foot-x { width: 46px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); }
+.mc-foot-x { width: 52px; height: 45px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); }
+.mc-foot-x svg { width: 20px; height: 20px; }
 .mc-card-active .mc-foot-x { background: #1A191C; }
 .mc-card-idle .mc-foot-x { background: var(--spec-structural); }
 .mc-btn { flex: 1; display: flex; align-items: center; justify-content: center; height: 45px; border: none; border-radius: 3px; cursor: pointer; font-family: var(--font-title); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }

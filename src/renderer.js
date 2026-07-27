@@ -9275,9 +9275,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         if (!p || !btn || btn.dataset.busy === 'true') return;
         const anyRunning = (p.servers || []).some(s => s.port && running[s.port]);
         const anyPaused  = (p.servers || []).some(s => s.paused && !(s.port && running[s.port]));
-        if (anyRunning) { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.disabled = false; }
-        else if (anyPaused) { btn.textContent = 'Resume'; btn.dataset.mode = 'resume'; btn.disabled = false; }
-        else { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.disabled = true; }
+        if (anyRunning) { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.hidden = false; }
+        else if (anyPaused) { btn.textContent = 'Resume'; btn.dataset.mode = 'resume'; btn.hidden = false; }
+        else { btn.hidden = true; }   // nothing running/paused → hide it entirely
       });
     }
 
@@ -9398,7 +9398,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const foot = document.createElement('div'); foot.className = 'mc-foot';
       const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
       x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
-      const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = 'Pause';
+      const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = 'Pause'; pause.hidden = true;   // refreshStatus reveals it when there's something to pause/resume
       pause.addEventListener('click', async () => {
         const mode = pause.dataset.mode === 'resume' ? 'resume' : 'pause';
         pause.dataset.busy = 'true'; pause.disabled = true; pause.textContent = mode === 'resume' ? 'Resuming…' : 'Pausing…';
