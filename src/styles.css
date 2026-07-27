@@ -451,7 +451,7 @@ html, body {
 .mc-thead { border-bottom: 1px solid #212026; }
 .mc-thead > span { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--spec-text-faint); }
 .mc-startall { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--accent); background: transparent; border: none; cursor: pointer; padding: 0; white-space: nowrap; justify-self: end; }
-.mc-startall:hover { text-decoration: underline; }
+.mc-startall:hover { background: transparent; color: var(--accent); text-decoration: underline; }
 .mc-rows { display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
 .mc-rows-empty { font-family: var(--font-mono); font-size: 11px; opacity: 0.4; padding: 12px 0; }
 .mc-row { border-bottom: 1px solid #1A191C; }
