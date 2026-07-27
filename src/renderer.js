@@ -9238,28 +9238,45 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     let statusTimer = null;
     const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; } });
 
-    // Probe every configured port and reflect running state on the rows, and
-    // surface Pause only where there's something running to suspend.
+    // Icons (from final icons/) — currentColor so CSS controls color per state.
+    const ICON_CLOSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg>';
+    const ICON_START  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5498 9.24974C1.54992 6.54918 2.99139 4.1933 5.13574 2.88841C5.46586 2.68755 5.89659 2.7919 6.09766 3.12181C6.29851 3.45193 6.19417 3.88265 5.86426 4.08372C4.11704 5.14678 2.95031 7.06075 2.9502 9.24974C2.9502 12.5911 5.6586 15.3005 9 15.3005C12.3414 15.3005 15.0498 12.5911 15.0498 9.24974C15.0497 7.06091 13.8833 5.14789 12.1357 4.08372C11.8057 3.88259 11.7013 3.45192 11.9023 3.12181C12.1035 2.79179 12.5341 2.68738 12.8643 2.88841C15.0084 4.19416 16.4501 6.54893 16.4502 9.24974C16.4502 13.3643 13.1146 16.6999 9 16.6999C4.8854 16.6999 1.5498 13.3643 1.5498 9.24974Z" fill="currentColor"/><path d="M8.2998 8.5V2C8.2998 1.6134 8.6134 1.2998 9 1.2998C9.3866 1.2998 9.7002 1.6134 9.7002 2V8.5C9.7002 8.8866 9.3866 9.2002 9 9.2002C8.6134 9.2002 8.2998 8.8866 8.2998 8.5Z" fill="currentColor"/></svg>';
+    const ICON_RELOAD = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.4852 9C15.4852 5.3826 12.5528 2.4502 8.93539 2.4502C6.19818 2.45021 3.85186 4.12921 2.87289 6.51562C2.72615 6.87329 2.31747 7.04419 1.9598 6.89746C1.60214 6.75073 1.43124 6.34204 1.57796 5.98438C2.76499 3.09083 5.61063 1.04982 8.93539 1.0498C13.326 1.0498 16.8856 4.6094 16.8856 9C16.8856 13.3906 13.326 16.9502 8.93539 16.9502C6.19906 16.9502 3.78513 15.5674 2.35629 13.4648C2.13904 13.1451 2.22223 12.7095 2.54183 12.4922C2.86159 12.2749 3.2972 12.358 3.51449 12.6777C4.69366 14.4129 6.6819 15.5498 8.93539 15.5498C12.5528 15.5498 15.4852 12.6174 15.4852 9Z" fill="currentColor"/><path d="M1.71954 2.61163C2.10235 2.55879 2.45557 2.82646 2.50861 3.20929L2.82013 5.46027L5.07111 5.14972C5.45406 5.09678 5.80723 5.36442 5.86017 5.74738C5.91299 6.13014 5.64619 6.48333 5.26349 6.53644L2.31915 6.94367C1.93627 6.9966 1.58313 6.72887 1.53009 6.34601L1.12189 3.4007C1.06905 3.01789 1.33672 2.66467 1.71954 2.61163Z" fill="currentColor"/></svg>';
+
+    function fmtLastActive(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      let h = d.getHours(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+      return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()} ${h}:${String(d.getMinutes()).padStart(2, '0')}${ap}`;
+    }
+    const hasStorybook = (p) => (p.servers || []).some(s => /storybook/i.test((s.name || '') + ' ' + (s.cmd || '')));
+
+    // Probe every configured port and reflect running state on the server rows.
     async function refreshStatus() {
-      const projects = loadProjects();
       const ports = [];
-      projects.forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
+      loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
       let running = {};
       if (ports.length) { try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) { return; } }
-      mcGrid.querySelectorAll('.mc-srv[data-port]').forEach(el => {
+      mcGrid.querySelectorAll('.mc-row[data-port]').forEach(el => {
         const up = !!running[el.dataset.port];
         el.classList.toggle('up', up);
-        const t = el.querySelector('.mc-srv-toggle');
-        if (t && !t.disabled) t.textContent = up ? 'Stop' : 'Start';
+        const st = el.querySelector('.mc-row-state'); if (st) st.textContent = up ? 'ACTIVE' : 'INACTIVE';
+        const act = el.querySelector('.mc-row-act');
+        if (act && !act.disabled) { act.innerHTML = up ? ICON_RELOAD : ICON_START; act.title = up ? 'Restart server' : 'Start server'; }
       });
-      // Pause is meaningful only with running servers; Resume only while paused.
-      mcGrid.querySelectorAll('.mc-card').forEach(card => {
-        const p = projects.find(x => x.id === card.dataset.project);
-        const btn = card.querySelector('.mc-pause-btn');
-        if (!p || !btn) return;
-        const anyRunning = (p.servers || []).some(s => s.port && running[s.port]);
-        btn.hidden = !(p.state === 'paused' || anyRunning);
-      });
+    }
+
+    // Start every stopped server in a project.
+    async function startAll(p) {
+      const ports = (p.servers || []).filter(s => s.port).map(s => s.port);
+      let running = {};
+      try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
+      for (const s of (p.servers || [])) {
+        if (s.port && running[s.port]) continue;
+        const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' }).catch(() => null);
+        if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
+      }
+      setTimeout(refreshStatus, 1500);
     }
 
     const pauseBehaviorOf = (p) => (p.pauseBehavior === 'keep' ? 'keep' : 'suspend');
@@ -9294,59 +9311,117 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       renderMC();
     }
 
+    // One server row in the active card's table.
     function serverRow(p, s) {
-      const row = document.createElement('div'); row.className = 'mc-srv';
+      const row = document.createElement('div'); row.className = 'mc-row';
       if (s.port) row.dataset.port = s.port;
-      row.innerHTML = '<span class="mc-srv-dot"></span><span class="mc-srv-name"></span><span class="mc-srv-port"></span><span class="mc-srv-actions"></span>';
-      row.querySelector('.mc-srv-name').textContent = s.name;
-      row.querySelector('.mc-srv-name').title = s.cmd || '';
-      row.querySelector('.mc-srv-port').textContent = s.port ? (':' + s.port) : '';
-      const acts = row.querySelector('.mc-srv-actions');
+      row.innerHTML =
+        '<span class="mc-row-status"><span class="mc-row-dot"></span><span class="mc-row-state">INACTIVE</span></span>' +
+        '<span class="mc-row-name"></span>' +
+        '<span class="mc-row-port"></span>' +
+        '<span class="mc-row-ram">—</span>' +
+        '<span class="mc-row-acts"></span>';
+      row.querySelector('.mc-row-name').textContent = s.name;
+      row.querySelector('.mc-row-name').title = s.cmd || '';
+      row.querySelector('.mc-row-port').textContent = s.port || '';
+      const acts = row.querySelector('.mc-row-acts');
       const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' });
 
-      // Windows only: per-server env override (WSL agent env vs Windows-native).
-      if (typeof process !== 'undefined' && process.platform === 'win32') {
-        const envChip = document.createElement('button');
-        envChip.className = 'mc-srv-env';
-        envChip.textContent = (s.runIn === 'win' ? 'win' : 'wsl');
-        envChip.title = 'Runs in ' + (s.runIn === 'win' ? 'Windows-native' : 'WSL') + ' — click to switch';
-        envChip.addEventListener('click', () => { updateServer(p.id, s.id, { runIn: (s.runIn === 'win' ? 'wsl' : 'win') }); renderMC(); });
-        acts.appendChild(envChip);
-      }
-
-      const toggle = document.createElement('button'); toggle.className = 'mc-srv-btn mc-srv-toggle'; toggle.textContent = 'Start';
-      toggle.addEventListener('click', async () => {
+      // Running → reload (restart); stopped → start. Icon swapped in refreshStatus.
+      const act = document.createElement('button'); act.className = 'mc-icn mc-row-act'; act.innerHTML = ICON_START; act.title = 'Start server';
+      act.addEventListener('click', async () => {
         const up = row.classList.contains('up');
-        toggle.disabled = true; toggle.textContent = up ? 'Stopping…' : 'Starting…';
-        if (up) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); }
+        act.disabled = true;
+        if (up) { await ipcRenderer.invoke(IPC.SERVER_RESTART, arg()).catch(() => {}); }
         else {
           const r = await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null);
-          if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-srv-port').textContent = ':' + r.port; }
+          if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-row-port').textContent = r.port; }
         }
-        setTimeout(() => { toggle.disabled = false; refreshStatus(); }, up ? 700 : 1400);
+        setTimeout(() => { act.disabled = false; refreshStatus(); }, 1400);
       });
 
-      const restart = document.createElement('button'); restart.className = 'mc-srv-btn'; restart.textContent = 'Restart';
-      restart.addEventListener('click', async () => {
-        restart.disabled = true; const label = restart.textContent; restart.textContent = '…';
-        const r = await ipcRenderer.invoke(IPC.SERVER_RESTART, arg()).catch(() => null);
-        if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-srv-port').textContent = ':' + r.port; }
-        setTimeout(() => { restart.disabled = false; restart.textContent = label; refreshStatus(); }, 1400);
-      });
+      const del = document.createElement('button'); del.className = 'mc-icn mc-row-del'; del.innerHTML = ICON_CLOSE; del.title = 'Remove server';
+      del.addEventListener('click', async () => { if (row.classList.contains('up')) await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); removeServer(p.id, s.id); renderMC(); });
 
-      const open = document.createElement('button'); open.className = 'mc-srv-btn'; open.textContent = 'Open'; open.disabled = !s.port;
-      open.addEventListener('click', () => { if (s.port) { ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + s.port); mc.close(); } });
-
-      const del = document.createElement('button'); del.className = 'mc-srv-btn mc-srv-del'; del.textContent = '×'; del.title = 'Remove server';
-      del.addEventListener('click', () => { removeServer(p.id, s.id); renderMC(); });
-
-      acts.append(toggle, restart, open, del);
+      acts.append(act, del);
       return row;
     }
 
+    // Shared two-column header (title/path · badge/last-edit).
+    function headerEl(p, isActive) {
+      const hd = document.createElement('div'); hd.className = 'mc-hd ' + (isActive ? 'mc-hd-active' : 'mc-hd-idle');
+      const l = document.createElement('div'); l.className = 'mc-hd-col mc-hd-l';
+      const title = document.createElement('div'); title.className = 'mc-hd-title'; title.textContent = p.name;
+      const path  = document.createElement('div'); path.className  = 'mc-hd-path';  path.textContent  = p.rootDir;
+      l.append(title, path);
+      const r = document.createElement('div'); r.className = 'mc-hd-col mc-hd-r';
+      const badge = document.createElement('span'); badge.className = 'mc-badge ' + (isActive ? 'mc-badge-active' : 'mc-badge-idle'); badge.textContent = isActive ? 'Active' : 'Idle';
+      const edit = document.createElement('div'); edit.className = 'mc-hd-edit';
+      edit.innerHTML = '<span class="mc-hd-edit-k">last edit:</span> <span class="mc-hd-edit-v"></span>';
+      edit.querySelector('.mc-hd-edit-v').textContent = fmtLastActive(p.lastActiveAt);
+      r.append(badge, edit);
+      hd.append(l, r);
+      return hd;
+    }
+
+    // The active (selected) project — expanded server table.
+    function activeCard(p) {
+      const card = document.createElement('div'); card.className = 'mc-card mc-card-active'; card.dataset.project = p.id;
+      card.appendChild(headerEl(p, true));
+      const table = document.createElement('div'); table.className = 'mc-table';
+      const head = document.createElement('div'); head.className = 'mc-thead';
+      head.innerHTML = '<span>Status</span><span>Server</span><span>Port</span><span>RAM</span>';
+      const startAllBtn = document.createElement('button'); startAllBtn.className = 'mc-startall'; startAllBtn.textContent = 'Start all';
+      startAllBtn.addEventListener('click', () => startAll(p));
+      head.appendChild(startAllBtn);
+      const rows = document.createElement('div'); rows.className = 'mc-rows';
+      const servers = p.servers || [];
+      if (servers.length) servers.forEach(s => rows.appendChild(serverRow(p, s)));
+      else { const none = document.createElement('div'); none.className = 'mc-rows-empty'; none.textContent = 'No servers detected'; rows.appendChild(none); }
+      table.append(head, rows);
+      card.appendChild(table);
+      const foot = document.createElement('div'); foot.className = 'mc-foot';
+      const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
+      x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
+      const paused = p.state === 'paused';
+      const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = paused ? 'Resume' : 'Pause';
+      pause.addEventListener('click', async () => { pause.disabled = true; pause.textContent = paused ? 'Resuming…' : 'Pausing…'; if (paused) await resumeProject(p); else await pauseProject(p); });
+      foot.append(x, pause);
+      card.appendChild(foot);
+      return card;
+    }
+
+    // A non-active project — collapsed preview card.
+    function idleCard(p) {
+      const card = document.createElement('div'); card.className = 'mc-card mc-card-idle'; card.dataset.project = p.id;
+      card.appendChild(headerEl(p, false));
+      const prev = document.createElement('div'); prev.className = 'mc-preview';
+      prev.innerHTML = '<span class="mc-preview-empty">No preview yet</span>';   // Slice 2: cached screenshot
+      card.appendChild(prev);
+      const meta = document.createElement('div'); meta.className = 'mc-meta';
+      const n = (p.servers || []).length;
+      const cnt = document.createElement('span'); cnt.className = 'mc-meta-servers'; cnt.textContent = n + ' Server' + (n === 1 ? '' : 's');
+      const has = hasStorybook(p);
+      const sb = document.createElement('span'); sb.className = 'mc-meta-sb' + (has ? ' has' : ''); sb.textContent = has ? 'Has Storybook' : 'No Storybook';
+      meta.append(cnt, sb);
+      card.appendChild(meta);
+      const foot = document.createElement('div'); foot.className = 'mc-foot';
+      const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
+      x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
+      const sw = document.createElement('button'); sw.className = 'mc-btn mc-btn-switch'; sw.textContent = 'Switch to project';
+      sw.addEventListener('click', () => { activateProject(p.rootDir); renderMC(); });
+      foot.append(x, sw);
+      card.appendChild(foot);
+      return card;
+    }
+
     function renderMC() {
-      const list = loadProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
       const activeId = getActiveId();
+      const list = loadProjects().slice().sort((a, b) => {
+        if (a.id === activeId) return -1;
+        if (b.id === activeId) return 1;
+        return (b.lastActiveAt || 0) - (a.lastActiveAt || 0);
+      });
       mcGrid.innerHTML = '';
       if (!list.length) {
         const e = document.createElement('div'); e.className = 'mc-empty';
@@ -9354,80 +9429,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         mcGrid.appendChild(e);
         return;
       }
-      list.forEach(p => {
-        const isActive = p.id === activeId;
-        const card = document.createElement('div');
-        card.className = 'mc-card' + (isActive ? ' active' : '');
-        card.dataset.project = p.id;
-        card.innerHTML =
-          '<div class="mc-card-name"><span></span></div>' +
-          '<div class="mc-card-path"></div>' +
-          '<div class="mc-servers"></div>' +
-          '<div class="mc-card-actions"></div>';
-        card.querySelector('.mc-card-name > span').textContent = p.name;
-        if (isActive) { const b = document.createElement('span'); b.className = 'mc-card-badge'; b.textContent = 'active'; card.querySelector('.mc-card-name').appendChild(b); }
-        if (p.state === 'paused') { const pb = document.createElement('span'); pb.className = 'mc-card-badge paused'; pb.textContent = 'paused'; card.querySelector('.mc-card-name').appendChild(pb); card.classList.add('paused'); }
-        card.querySelector('.mc-card-path').textContent = p.rootDir;
-
-        const srvWrap = card.querySelector('.mc-servers');
-        const servers = p.servers || [];
-        if (!servers.length) {
-          const none = document.createElement('div'); none.className = 'mc-srv-none'; none.textContent = 'No servers detected';
-          srvWrap.appendChild(none);
-        } else {
-          servers.forEach(s => srvWrap.appendChild(serverRow(p, s)));
-          const beh = document.createElement('button');
-          beh.className = 'mc-srv-behavior';
-          beh.textContent = 'On pause: ' + (pauseBehaviorOf(p) === 'keep' ? 'keep servers running' : 'suspend servers');
-          beh.title = 'Toggle what happens to this project’s servers when paused';
-          beh.addEventListener('click', () => { updateProject(p.id, x => { x.pauseBehavior = pauseBehaviorOf(x) === 'keep' ? 'suspend' : 'keep'; }); renderMC(); });
-          srvWrap.appendChild(beh);
-        }
-
-        // + Add server (manual) — inline form
-        const addWrap = document.createElement('div'); addWrap.className = 'mc-srv-addwrap';
-        const addBtn = document.createElement('button'); addBtn.className = 'mc-srv-addbtn'; addBtn.textContent = '+ Add server';
-        const form = document.createElement('div'); form.className = 'mc-srv-form'; form.hidden = true;
-        const nameIn = document.createElement('input'); nameIn.className = 'mc-srv-input'; nameIn.placeholder = 'name (e.g. dev)';
-        const cmdIn  = document.createElement('input'); cmdIn.className  = 'mc-srv-input'; cmdIn.placeholder  = 'command (e.g. npm run dev)';
-        const portIn = document.createElement('input'); portIn.className = 'mc-srv-input mc-srv-input-port'; portIn.placeholder = 'port'; portIn.inputMode = 'numeric';
-        const save   = document.createElement('button'); save.className = 'mc-srv-btn primary'; save.textContent = 'Add';
-        const cancel = document.createElement('button'); cancel.className = 'mc-srv-btn'; cancel.textContent = 'Cancel';
-        const formRow2 = document.createElement('div'); formRow2.className = 'mc-srv-form-row';
-        formRow2.append(portIn, save, cancel);
-        form.append(nameIn, cmdIn, formRow2);
-        addBtn.addEventListener('click', () => { form.hidden = !form.hidden; if (!form.hidden) nameIn.focus(); });
-        cancel.addEventListener('click', () => { form.hidden = true; nameIn.value = cmdIn.value = portIn.value = ''; });
-        save.addEventListener('click', () => {
-          const cmd = cmdIn.value.trim();
-          if (!cmd) { cmdIn.focus(); return; }
-          const port = parseInt(portIn.value, 10);
-          addServer(p.id, { name: nameIn.value.trim() || 'server', cmd, port: (port >= 1 && port <= 65535) ? port : null });
-          renderMC();
-        });
-        addWrap.append(addBtn, form);
-        srvWrap.appendChild(addWrap);
-
-        const actions = card.querySelector('.mc-card-actions');
-        const pr = document.createElement('button');
-        const paused = p.state === 'paused';
-        pr.className = 'mc-card-btn mc-pause-btn' + (paused ? ' primary' : '');
-        pr.textContent = paused ? 'Resume' : 'Pause';
-        pr.hidden = !paused;   // Pause is revealed by refreshStatus once a server is running
-        pr.addEventListener('click', async () => { pr.disabled = true; pr.textContent = paused ? 'Resuming…' : 'Pausing…'; if (paused) await resumeProject(p); else await pauseProject(p); });
-        actions.appendChild(pr);
-        const sw = document.createElement('button');
-        sw.className = 'mc-card-btn' + (isActive ? '' : ' primary');
-        sw.textContent = isActive ? 'Current' : 'Switch';
-        sw.disabled = isActive;
-        sw.addEventListener('click', () => { if (!isActive) { activateProject(p.rootDir); mc.close(); } });
-        const rm = document.createElement('button');
-        rm.className = 'mc-card-btn';
-        rm.textContent = 'Remove';
-        rm.addEventListener('click', () => { removeProject(p.id); renderMC(); });
-        actions.appendChild(sw); actions.appendChild(rm);
-        mcGrid.appendChild(card);
-      });
+      list.forEach(p => mcGrid.appendChild(p.id === activeId ? activeCard(p) : idleCard(p)));
       refreshStatus();
     }
 
@@ -9441,6 +9443,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
 
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
+    document.getElementById('mc-close')?.addEventListener('click', () => mc.close());
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
       if (dir) { activateProject(dir); await seedServers(getProject(getActiveId())); renderMC(); }
