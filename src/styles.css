@@ -355,11 +355,11 @@ html, body {
 .sm-chevron { margin-left: auto; opacity: 0.5; transition: transform 0.15s; }
 
 /* ── Project switcher chip (app-bar, top-left) ───────────────────── */
-#project-switch { position: relative; top: 10px; display: flex; align-items: center; -webkit-app-region: no-drag; }
+#project-switch { position: relative; display: flex; align-items: center; flex-shrink: 0; -webkit-app-region: no-drag; }
 #btn-project {
   display: flex; align-items: center; gap: 10px;
-  height: 32px; padding: 0 12px;
-  background: var(--spec-structural); border: none; border-radius: var(--radius-lg);   /* shade 3 */
+  height: 34px; padding: 0 14px;
+  background: var(--spec-structural); border: 1px solid var(--spec-text-faint); border-radius: var(--radius-lg);   /* shade 3 fill, shade 2 border */
   color: var(--text); font-family: var(--font-mono); font-size: 12px;
   cursor: pointer; transition: background 0.1s; white-space: nowrap;
 }
@@ -368,10 +368,10 @@ html, body {
 
 /* Mission Control button — square, pairs with the project pill */
 #btn-mission {
-  -webkit-app-region: no-drag; position: relative; top: 10px;
+  -webkit-app-region: no-drag; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; margin-left: -2px;
-  background: var(--spec-structural); border: none; border-radius: var(--radius-lg);   /* shade 3 */
+  width: 34px; height: 34px;
+  background: var(--spec-structural); border: 1px solid var(--spec-text-faint); border-radius: var(--radius-lg);   /* shade 3 fill, shade 2 border */
   color: var(--text); cursor: pointer; transition: background 0.1s;
 }
 #btn-mission:hover { background: var(--spec-text-faint); }   /* shade 2 */
@@ -4045,7 +4045,6 @@ html, body {
   display: flex; align-items: flex-start;   /* tabs hang from the top edge */
   height: 100%;
   gap: 4px;
-  margin-left: 48px;   /* clear the project pill + Mission Control cluster on the left */
   -webkit-app-region: no-drag;
 }
 #view-tab-thumb { display: none; }            /* active styling replaces the sliding thumb */
@@ -4701,7 +4700,7 @@ button:active { background: var(--btn-active); }
 #views-bar {
   position: relative;
   flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   padding: 11px 16px;
   background-color: var(--spec-input-bg);                 /* #08090C */
   border-radius: 16px 16px 0 0;
@@ -4721,6 +4720,7 @@ button:active { background: var(--btn-active); }
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--spec-text-dim);  /* shade 1 */
   flex-shrink: 0;
+  margin-left: auto;   /* push VIEWS + toggles to the right; project pill/MC sit at the left */
 }
 #views-toggles { display: flex; align-items: center; gap: 16px; }
 .view-toggle { display: flex; align-items: center; gap: 7px; }
