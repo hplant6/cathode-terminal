@@ -9129,6 +9129,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function activateProject(dir, name) {
     const entry = registerProject(dir, name);
     if (!entry) return;
+    const leaving = getActiveId();
+    if (leaving && leaving !== entry.id) { const lp = getProject(leaving); if (lp) pauseProjectServers(lp); }   // auto-pause the project we're leaving
     setActiveId(entry.id);
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
@@ -9166,6 +9168,22 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       p.servers.push({ id: genId(), name: def.name || 'server', cmd: def.cmd || '', port: def.port || null, runIn: def.runIn || 'wsl' });
     });
   }
+  // Pause a project's running servers (stop + flag) — used by the manual Pause
+  // button and automatically when you switch away from a project.
+  async function pauseProjectServers(project) {
+    const servers = (project && project.servers) || [];
+    const ports = servers.filter(s => s.port).map(s => s.port);
+    if (!ports.length) return;
+    let running = {};
+    try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
+    for (const s of servers) {
+      if (s.port && running[s.port]) {
+        await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {});
+        updateServer(project.id, s.id, { paused: true });
+      }
+    }
+  }
+
   // Seed a project's servers from its package.json scripts (once, if none defined).
   async function seedServers(project) {
     if (!project || (project.servers && project.servers.length)) return;
@@ -9343,18 +9361,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       setTimeout(refreshStatus, 1500);
     }
 
-    // Bulk pause every running server in the project (each flagged paused so
-    // the per-row control and the project Pause/Resume button agree).
-    async function pauseProject(p) {
-      const servers = p.servers || [];
-      const ports = servers.filter(s => s.port).map(s => s.port);
-      let running = {};
-      try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
-      for (const s of servers) {
-        if (s.port && running[s.port]) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); updateServer(p.id, s.id, { paused: true }); }
-      }
-      renderMC();
-    }
+    // Bulk pause every running server in the project (shared with switch-away).
+    async function pauseProject(p) { await pauseProjectServers(p); renderMC(); }
 
     // Bulk resume every paused server in the project.
     async function resumeProject(p) {
