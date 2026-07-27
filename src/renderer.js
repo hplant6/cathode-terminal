@@ -9451,7 +9451,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const card = document.createElement('div'); card.className = 'mc-card mc-card-idle'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, false));
       const prev = document.createElement('div'); prev.className = 'mc-preview';
-      prev.innerHTML = '<span class="mc-preview-empty">No preview yet</span>';   // Slice 2: cached screenshot
+      const img = document.createElement('img'); img.src = p.preview || 'icons/empty-state.png'; img.alt = '';   // p.preview = cached screenshot (Slice 2)
+      if (!p.preview) prev.classList.add('mc-preview-blank');
+      prev.appendChild(img);
       card.appendChild(prev);
       const meta = document.createElement('div'); meta.className = 'mc-meta';
       const n = (p.servers || []).length;
