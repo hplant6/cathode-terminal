@@ -465,6 +465,9 @@ html, body {
 .mc-row.paused .mc-row-dot { background: var(--mc-amber); }
 .mc-row.paused .mc-row-state { color: var(--mc-amber); }
 .mc-row.paused .mc-row-name, .mc-row.paused .mc-row-port, .mc-row.paused .mc-row-ram { color: #fff; }
+.mc-row.starting .mc-row-dot { background: var(--mc-amber); animation: mc-pulse 1s ease-in-out infinite; }
+.mc-row.starting .mc-row-state { color: var(--mc-amber); }
+@keyframes mc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 .mc-row-acts { display: flex; align-items: center; gap: 12px; justify-self: end; }
 
 /* Icon buttons */
@@ -474,8 +477,9 @@ html, body {
 .mc-icn:disabled { opacity: 0.4; cursor: default; }
 .mc-row-reload, .mc-row-pause { display: none; }
 .mc-row.up .mc-row-reload, .mc-row.up .mc-row-pause,
-.mc-row.paused .mc-row-reload, .mc-row.paused .mc-row-pause { display: inline-flex; }
-.mc-row.up .mc-row-start, .mc-row.paused .mc-row-start { display: none; }
+.mc-row.paused .mc-row-reload, .mc-row.paused .mc-row-pause,
+.mc-row.starting .mc-row-reload, .mc-row.starting .mc-row-pause { display: inline-flex; }
+.mc-row.up .mc-row-start, .mc-row.paused .mc-row-start, .mc-row.starting .mc-row-start { display: none; }
 .mc-row-reload, .mc-row-pause { color: var(--spec-text-dim); }
 .mc-row.paused .mc-row-pause { color: #fff; }              /* bright when this server is paused */
 .mc-row-start { color: var(--mc-green); }
