@@ -9238,18 +9238,27 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     let statusTimer = null;
     const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; } });
 
-    // Probe every configured port and reflect running state on the rows.
+    // Probe every configured port and reflect running state on the rows, and
+    // surface Pause only where there's something running to suspend.
     async function refreshStatus() {
+      const projects = loadProjects();
       const ports = [];
-      loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
-      if (!ports.length) return;
+      projects.forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
       let running = {};
-      try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) { return; }
+      if (ports.length) { try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) { return; } }
       mcGrid.querySelectorAll('.mc-srv[data-port]').forEach(el => {
         const up = !!running[el.dataset.port];
         el.classList.toggle('up', up);
         const t = el.querySelector('.mc-srv-toggle');
         if (t && !t.disabled) t.textContent = up ? 'Stop' : 'Start';
+      });
+      // Pause is meaningful only with running servers; Resume only while paused.
+      mcGrid.querySelectorAll('.mc-card').forEach(card => {
+        const p = projects.find(x => x.id === card.dataset.project);
+        const btn = card.querySelector('.mc-pause-btn');
+        if (!p || !btn) return;
+        const anyRunning = (p.servers || []).some(s => s.port && running[s.port]);
+        btn.hidden = !(p.state === 'paused' || anyRunning);
       });
     }
 
@@ -9349,6 +9358,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         const isActive = p.id === activeId;
         const card = document.createElement('div');
         card.className = 'mc-card' + (isActive ? ' active' : '');
+        card.dataset.project = p.id;
         card.innerHTML =
           '<div class="mc-card-name"><span></span></div>' +
           '<div class="mc-card-path"></div>' +
@@ -9401,8 +9411,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         const actions = card.querySelector('.mc-card-actions');
         const pr = document.createElement('button');
         const paused = p.state === 'paused';
-        pr.className = 'mc-card-btn' + (paused ? ' primary' : '');
+        pr.className = 'mc-card-btn mc-pause-btn' + (paused ? ' primary' : '');
         pr.textContent = paused ? 'Resume' : 'Pause';
+        pr.hidden = !paused;   // Pause is revealed by refreshStatus once a server is running
         pr.addEventListener('click', async () => { pr.disabled = true; pr.textContent = paused ? 'Resuming…' : 'Pausing…'; if (paused) await resumeProject(p); else await pauseProject(p); });
         actions.appendChild(pr);
         const sw = document.createElement('button');
