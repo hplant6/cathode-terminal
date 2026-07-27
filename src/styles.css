@@ -421,7 +421,7 @@ html, body {
 /* Card shell */
 .mc-card { display: flex; flex-direction: column; gap: 10px; padding: 24px; border-radius: 22px; box-sizing: border-box; min-height: 440px; }
 .mc-card-idle { background: var(--spec-header-bg); }                 /* shade 6 */
-.mc-card-active { background: var(--spec-input-bg); border: 4px solid var(--accent); border-radius: 28px; box-shadow: 0 0 19px 0 rgba(255, 87, 32, 0.75); }
+.mc-card-active { background: var(--spec-input-bg); border: 4px solid var(--accent); border-radius: 28px; box-shadow: 0 0 19px 0 color-mix(in srgb, var(--accent) 75%, transparent); }
 
 /* Header (title/path · badge/last-edit) */
 .mc-hd { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; padding: 10px; border-radius: 12px; }
