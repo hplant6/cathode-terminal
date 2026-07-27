@@ -358,23 +358,23 @@ html, body {
 #project-switch { position: relative; display: flex; align-items: center; flex-shrink: 0; -webkit-app-region: no-drag; }
 #btn-project {
   display: flex; align-items: center; gap: 10px;
-  height: 34px; padding: 0 14px;
-  background: var(--spec-structural); border: 1px solid var(--spec-text-faint); border-radius: var(--radius-lg);   /* shade 3 fill, shade 2 border */
+  height: 34px; padding: 0 16px;
+  background: var(--spec-dropdown-bg); border: none; border-radius: 999px;   /* shade 4 fill, fully round */
   color: var(--text); font-family: var(--font-mono); font-size: 12px;
   cursor: pointer; transition: background 0.1s; white-space: nowrap;
 }
-#btn-project:hover, #project-switch.open #btn-project { background: var(--spec-text-faint); }   /* shade 2 */
+#btn-project:hover, #project-switch.open #btn-project { background: var(--spec-structural); }   /* shade 3 on hover */
 #btn-project-label { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
-/* Mission Control button — square, pairs with the project pill */
+/* Mission Control button — round, pairs with the project pill */
 #btn-mission {
   -webkit-app-region: no-drag; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px;
-  background: var(--spec-structural); border: 1px solid var(--spec-text-faint); border-radius: var(--radius-lg);   /* shade 3 fill, shade 2 border */
+  background: var(--spec-dropdown-bg); border: none; border-radius: 999px;   /* shade 4 fill, circle */
   color: var(--text); cursor: pointer; transition: background 0.1s;
 }
-#btn-mission:hover { background: var(--spec-text-faint); }   /* shade 2 */
+#btn-mission:hover { background: var(--spec-structural); }   /* shade 3 on hover */
 #btn-mission svg { opacity: 0.85; }
 #btn-project .ps-chev { display: inline-flex; opacity: 0.5; transition: transform 0.15s; }
 #project-switch.open #btn-project .ps-chev { transform: rotate(180deg); }
