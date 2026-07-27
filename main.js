@@ -1234,14 +1234,20 @@ const IS_WIN_HOST = process.platform === 'win32';
 function probePort(port, timeout = 800) {
   const sp = safePort(port);
   if (!sp) return Promise.resolve(false);
-  return new Promise((resolve) => {
-    const netmod = require('net');
+  const netmod = require('net');
+  // Dev servers bind IPv4 (127.0.0.1), IPv6 (::1), or all (0.0.0.0) — and over
+  // WSL2 forwarding the family matters. Consider the port up if EITHER connects.
+  const tryHost = (host) => new Promise((resolve) => {
     let done = false;
+    const sock = new netmod.Socket();
     const finish = (v) => { if (!done) { done = true; try { sock.destroy(); } catch (_) {} resolve(v); } };
-    const sock = netmod.connect({ host: '127.0.0.1', port: sp }, () => finish(true));
-    sock.on('error', () => finish(false));
-    sock.setTimeout(timeout, () => finish(false));
+    sock.setTimeout(timeout);
+    sock.once('connect', () => finish(true));
+    sock.once('timeout', () => finish(false));
+    sock.once('error', () => finish(false));
+    try { sock.connect(sp, host); } catch (_) { finish(false); }
   });
+  return Promise.all([tryHost('127.0.0.1'), tryHost('::1')]).then(rs => rs.some(Boolean));
 }
 
 function killServerProc(inst) {
