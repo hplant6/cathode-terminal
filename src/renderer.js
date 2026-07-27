@@ -9293,6 +9293,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         el.classList.toggle('paused', paused);
         const st = el.querySelector('.mc-row-state');
         if (st) st.textContent = up ? 'ACTIVE' : (starting ? 'STARTING' : (paused ? 'PAUSED' : 'INACTIVE'));
+        // A server the user just started/resumed came up → show it in the browser.
+        if (up && el.dataset.openWhenUp && el.dataset.port) { el.dataset.openWhenUp = ''; ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port); mc.close(); }
       });
       mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
         const p = projects.find(x => x.id === card.dataset.project);
@@ -9375,12 +9377,12 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
 
       const pause = document.createElement('button'); pause.className = 'mc-icn mc-row-pause'; pause.innerHTML = ICON_PAUSE; pause.title = 'Pause server';
       pause.addEventListener('click', busy(async () => {
-        if (row.dataset.paused === 'true') { markStarting(); capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }   // resume
+        if (row.dataset.paused === 'true') { markStarting(); row.dataset.openWhenUp = '1'; capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }   // resume
         else { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); setPaused(); }                                                             // pause
       }));
 
       const start = document.createElement('button'); start.className = 'mc-icn mc-row-start'; start.innerHTML = ICON_START; start.title = 'Start server';
-      start.addEventListener('click', busy(async () => { markStarting(); capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }));
+      start.addEventListener('click', busy(async () => { markStarting(); row.dataset.openWhenUp = '1'; capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }));
 
       const del = document.createElement('button'); del.className = 'mc-icn mc-row-del'; del.innerHTML = ICON_CLOSE; del.title = 'Remove server';
       del.addEventListener('click', async () => { if (row.classList.contains('up')) await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); removeServer(p.id, s.id); renderMC(); });
