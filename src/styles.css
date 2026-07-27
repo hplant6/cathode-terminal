@@ -104,6 +104,7 @@
   --spec-accent-dark:  #4C2112;   /* darker orange (send-btn idle, etc.) — themeable: Accent 1 Alt */
   --mc-green:          #8EFFAE;   /* Mission Control: active/running (from Figma) */
   --mc-green-dark:     #22432C;   /* Mission Control: active card header bg */
+  --mc-amber:          #E0A200;   /* Mission Control: paused server */
   --spec-black:        #000000;   /* shade 8 (darkest) — black fills: toggles, tooltip, etc. */
   --spec-graph-2:      #FFE16B;   /* graph ramp 2nd colour (usage/sysperf tip) — themeable */
   --graph-line:        color-mix(in srgb, var(--spec-text) 8%, transparent);   /* faint, follows the text colour (light on dark / dark on light) */
@@ -461,6 +462,9 @@ html, body {
 .mc-row.up .mc-row-state { color: var(--mc-green); }
 .mc-row-name, .mc-row-port, .mc-row-ram { font-family: var(--font-mono); font-weight: 700; font-size: 12px; color: var(--spec-text-dim); }
 .mc-row.up .mc-row-name, .mc-row.up .mc-row-port, .mc-row.up .mc-row-ram { color: #fff; }
+.mc-row.paused .mc-row-dot { background: var(--mc-amber); }
+.mc-row.paused .mc-row-state { color: var(--mc-amber); }
+.mc-row.paused .mc-row-name, .mc-row.paused .mc-row-port, .mc-row.paused .mc-row-ram { color: #fff; }
 .mc-row-acts { display: flex; align-items: center; gap: 12px; justify-self: end; }
 
 /* Icon buttons */
@@ -468,8 +472,13 @@ html, body {
 .mc-icn svg { width: 18px; height: 18px; display: block; }
 .mc-icn:hover { filter: brightness(1.2); }
 .mc-icn:disabled { opacity: 0.4; cursor: default; }
-.mc-row:not(.up) .mc-row-act { color: var(--mc-green); }   /* start = green */
-.mc-row.up .mc-row-act { color: var(--spec-text-dim); }    /* reload = dim */
+.mc-row-reload, .mc-row-pause { display: none; }
+.mc-row.up .mc-row-reload, .mc-row.up .mc-row-pause,
+.mc-row.paused .mc-row-reload, .mc-row.paused .mc-row-pause { display: inline-flex; }
+.mc-row.up .mc-row-start, .mc-row.paused .mc-row-start { display: none; }
+.mc-row-reload, .mc-row-pause { color: var(--spec-text-dim); }
+.mc-row.paused .mc-row-pause { color: #fff; }              /* bright when this server is paused */
+.mc-row-start { color: var(--mc-green); }
 .mc-row-del { color: var(--spec-text); }
 
 /* Idle card — preview + meta */
@@ -492,6 +501,18 @@ html, body {
 .mc-btn-switch { background: var(--spec-accent-dark); }
 .mc-btn-switch:hover { background: var(--accent); }
 .mc-btn:disabled { opacity: 0.5; cursor: default; }
+.mc-btn-add { background: transparent; border: 1px solid var(--spec-text-faint); color: #fff; }
+.mc-btn-add:hover { background: var(--btn-hover); }
+
+/* Add-server form (swaps into the active card body) */
+.mc-addform { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; padding: 4px 2px; }
+.mc-addform-title { font-family: var(--font-title); font-weight: 600; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+.mc-addform-field { display: flex; flex-direction: column; gap: 6px; }
+.mc-addform-field > span { font-family: var(--font-mono); font-weight: 700; font-size: 11px; text-transform: uppercase; color: var(--spec-text-faint); }
+.mc-addform-input { background: var(--spec-header-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: #fff; font-family: var(--font-mono); font-size: 13px; padding: 11px 12px; }
+.mc-addform-input::placeholder { color: var(--spec-text-faint); }
+.mc-addform-input:focus { outline: none; border-color: var(--accent); }
+.mc-addform-btns { display: flex; gap: 10px; margin-top: auto; }
 
 /* Open Project button */
 .mc-open-fab { position: absolute; right: 40px; bottom: 24px; padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }

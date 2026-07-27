@@ -9236,12 +9236,15 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   const mcGrid  = document.getElementById('mc-grid');
   if (mcModal && mcGrid) {
     let statusTimer = null;
-    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; } });
+    let addFormProject = null;   // project id whose active card is showing the Add-server form
+    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); statusTimer = null; addFormProject = null; } });
 
     // Icons (from final icons/) — currentColor so CSS controls color per state.
     const ICON_CLOSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg>';
     const ICON_START  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5498 9.24974C1.54992 6.54918 2.99139 4.1933 5.13574 2.88841C5.46586 2.68755 5.89659 2.7919 6.09766 3.12181C6.29851 3.45193 6.19417 3.88265 5.86426 4.08372C4.11704 5.14678 2.95031 7.06075 2.9502 9.24974C2.9502 12.5911 5.6586 15.3005 9 15.3005C12.3414 15.3005 15.0498 12.5911 15.0498 9.24974C15.0497 7.06091 13.8833 5.14789 12.1357 4.08372C11.8057 3.88259 11.7013 3.45192 11.9023 3.12181C12.1035 2.79179 12.5341 2.68738 12.8643 2.88841C15.0084 4.19416 16.4501 6.54893 16.4502 9.24974C16.4502 13.3643 13.1146 16.6999 9 16.6999C4.8854 16.6999 1.5498 13.3643 1.5498 9.24974Z" fill="currentColor"/><path d="M8.2998 8.5V2C8.2998 1.6134 8.6134 1.2998 9 1.2998C9.3866 1.2998 9.7002 1.6134 9.7002 2V8.5C9.7002 8.8866 9.3866 9.2002 9 9.2002C8.6134 9.2002 8.2998 8.8866 8.2998 8.5Z" fill="currentColor"/></svg>';
     const ICON_RELOAD = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.4852 9C15.4852 5.3826 12.5528 2.4502 8.93539 2.4502C6.19818 2.45021 3.85186 4.12921 2.87289 6.51562C2.72615 6.87329 2.31747 7.04419 1.9598 6.89746C1.60214 6.75073 1.43124 6.34204 1.57796 5.98438C2.76499 3.09083 5.61063 1.04982 8.93539 1.0498C13.326 1.0498 16.8856 4.6094 16.8856 9C16.8856 13.3906 13.326 16.9502 8.93539 16.9502C6.19906 16.9502 3.78513 15.5674 2.35629 13.4648C2.13904 13.1451 2.22223 12.7095 2.54183 12.4922C2.86159 12.2749 3.2972 12.358 3.51449 12.6777C4.69366 14.4129 6.6819 15.5498 8.93539 15.5498C12.5528 15.5498 15.4852 12.6174 15.4852 9Z" fill="currentColor"/><path d="M1.71954 2.61163C2.10235 2.55879 2.45557 2.82646 2.50861 3.20929L2.82013 5.46027L5.07111 5.14972C5.45406 5.09678 5.80723 5.36442 5.86017 5.74738C5.91299 6.13014 5.64619 6.48333 5.26349 6.53644L2.31915 6.94367C1.93627 6.9966 1.58313 6.72887 1.53009 6.34601L1.12189 3.4007C1.06905 3.01789 1.33672 2.66467 1.71954 2.61163Z" fill="currentColor"/></svg>';
+
+    const ICON_PAUSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.7 1.92223C6.70081 1.53564 6.38808 1.2212 6.00148 1.21992C5.61488 1.21865 5.30082 1.53101 5.3 1.91761L6 1.91992L6.7 1.92223ZM5.27004 16.0774C5.26922 16.464 5.58196 16.7784 5.96855 16.7797C6.35515 16.781 6.66921 16.4686 6.67003 16.082L5.97003 16.0797L5.27004 16.0774ZM6 1.91992L5.3 1.91761L5.27004 16.0774L5.97003 16.0797L6.67003 16.082L6.7 1.92223L6 1.91992Z" fill="currentColor"/><path d="M12.7293 1.92223C12.7301 1.53564 12.4174 1.2212 12.0308 1.21992C11.6442 1.21865 11.3301 1.53101 11.3293 1.91761L12.0293 1.91992L12.7293 1.92223ZM11.2993 16.0774C11.2985 16.464 11.6113 16.7784 11.9978 16.7797C12.3844 16.781 12.6985 16.4686 12.6993 16.082L11.9993 16.0797L11.2993 16.0774ZM12.0293 1.91992L11.3293 1.91761L11.2993 16.0774L11.9993 16.0797L12.6993 16.082L12.7293 1.92223L12.0293 1.91992Z" fill="currentColor"/></svg>';
 
     function fmtLastActive(ts) {
       if (!ts) return '—';
@@ -9251,18 +9254,30 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
     const hasStorybook = (p) => (p.servers || []).some(s => /storybook/i.test((s.name || '') + ' ' + (s.cmd || '')));
 
-    // Probe every configured port and reflect running state on the server rows.
+    // Probe ports; reflect running/paused/inactive on rows + the Pause button.
     async function refreshStatus() {
+      const projects = loadProjects();
       const ports = [];
-      loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
+      projects.forEach(p => (p.servers || []).forEach(s => { if (s.port) ports.push(s.port); }));
       let running = {};
       if (ports.length) { try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) { return; } }
-      mcGrid.querySelectorAll('.mc-row[data-port]').forEach(el => {
-        const up = !!running[el.dataset.port];
+      mcGrid.querySelectorAll('.mc-row').forEach(el => {
+        const up = !!(el.dataset.port && running[el.dataset.port]);
+        const paused = !up && el.dataset.paused === 'true';
         el.classList.toggle('up', up);
-        const st = el.querySelector('.mc-row-state'); if (st) st.textContent = up ? 'ACTIVE' : 'INACTIVE';
-        const act = el.querySelector('.mc-row-act');
-        if (act && !act.disabled) { act.innerHTML = up ? ICON_RELOAD : ICON_START; act.title = up ? 'Restart server' : 'Start server'; }
+        el.classList.toggle('paused', paused);
+        const st = el.querySelector('.mc-row-state');
+        if (st) st.textContent = up ? 'ACTIVE' : (paused ? 'PAUSED' : 'INACTIVE');
+      });
+      mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
+        const p = projects.find(x => x.id === card.dataset.project);
+        const btn = card.querySelector('.mc-btn-pause');
+        if (!p || !btn || btn.dataset.busy === 'true') return;
+        const anyRunning = (p.servers || []).some(s => s.port && running[s.port]);
+        const anyPaused  = (p.servers || []).some(s => s.paused && !(s.port && running[s.port]));
+        if (anyRunning) { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.disabled = false; }
+        else if (anyPaused) { btn.textContent = 'Resume'; btn.dataset.mode = 'resume'; btn.disabled = false; }
+        else { btn.textContent = 'Pause'; btn.dataset.mode = 'pause'; btn.disabled = true; }
       });
     }
 
@@ -9279,42 +9294,36 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       setTimeout(refreshStatus, 1500);
     }
 
-    const pauseBehaviorOf = (p) => (p.pauseBehavior === 'keep' ? 'keep' : 'suspend');
-
-    // Pause: stop the project's running servers (if it suspends on pause),
-    // recording which were up so Resume can restart exactly those.
+    // Bulk pause every running server in the project (each flagged paused so
+    // the per-row control and the project Pause/Resume button agree).
     async function pauseProject(p) {
       const servers = p.servers || [];
-      let stopped = [];
-      if (pauseBehaviorOf(p) === 'suspend' && servers.length) {
-        const ports = servers.filter(s => s.port).map(s => s.port);
-        let running = {};
-        try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
-        for (const s of servers) {
-          if (s.port && running[s.port]) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); stopped.push(s.id); }
-        }
+      const ports = servers.filter(s => s.port).map(s => s.port);
+      let running = {};
+      try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
+      for (const s of servers) {
+        if (s.port && running[s.port]) { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); updateServer(p.id, s.id, { paused: true }); }
       }
-      updateProject(p.id, x => { x.state = 'paused'; x.pausedServers = stopped; });
       renderMC();
     }
 
-    // Resume: restart the servers that were running when the project was paused.
+    // Bulk resume every paused server in the project.
     async function resumeProject(p) {
-      const servers = p.servers || [];
-      for (const sid of (p.pausedServers || [])) {
-        const s = servers.find(x => x.id === sid);
-        if (!s) continue;
+      for (const s of (p.servers || [])) {
+        if (!s.paused) continue;
         const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' }).catch(() => null);
         if (r && r.ok && r.port && r.port !== s.port) updateServer(p.id, s.id, { port: r.port });
+        updateServer(p.id, s.id, { paused: false });
       }
-      updateProject(p.id, x => { x.state = 'active'; x.pausedServers = []; });
       renderMC();
     }
 
-    // One server row in the active card's table.
+    // One server row. Icons shown per state (CSS): running/paused → reload +
+    // pause + close; inactive → start + close.
     function serverRow(p, s) {
       const row = document.createElement('div'); row.className = 'mc-row';
       if (s.port) row.dataset.port = s.port;
+      if (s.paused) row.dataset.paused = 'true';
       row.innerHTML =
         '<span class="mc-row-status"><span class="mc-row-dot"></span><span class="mc-row-state">INACTIVE</span></span>' +
         '<span class="mc-row-name"></span>' +
@@ -9326,24 +9335,27 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       row.querySelector('.mc-row-port').textContent = s.port || '';
       const acts = row.querySelector('.mc-row-acts');
       const arg = () => ({ id: s.id, projectId: p.id, name: s.name, cmd: s.cmd, cwd: p.rootDir, port: s.port, runIn: s.runIn || 'wsl' });
+      const capturePort = (r) => { if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-row-port').textContent = r.port; } };
+      const busy = (fn) => async () => { row.querySelectorAll('.mc-icn').forEach(b => b.disabled = true); await fn(); setTimeout(() => { row.querySelectorAll('.mc-icn').forEach(b => b.disabled = false); refreshStatus(); }, 1400); };
+      const clearPaused = () => { updateServer(p.id, s.id, { paused: false }); s.paused = false; row.dataset.paused = ''; };
+      const setPaused   = () => { updateServer(p.id, s.id, { paused: true });  s.paused = true;  row.dataset.paused = 'true'; };
 
-      // Running → reload (restart); stopped → start. Icon swapped in refreshStatus.
-      const act = document.createElement('button'); act.className = 'mc-icn mc-row-act'; act.innerHTML = ICON_START; act.title = 'Start server';
-      act.addEventListener('click', async () => {
-        const up = row.classList.contains('up');
-        act.disabled = true;
-        if (up) { await ipcRenderer.invoke(IPC.SERVER_RESTART, arg()).catch(() => {}); }
-        else {
-          const r = await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null);
-          if (r && r.ok && r.port && r.port !== s.port) { updateServer(p.id, s.id, { port: r.port }); s.port = r.port; row.dataset.port = r.port; row.querySelector('.mc-row-port').textContent = r.port; }
-        }
-        setTimeout(() => { act.disabled = false; refreshStatus(); }, 1400);
-      });
+      const reload = document.createElement('button'); reload.className = 'mc-icn mc-row-reload'; reload.innerHTML = ICON_RELOAD; reload.title = 'Restart server';
+      reload.addEventListener('click', busy(async () => { capturePort(await ipcRenderer.invoke(IPC.SERVER_RESTART, arg()).catch(() => null)); clearPaused(); }));
+
+      const pause = document.createElement('button'); pause.className = 'mc-icn mc-row-pause'; pause.innerHTML = ICON_PAUSE; pause.title = 'Pause server';
+      pause.addEventListener('click', busy(async () => {
+        if (row.dataset.paused === 'true') { capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }   // resume
+        else { await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); setPaused(); }                                             // pause
+      }));
+
+      const start = document.createElement('button'); start.className = 'mc-icn mc-row-start'; start.innerHTML = ICON_START; start.title = 'Start server';
+      start.addEventListener('click', busy(async () => { capturePort(await ipcRenderer.invoke(IPC.SERVER_START, arg()).catch(() => null)); clearPaused(); }));
 
       const del = document.createElement('button'); del.className = 'mc-icn mc-row-del'; del.innerHTML = ICON_CLOSE; del.title = 'Remove server';
       del.addEventListener('click', async () => { if (row.classList.contains('up')) await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); removeServer(p.id, s.id); renderMC(); });
 
-      acts.append(act, del);
+      acts.append(reload, pause, start, del);
       return row;
     }
 
@@ -9364,10 +9376,12 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       return hd;
     }
 
-    // The active (selected) project — expanded server table.
+    // The active (selected) project — expanded server table (or Add-server form).
     function activeCard(p) {
       const card = document.createElement('div'); card.className = 'mc-card mc-card-active'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, true));
+      if (addFormProject === p.id) { card.appendChild(addServerForm(p)); return card; }
+
       const table = document.createElement('div'); table.className = 'mc-table';
       const head = document.createElement('div'); head.className = 'mc-thead';
       head.innerHTML = '<span>Status</span><span>Server</span><span>Port</span><span>RAM</span>';
@@ -9380,15 +9394,50 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       else { const none = document.createElement('div'); none.className = 'mc-rows-empty'; none.textContent = 'No servers detected'; rows.appendChild(none); }
       table.append(head, rows);
       card.appendChild(table);
+
       const foot = document.createElement('div'); foot.className = 'mc-foot';
       const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
       x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
-      const paused = p.state === 'paused';
-      const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = paused ? 'Resume' : 'Pause';
-      pause.addEventListener('click', async () => { pause.disabled = true; pause.textContent = paused ? 'Resuming…' : 'Pausing…'; if (paused) await resumeProject(p); else await pauseProject(p); });
-      foot.append(x, pause);
+      const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = 'Pause';
+      pause.addEventListener('click', async () => {
+        const mode = pause.dataset.mode === 'resume' ? 'resume' : 'pause';
+        pause.dataset.busy = 'true'; pause.disabled = true; pause.textContent = mode === 'resume' ? 'Resuming…' : 'Pausing…';
+        if (mode === 'resume') await resumeProject(p); else await pauseProject(p);
+      });
+      const add = document.createElement('button'); add.className = 'mc-btn mc-btn-add'; add.textContent = 'Add server';
+      add.addEventListener('click', () => { addFormProject = p.id; renderMC(); });
+      foot.append(x, pause, add);
       card.appendChild(foot);
       return card;
+    }
+
+    // Add-server form that swaps into the active card body.
+    function addServerForm(p) {
+      const form = document.createElement('div'); form.className = 'mc-addform';
+      form.innerHTML =
+        '<div class="mc-addform-title">Add server</div>' +
+        '<label class="mc-addform-field"><span>Name</span><input class="mc-addform-input" data-k="name" placeholder="e.g. API" autocomplete="off" spellcheck="false"></label>' +
+        '<label class="mc-addform-field"><span>Command</span><input class="mc-addform-input" data-k="cmd" placeholder="e.g. npm run api" autocomplete="off" spellcheck="false"></label>' +
+        '<label class="mc-addform-field"><span>Port (optional)</span><input class="mc-addform-input mc-addform-port" data-k="port" inputmode="numeric" placeholder="e.g. 4321" autocomplete="off"></label>' +
+        '<div class="mc-addform-btns"></div>';
+      const nameIn = form.querySelector('[data-k="name"]');
+      const cmdIn  = form.querySelector('[data-k="cmd"]');
+      const portIn = form.querySelector('[data-k="port"]');
+      const btns = form.querySelector('.mc-addform-btns');
+      const cancel = document.createElement('button'); cancel.className = 'mc-btn mc-btn-add'; cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', () => { addFormProject = null; renderMC(); });
+      const save = document.createElement('button'); save.className = 'mc-btn mc-btn-pause'; save.textContent = 'Add';
+      const submit = () => {
+        const cmd = cmdIn.value.trim(); if (!cmd) { cmdIn.focus(); return; }
+        const port = parseInt(portIn.value, 10);
+        addServer(p.id, { name: nameIn.value.trim() || 'server', cmd, port: (port >= 1 && port <= 65535) ? port : null });
+        addFormProject = null; renderMC();
+      };
+      save.addEventListener('click', submit);
+      form.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } if (e.key === 'Escape') { addFormProject = null; renderMC(); } });
+      btns.append(cancel, save);
+      setTimeout(() => nameIn.focus(), 0);
+      return form;
     }
 
     // A non-active project — collapsed preview card.
