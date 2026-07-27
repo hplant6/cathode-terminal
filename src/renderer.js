@@ -9407,6 +9407,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   const mcModal = document.getElementById('mission-control');
   const mcGrid  = document.getElementById('mc-grid');
   if (mcModal && mcGrid) {
+    const mcUntracked = document.getElementById('mc-untracked');
+    const COMMON_DEV_PORTS = [3000, 3001, 3002, 3003, 3333, 4000, 4173, 4200, 4321, 5000, 5100, 5173, 5174, 5175, 5273, 6006, 7000, 7070, 8000, 8080, 8081, 8888, 9000];
+    const DEV_NAME_RE = /^(node|nodejs|deno|bun|python|py|ruby|php|java|dotnet|caddy|nginx|vite|esbuild|next|webpack)/i;
     let statusTimer = null, ramTimer = null;
     let addFormProject = null;   // project id whose active card is showing the Add-server form
     const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); clearInterval(ramTimer); statusTimer = ramTimer = null; addFormProject = null; } });
@@ -9497,6 +9500,59 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       mcGrid.querySelectorAll('.mc-row.up[data-port]').forEach(el => {
         const cell = el.querySelector('.mc-row-ram'); if (cell) cell.textContent = fmtRam(ram[el.dataset.port]);
       });
+    }
+
+    // Surface localhost dev servers that are running but not tied to any tracked
+    // project (e.g. one the agent started in a folder you haven't opened yet).
+    async function refreshUntracked() {
+      if (!mcUntracked) return;
+      const tracked = new Set();
+      loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) tracked.add(+s.port); }));
+      const found = new Map();   // port → process name
+      try {   // listPorts: dev runtimes visible to the host (macOS, Windows-native)
+        const r = await ipcRenderer.invoke(IPC.PORTS_LIST);
+        if (r && r.ok && Array.isArray(r.ports)) r.ports.forEach(p => {
+          const n = String(p.name || '').toLowerCase().replace(/\.(exe|app)$/, '');
+          if (DEV_NAME_RE.test(n) && !tracked.has(p.port)) found.set(p.port, p.name || '');
+        });
+      } catch (_) {}
+      const probe = COMMON_DEV_PORTS.filter(p => !tracked.has(p) && !found.has(p));   // catches WSL servers the host scan can't see
+      if (probe.length) {
+        try { const { running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports: probe }); probe.forEach(p => { if (running[p]) found.set(p, ''); }); } catch (_) {}
+      }
+      renderUntracked([...found.entries()].map(([port, name]) => ({ port, name })).sort((a, b) => a.port - b.port));
+    }
+
+    function renderUntracked(items) {
+      mcUntracked.innerHTML = '';
+      if (!items.length) { mcUntracked.hidden = true; return; }
+      mcUntracked.hidden = false;
+      const label = document.createElement('div'); label.className = 'mc-untracked-label';
+      label.textContent = 'Running on localhost — not in a project';
+      mcUntracked.appendChild(label);
+      const list = document.createElement('div'); list.className = 'mc-untracked-list';
+      items.forEach(({ port, name }) => {
+        const row = document.createElement('div'); row.className = 'mc-untracked-item';
+        row.innerHTML = '<span class="mc-untracked-dot"></span><span class="mc-untracked-port"></span><span class="mc-untracked-name"></span><span class="mc-untracked-acts"></span>';
+        row.querySelector('.mc-untracked-port').textContent = 'localhost:' + port;
+        row.querySelector('.mc-untracked-name').textContent = name || '';
+        const acts = row.querySelector('.mc-untracked-acts');
+        const open = document.createElement('button'); open.className = 'mc-untracked-btn'; open.textContent = 'Open';
+        open.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + port));
+        const adopt = document.createElement('button'); adopt.className = 'mc-untracked-btn primary'; adopt.textContent = 'Open as project';
+        adopt.addEventListener('click', async () => {
+          const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
+          if (!dir) return;
+          activateProject(dir);
+          await seedServers(getProject(getActiveId()));
+          const p = getProject(getActiveId());   // ensure the running port is tracked so the new card shows it active
+          if (p && !(p.servers || []).some(s => +s.port === port)) addServer(p.id, { name: 'dev', cmd: '', port });
+          renderMC(); refreshUntracked();
+        });
+        acts.append(open, adopt);
+        list.appendChild(row);
+      });
+      mcUntracked.appendChild(list);
     }
 
     // Start every stopped server in a project.
@@ -9696,8 +9752,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       mc.open();
       clearInterval(statusTimer); clearInterval(ramTimer);
       statusTimer = setInterval(refreshStatus, 3000);
-      ramTimer = setInterval(refreshRam, 5000);
-      refreshRam();
+      ramTimer = setInterval(() => { refreshRam(); refreshUntracked(); }, 5000);
+      refreshRam(); refreshUntracked();
     }
 
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });

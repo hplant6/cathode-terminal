@@ -523,6 +523,19 @@ html, body {
 .mc-open-fab { position: absolute; right: 40px; bottom: 24px; padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 .mc-open-fab:hover { filter: brightness(1.08); }
 
+/* Running-but-untracked localhost servers */
+#mc-untracked { flex-shrink: 0; margin-bottom: 16px; padding: 12px 16px; background: var(--spec-header-bg); border: 1px solid var(--spec-structural); border-radius: 12px; }
+.mc-untracked-label { font-family: var(--font-mono); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mc-amber); margin-bottom: 10px; }
+.mc-untracked-list { display: flex; flex-direction: column; gap: 7px; }
+.mc-untracked-item { display: flex; align-items: center; gap: 10px; }
+.mc-untracked-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--mc-green); box-shadow: 0 0 5px color-mix(in srgb, var(--mc-green) 60%, transparent); }
+.mc-untracked-port { font-family: var(--font-mono); font-size: 12px; color: #fff; }
+.mc-untracked-name { font-family: var(--font-mono); font-size: 11px; opacity: 0.45; }
+.mc-untracked-acts { margin-left: auto; display: flex; gap: 6px; }
+.mc-untracked-btn { padding: 4px 10px; font-size: 11px; font-family: var(--font-ui); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text); cursor: pointer; transition: background 0.1s; }
+.mc-untracked-btn:hover { background: var(--btn-hover); }
+.mc-untracked-btn.primary { border-color: var(--accent); color: var(--accent); }
+
 /* Server output viewer (click a row's status) */
 .mc-logpop { position: absolute; inset: 64px 40px 84px; z-index: 10; display: flex; flex-direction: column; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); overflow: hidden; }
 .mc-logpop-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--spec-structural); flex-shrink: 0; }
