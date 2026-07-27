@@ -3540,6 +3540,18 @@ resizeGrips.forEach(grip => grip.addEventListener('mousedown', e => {
 }));
 // rAF-throttled: mousemove fires at 60–120 Hz; each un-throttled event caused
 // a style write + IPC → 4 native setBounds in main. One update per frame.
+// Smallest left-panel width that still shows the whole Views bar (project pill +
+// Mission Control + the toggles) without clipping — measured from live content.
+function leftPanelMinWidth() {
+  const vb = document.getElementById('views-bar');
+  if (!vb) return 340;
+  const cs  = getComputedStyle(vb);
+  const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const gap = parseFloat(cs.gap) || 10;
+  const w = (id) => { const el = document.getElementById(id); return el ? el.offsetWidth : 0; };
+  return Math.ceil(pad + w('project-switch') + w('btn-mission') + w('views-toggles') + gap * 2 + 6);
+}
+
 let dragClientX = 0, dragRaf = 0;
 document.addEventListener('mousemove', e => {
   if (!dragging) return;
@@ -3549,7 +3561,8 @@ document.addEventListener('mousemove', e => {
     dragRaf = 0;
     if (!dragging) return;
     const appW     = appRootEl.offsetWidth - currentDevToolsWidth;
-    const fraction = Math.min(0.75, Math.max(0.2, dragClientX / appW));
+    const minFrac  = Math.min(0.75, leftPanelMinWidth() / appW);   // don't let the drag clip the Views-bar toggles
+    const fraction = Math.min(0.75, Math.max(minFrac, dragClientX / appW));
     leftPanel.style.width = Math.round(fraction * appW) + 'px';
     ipcRenderer.send(IPC.SPLIT_CHANGED, fraction);
   });
