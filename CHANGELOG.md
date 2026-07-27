@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-27
+
+### Fixed
+- **Per-server RAM on macOS.** The RAM readout used `xargs -r`, a GNU-only flag that BSD/macOS `xargs` rejects, so memory silently showed `—` on Mac. Rewritten to be shell-portable (works on macOS and Linux).
+
 ## [1.1.0] - 2026-07-27
 
 ### Added
