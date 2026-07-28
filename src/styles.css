@@ -694,6 +694,67 @@ html, body {
 .ds-slider:hover::-webkit-slider-thumb { background: #fff; }
 .ds-slider:focus { outline: none; }
 .ds-slider:focus::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--spec-accent) 30%, transparent); }
+
+/* ── Usage Assistance modal ─────────────────────────────────────── */
+.ua-box { width: 480px; max-width: 94vw; }
+.ua-title { font-family: var(--font-title); font-weight: 600; font-size: 20px; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; color: #fff; margin-bottom: 8px; }
+.ua-sub { font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); text-align: center; line-height: 1.5; margin: 0 0 18px; }
+
+/* usage gauges (reuse gaugeSvg) */
+.ua-gauges { display: flex; gap: 14px; background: var(--spec-input-bg); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.ua-gauge { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.ua-gauge-dial { width: 74px; flex-shrink: 0; }
+.ua-gauge-dial .gauge { width: 100%; height: auto; display: block; }
+.ua-gauge-text { min-width: 0; }
+.ua-gauge-label { font-family: var(--font-title); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; line-height: 1.25; }
+.ua-gauge-dim { color: var(--spec-text-dim); }
+.ua-gauge-sub { font-family: var(--font-mono); font-size: 10px; color: var(--spec-text-dim); margin-top: 3px; }
+
+/* auto handoff panel */
+.ua-panel { background: var(--spec-input-bg); border-radius: 12px; padding: 18px; margin-bottom: 12px; }
+.ua-panel-head { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.ua-panel-title { font-family: var(--font-title); font-weight: 600; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+.ua-panel-desc { font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); text-align: center; margin: 8px 0 0; }
+.ua-toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; border: none; border-radius: 999px; background: var(--spec-structural); cursor: pointer; padding: 0; transition: background 0.15s; }
+.ua-toggle-knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--spec-text-dim); transition: left 0.15s, background 0.15s; }
+.ua-toggle.on .ua-toggle-knob { left: 23px; background: var(--accent); }
+
+/* collapse */
+.ua-expand { display: none; }
+.ua-expand.open { display: block; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--spec-structural); }
+.ua-threshold { font-family: var(--font-title); font-weight: 700; font-size: 46px; text-align: center; color: #fff; letter-spacing: 0.02em; line-height: 1; }
+
+/* new slider iteration — grip-handle */
+.ua-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; margin: 14px 0 4px; background: transparent; cursor: pointer; }
+.ua-slider::-webkit-slider-runnable-track { height: 12px; border-radius: 999px; background: linear-gradient(to right, var(--accent) var(--_pct, 0%), var(--spec-structural) var(--_pct, 0%)); }
+.ua-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 26px; margin-top: -7px; border-radius: 6px; background:
+    linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.38)) 8px 8px / 1.5px 10px no-repeat,
+    linear-gradient(rgba(0,0,0,0.38), rgba(0,0,0,0.38)) 12px 8px / 1.5px 10px no-repeat,
+    var(--accent);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.ua-slider:focus { outline: none; }
+
+/* when-limit-reached sub-box */
+.ua-limit { background: var(--spec-header-bg); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.ua-limit-title { font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-align: center; }
+.ua-limit-desc { font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim); text-align: center; line-height: 1.5; margin: 8px 0 12px; }
+.ua-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--spec-structural); }
+.ua-flabel { font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); flex-shrink: 0; }
+.ua-select { flex: 0 1 210px; background: var(--spec-structural); border: none; border-radius: 6px; color: #fff; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding: 9px 12px; cursor: pointer; }
+.ua-select:focus { outline: none; }
+
+/* perform button + status */
+.ua-perform { width: 100%; height: 46px; border: none; border-radius: 8px; background: var(--spec-structural); color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.1s; }
+.ua-perform:hover:not(:disabled) { background: var(--spec-text-faint); }
+.ua-perform:disabled { opacity: 0.7; cursor: default; }
+.ua-status { margin: 10px 0 0; font-family: var(--font-mono); font-size: 11px; text-align: center; color: var(--spec-text-dim); }
+.ua-status[data-state="error"] { color: var(--accent); }
+
+/* auto-handoff countdown toast */
+.ua-countdown { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; align-items: center; gap: 14px; background: var(--spec-structural); border: 1px solid var(--accent); border-radius: 10px; padding: 12px 16px; box-shadow: 0 10px 34px rgba(0,0,0,0.55); }
+.ua-cd-text { font-family: var(--font-mono); font-size: 12px; color: #fff; }
+.ua-cd-cancel { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--font-ui); font-size: 11px; padding: 5px 12px; cursor: pointer; }
+.ua-cd-cancel:hover { background: var(--btn-hover); }
 .budget-hint { font-size: 11px; color: var(--spec-text-faint); line-height: 1.5; }
 .budget-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--spec-text-dim); cursor: pointer; }
 .budget-check input { accent-color: var(--spec-accent); }

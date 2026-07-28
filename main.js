@@ -2862,6 +2862,10 @@ function codeSafeJoin(rel) {
 }
 
 ipcMain.handle(IPC.GET_PROJECT_DIR, () => currentProjectDir || '');
+ipcMain.handle(IPC.CHECK_PROJECT_FILE, (_, { name } = {}) => {
+  try { return { exists: !!name && fs.existsSync(path.join(sessionCwd(), path.basename(name))) }; }
+  catch (_) { return { exists: false }; }
+});
 
 ipcMain.handle(IPC.PICK_PROJECT_DIR, async () => {
   const { filePaths } = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
@@ -3280,7 +3284,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Edit Tabs',          click: act('edit-tabs') },
     { label: 'MCP Connections',    click: act('mcp-tools') },
     { label: 'Keyboard Shortcuts', click: act('keyboard-shortcuts') },
-    { label: 'Budget Guard…',      click: act('budget') },
+    { label: 'Usage Assistance…',  click: act('budget') },
     { label: 'Localhost Servers…', click: act('localhost') },
     { label: 'Watch Approval…',    click: act('watch-approval') },
     { type: 'separator' },

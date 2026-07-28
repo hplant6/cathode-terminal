@@ -1005,7 +1005,7 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
   const chipKey = bg ? (bg.reset || '_') : null;
   const showChip = !!(bg && bg.over) && _budgetChipDismissed !== chipKey;
   const chipHtml = showChip
-    ? `<div class="usage-budget-chip"><button class="ubc-main" title="Open Budget Guard — hand off to a budget agent">Budget · ${Math.round(bg.pct)}% of your ${bg.label} limit — hand off ›</button><button class="ubc-x" title="Dismiss until your limit resets" aria-label="Dismiss">✕</button></div>`
+    ? `<div class="usage-budget-chip"><button class="ubc-main" title="Open Usage Assistance — hand off to a budget agent">Usage · ${Math.round(bg.pct)}% of your ${bg.label} limit — hand off ›</button><button class="ubc-x" title="Dismiss until your limit resets" aria-label="Dismiss">✕</button></div>`
     : '';
 
   usageBody.innerHTML = chipHtml + (usageMini
@@ -4020,7 +4020,7 @@ function updateDsSlider(el) {
 // ── Budget Guard config + handoff ──
 const BUDGET_CFG_KEY = 'cathode-budget';
 const BUDGET_AGENT_LABEL = { hermes: 'Hermes', gemini: 'Gemini', codex: 'Codex' };
-const BUDGET_DEFAULTS = { threshold: 80, watchWeekly: false, autoOpen: true, target: 'hermes', dest: 'HANDOFF.md' };
+const BUDGET_DEFAULTS = { threshold: 80, autoHandoff: false, target: 'hermes', dest: 'HANDOFF.md' };   // weekly is always watched; autoHandoff replaces autoOpen/watchWeekly
 function budgetConfig() { return Object.assign({}, BUDGET_DEFAULTS, safeParse(localStorage.getItem(BUDGET_CFG_KEY), {})); }
 function saveBudgetConfig(cfg) { localStorage.setItem(BUDGET_CFG_KEY, JSON.stringify(cfg)); }
 // Which usage limit governs the budget (weekly if watched and higher, else the 5h),
@@ -4033,7 +4033,7 @@ function budgetGovern(limits) {
   // so use it as-is — do NOT rescale, or a fresh 1% reads as 100%.
   const p = m => m && typeof m.utilization === 'number' ? m.utilization : null;
   const five = p(limits.fiveHour);
-  const week = c.watchWeekly ? p(limits.sevenDay) : null;
+  const week = p(limits.sevenDay);   // weekly is always watched now (either limit can trigger)
   let pick = { pct: five, label: '5-hour', reset: limits.fiveHour && limits.fiveHour.resetsAt };
   if (week != null && (five == null || week >= five)) pick = { pct: week, label: 'weekly', reset: limits.sevenDay && limits.sevenDay.resetsAt };
   if (pick.pct == null) return null;
@@ -4064,123 +4064,136 @@ let openBudgetModal = null;
   const cfg = budgetConfig();
   const save = () => saveBudgetConfig(cfg);
 
-  const slider   = document.getElementById('budget-threshold');
-  const sliderV  = document.getElementById('budget-threshold-val');
-  const weeklyCb = document.getElementById('budget-watch-weekly');
-  const autoCb   = document.getElementById('budget-autoopen');
-  const targetEl = document.getElementById('budget-target');
-  const destEl   = document.getElementById('budget-dest');
-  const statusEl = document.getElementById('budget-status');
-  const briefBtn = document.getElementById('budget-write-brief');
-  const contBtn  = document.getElementById('budget-continue');
-  const contAgent = document.getElementById('budget-continue-agent');
+  const slider     = document.getElementById('budget-threshold');
+  const thresholdV = document.getElementById('budget-threshold-val');
+  const targetEl   = document.getElementById('budget-target');
+  const destEl     = document.getElementById('budget-dest');
+  const statusEl   = document.getElementById('budget-status');
+  const toggle     = document.getElementById('ua-toggle');
+  const expand     = document.getElementById('ua-expand');
+  const performBtn = document.getElementById('budget-handoff-now');
+  const gSession   = document.getElementById('ua-gauge-session');
+  const gWeek      = document.getElementById('ua-gauge-week');
+  const subSession = document.getElementById('ua-session-sub');
+  const subWeek    = document.getElementById('ua-week-sub');
 
-  let lastLimits = null;          // last GET_RATE_LIMITS result
-  let armedResetAt = null;        // resetsAt we've already auto-alerted for (re-arms each new window)
-  let lastCheck = 0;
-  // Step-2 gate: "Continue" stays inert until a brief has actually been written
-  // for the current project — otherwise the new agent is told to read a file that
-  // doesn't exist yet. Tracked by cwd so a brief written for project A doesn't
-  // green-light a handoff while you're now in project B.
-  let briefWrittenCwd = null;
+  let lastLimits = null, armedResetAt = null, lastCheck = 0, handoffBusy = false, countdownTimer = null;
+  const governing = () => budgetGovern(lastLimits);
+  const pctOf = (m) => (m && typeof m.utilization === 'number' ? Math.round(m.utilization) : null);
 
-  function handoffCwd() { const s = sessions.get(activeId); return (s && s.cwd) || ''; }
-  function refreshContinueGate() {
-    const ready = briefWrittenCwd != null && briefWrittenCwd === handoffCwd();
-    contBtn.disabled = !ready;
-    contBtn.classList.toggle('is-ready', ready);
-    contBtn.title = ready ? '' : 'Write the handoff brief first (step 1).';
-  }
-
-  function syncControls() {
-    slider.value = cfg.threshold; sliderV.textContent = cfg.threshold + '%'; updateDsSlider(slider);
-    weeklyCb.checked = !!cfg.watchWeekly;
-    autoCb.checked = !!cfg.autoOpen;
-    targetEl.value = cfg.target;
-    destEl.value = cfg.dest;
-    if (contAgent) contAgent.textContent = AGENT_LABEL[cfg.target] || cfg.target;
-    refreshContinueGate();
-  }
-
-  function fmtReset(iso) {
+  function fmtClock(iso) {
     const t = Date.parse(iso || ''); if (isNaN(t)) return '';
-    const mins = Math.max(0, (t - Date.now()) / 60000);
-    if (mins < 60) return `resets in ${Math.round(mins)}m`;
-    const h = mins / 60; return h < 24 ? `resets in ${Math.round(h)}h` : `resets in ${Math.round(h / 24)}d`;
+    return 'Resets ' + new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }
-  const governing = () => budgetGovern(lastLimits);   // shared with the Usage-panel chip
-  function renderStatus() {
-    if (!lastLimits) { statusEl.textContent = 'Checking your usage limit…'; statusEl.dataset.state = 'idle'; return; }
-    if (!lastLimits.ok) { statusEl.textContent = 'Usage limit unavailable — sign in to Claude Code to enable Budget Guard.'; statusEl.dataset.state = 'error'; return; }
-    const g = governing();
-    if (!g) { statusEl.textContent = 'Usage limit unavailable.'; statusEl.dataset.state = 'error'; return; }
-    const reset = g.reset ? ' · ' + fmtReset(g.reset) : '';
-    statusEl.textContent = `${Math.round(g.pct)}% of your ${g.label} limit used${reset}` + (g.over ? ' — consider handing off.' : '.');
-    statusEl.dataset.state = g.over ? 'warn' : 'ok';
+
+  function renderGauges() {
+    const five = lastLimits && lastLimits.ok ? lastLimits.fiveHour : null;
+    const week = lastLimits && lastLimits.ok ? lastLimits.sevenDay : null;
+    const sp = pctOf(five), wp = pctOf(week);
+    gSession.innerHTML = gaugeSvg(sp == null ? 0 : sp);
+    gWeek.innerHTML    = gaugeSvg(wp == null ? 0 : wp);
+    subSession.textContent = five ? (fmtClock(five.resetsAt) || '') : 'Sign in to Claude Code';
+    subWeek.textContent    = week ? (fmtClock(week.resetsAt) || '') : '';
+  }
+
+  function showStatus(msg, state) {
+    if (!msg) { statusEl.hidden = true; return; }
+    statusEl.hidden = false; statusEl.textContent = msg; statusEl.dataset.state = state || 'idle';
+  }
+  function resetPerform() { performBtn.disabled = false; performBtn.textContent = 'Perform Handoff Now'; handoffBusy = false; }
+
+  function setAutoUI(on) {
+    toggle.classList.toggle('on', on);
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+    expand.classList.toggle('open', on);
+  }
+  function syncControls() {
+    slider.value = cfg.threshold; thresholdV.textContent = cfg.threshold + '%'; updateDsSlider(slider);
+    targetEl.value = cfg.target; destEl.value = cfg.dest;
+    setAutoUI(!!cfg.autoHandoff);
+    resetPerform(); showStatus('');
   }
 
   async function checkLimits(auto) {
     const now = Date.now();
-    if (auto && now - lastCheck < 60000) return;   // throttle event-driven checks
+    if (auto && now - lastCheck < 60000) return;
     lastCheck = now;
-    Object.assign(cfg, budgetConfig());   // pick up any externally-changed threshold
-    try { lastLimits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); }
-    catch (_) { lastLimits = { ok: false }; }
-    if (!modal.classList.contains('open')) { /* status refreshes on open */ } else renderStatus();
+    Object.assign(cfg, budgetConfig());
+    try { lastLimits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); } catch (_) { lastLimits = { ok: false }; }
+    if (modal.classList.contains('open')) renderGauges();
     const g = governing();
-    if (auto && cfg.autoOpen && g && g.over) {
+    if (auto && cfg.autoHandoff && g && g.over && !handoffBusy) {
       const resetKey = g.reset || 'none';
-      if (armedResetAt !== resetKey) {   // once per limit window
-        armedResetAt = resetKey;
-        syncControls(); ctl.open(); renderStatus();
-      }
+      if (armedResetAt !== resetKey) { armedResetAt = resetKey; startAutoCountdown(g); }
     }
   }
 
-  // Handoff step 1 — the current agent writes the brief to the chosen file.
-  function writeBrief() {
-    const r = writeHandoffBriefNow();
-    if (!r.ok) { statusEl.textContent = 'Open an agent chat first, then write the brief.'; statusEl.dataset.state = 'error'; return; }
-    briefWrittenCwd = handoffCwd();     // unlock step 2 for this project
-    refreshContinueGate();
-    statusEl.textContent = `Asked the agent to write ${r.dest} — watch the chat, then click “Continue”.`;
-    statusEl.dataset.state = 'ok';
+  // Wait for the current agent to actually write the brief: resolve when a turn
+  // completes (ACP_DONE) AND the dest file exists; time out without starting an agent.
+  function waitForBrief(dest, timeoutMs = 90000) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; ipcRenderer.removeListener(IPC.ACP_DONE, onDone); clearTimeout(to); resolve(v); };
+      const onDone = () => setTimeout(async () => {
+        const r = await ipcRenderer.invoke(IPC.CHECK_PROJECT_FILE, { name: dest }).catch(() => null);
+        if (r && r.exists) finish(true);
+      }, 700);
+      ipcRenderer.on(IPC.ACP_DONE, onDone);
+      const to = setTimeout(() => finish(false), timeoutMs);
+    });
   }
 
-  // Handoff step 2 — open a fresh session on the target agent, primed to read the brief.
-  function continueOnTarget() {
-    if (contBtn.disabled) return;   // gated until step 1 has run for this project
-    const target = cfg.target;
-    let id;
-    try { id = createSession(AGENT_LABEL[target] || target, target, true, false); }
-    catch (_) { statusEl.textContent = `Could not start ${AGENT_LABEL[target] || target}.`; statusEl.dataset.state = 'error'; return; }
-    if (id == null) return;
+  // One seamless action: write brief -> wait -> continue on the target agent.
+  async function performHandoff() {
+    if (handoffBusy) return;
+    const s = sessions.get(activeId);
+    if (!s || s.type !== 'acp') { showStatus('Open an agent chat first, then hand off.', 'error'); return; }
+    handoffBusy = true; performBtn.disabled = true; showStatus('');
+    performBtn.textContent = 'Writing brief…';
+    const r = writeHandoffBriefNow();
+    if (!r.ok) { showStatus('Open an agent chat first.', 'error'); resetPerform(); return; }
+    const ok = await waitForBrief(r.dest);
+    if (!ok) { showStatus('The brief didn’t finish in time — try again.', 'error'); resetPerform(); return; }
+    const label = AGENT_LABEL[cfg.target] || cfg.target;
+    performBtn.textContent = 'Starting ' + label + '…';
+    let id = null;
+    try { id = createSession(label, cfg.target, true, false); } catch (_) {}
+    if (id == null) { showStatus('Could not start ' + label + '.', 'error'); resetPerform(); return; }
     switchSession(id);
     const kickoff = `You're taking over this project from another agent. Read \`${cfg.dest}\` in the project root for the full handoff brief, then continue the work from there. Ask me only if something is genuinely unclear.`;
     const ta = document.getElementById('ui-textarea');
     if (ta) { ta.value = kickoff; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); }
-    briefWrittenCwd = null;   // handoff consumed — a fresh one needs a fresh brief
-    ctl.close();
+    handoffBusy = false; ctl.close(); setTimeout(syncControls, 300);
   }
 
-  slider.addEventListener('input', () => { cfg.threshold = parseInt(slider.value, 10) || 80; sliderV.textContent = cfg.threshold + '%'; updateDsSlider(slider); save(); renderStatus(); });
-  weeklyCb.addEventListener('change', () => { cfg.watchWeekly = weeklyCb.checked; save(); renderStatus(); });
-  autoCb.addEventListener('change', () => { cfg.autoOpen = autoCb.checked; save(); });
-  targetEl.addEventListener('change', () => { cfg.target = targetEl.value; if (contAgent) contAgent.textContent = AGENT_LABEL[cfg.target] || cfg.target; save(); });
-  destEl.addEventListener('change', () => { cfg.dest = destEl.value; save(); });
-  briefBtn.addEventListener('click', writeBrief);
-  contBtn.addEventListener('click', continueOnTarget);
-  refreshContinueGate();   // start locked until a brief is written
-  document.getElementById('budget-close')?.addEventListener('click', ctl.close);
-  document.getElementById('budget-done')?.addEventListener('click', ctl.close);
+  // Auto handoff fires this after a short, cancelable countdown (safety escape hatch).
+  function startAutoCountdown(g, secs = 10) {
+    if (countdownTimer) return;
+    const label = AGENT_LABEL[cfg.target] || cfg.target;
+    const toast = document.createElement('div'); toast.className = 'ua-countdown';
+    toast.innerHTML = '<span class="ua-cd-text"></span><button class="ua-cd-cancel" type="button">Cancel</button>';
+    const txt = toast.querySelector('.ua-cd-text');
+    document.body.appendChild(toast);
+    let left = secs;
+    const tick = () => { txt.textContent = `Usage at ${Math.round(g.pct)}% of your ${g.label} limit — handing off to ${label} in ${left}s`; };
+    const stop = () => { clearInterval(countdownTimer); countdownTimer = null; toast.remove(); };
+    tick();
+    countdownTimer = setInterval(() => { if (--left <= 0) { stop(); openBudgetModal(); performHandoff(); } else tick(); }, 1000);
+    toast.querySelector('.ua-cd-cancel').addEventListener('click', stop);
+  }
 
-  // Event-driven limit checks: after each agent turn (when usage actually moves),
-  // plus a slow fallback poll. Both auto-open the guard once per limit window.
+  slider.addEventListener('input', () => { cfg.threshold = parseInt(slider.value, 10) || 80; thresholdV.textContent = cfg.threshold + '%'; updateDsSlider(slider); save(); });
+  toggle.addEventListener('click', () => { cfg.autoHandoff = !cfg.autoHandoff; setAutoUI(cfg.autoHandoff); save(); });
+  targetEl.addEventListener('change', () => { cfg.target = targetEl.value; save(); });
+  destEl.addEventListener('change', () => { cfg.dest = destEl.value; save(); });
+  performBtn.addEventListener('click', performHandoff);
+  document.getElementById('budget-close')?.addEventListener('click', ctl.close);
+
   ipcRenderer.on(IPC.ACP_DONE, () => checkLimits(true));
   setInterval(() => checkLimits(true), 10 * 60 * 1000);
-  setTimeout(() => checkLimits(true), 8000);   // initial read shortly after launch
+  setTimeout(() => checkLimits(true), 8000);
 
-  openBudgetModal = function() { syncControls(); ctl.open(); renderStatus(); checkLimits(false); };
+  openBudgetModal = function() { syncControls(); ctl.open(); renderGauges(); checkLimits(false); };
 })();
 
 // ── Resume a past session — drop-up menu on the composer toolbar ──────────

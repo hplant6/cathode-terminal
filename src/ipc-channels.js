@@ -102,6 +102,7 @@ const IPC = Object.freeze({
   EYEDROPPER_SET_COLOR: 'eyedropper-set-color',
   EYEDROPPER_SET_PROP: 'eyedropper-set-prop',
   GET_PROJECT_DIR: 'get-project-dir',
+  CHECK_PROJECT_FILE: 'check-project-file',   // does <active project cwd>/<name> exist? (handoff brief wait)
   GET_RATE_LIMITS: 'get-rate-limits',
   GET_USAGE: 'get-usage',
   MARKER_CANCEL: 'marker-cancel',

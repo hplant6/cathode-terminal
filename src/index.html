@@ -1460,52 +1460,49 @@
   </div>
 
   <div id="budget-modal" class="modal-backdrop">
-    <div class="modal-box budget-box">
+    <div class="modal-box ua-box">
       <button id="budget-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
-      <div class="modal-title">Budget Guard</div>
-      <p class="modal-desc">Watch your Claude usage limit and, when it runs low, hand the project off to a budget agent — the current agent writes a brief so the next one picks up with minimal explanation.</p>
+      <div class="ua-title">Usage Assistance</div>
+      <p class="ua-sub">When Claude usage runs low, seamlessly hand off the project to a budget agent via an auto-generated brief.</p>
 
-      <div id="budget-status" class="budget-status" data-state="idle">Checking your usage limit…</div>
+      <div class="ua-gauges">
+        <div class="ua-gauge"><div class="ua-gauge-dial" id="ua-gauge-session"></div><div class="ua-gauge-text"><div class="ua-gauge-label">Current Session</div><div class="ua-gauge-sub" id="ua-session-sub">—</div></div></div>
+        <div class="ua-gauge"><div class="ua-gauge-dial" id="ua-gauge-week"></div><div class="ua-gauge-text"><div class="ua-gauge-label">Current Week <span class="ua-gauge-dim">(All Models)</span></div><div class="ua-gauge-sub" id="ua-week-sub">—</div></div></div>
+      </div>
 
-      <div class="budget-section">
-        <div class="budget-row-head">
-          <span class="budget-label">Advise switching at</span>
-          <span id="budget-threshold-val" class="budget-threshold-val">80%</span>
+      <div class="ua-panel">
+        <div class="ua-panel-head">
+          <span class="ua-panel-title">Auto Handoff</span>
+          <button id="ua-toggle" class="ua-toggle" role="switch" aria-checked="false" title="Automatically hand off when usage crosses the threshold"><span class="ua-toggle-knob"></span></button>
         </div>
-        <input id="budget-threshold" type="range" min="50" max="95" step="5" value="80" class="ds-slider"/>
-        <div class="budget-hint">Percent of your <strong>5-hour</strong> session limit at which Budget Guard steps in.</div>
-        <label class="budget-check"><input type="checkbox" id="budget-watch-weekly"/> <span>Also watch my weekly limit</span></label>
-        <label class="budget-check"><input type="checkbox" id="budget-autoopen" checked/> <span>Pop this up automatically when I reach the limit</span></label>
-      </div>
-
-      <div class="budget-section">
-        <div class="budget-label">When the limit is reached</div>
-        <div class="budget-field">
-          <label class="budget-flabel" for="budget-target">Hand off to</label>
-          <select id="budget-target" class="budget-select">
-            <option value="hermes">Hermes</option>
-            <option value="gemini">Gemini</option>
-            <option value="codex">Codex</option>
-          </select>
+        <p class="ua-panel-desc">Set the session usage threshold to begin the transition.</p>
+        <div class="ua-expand" id="ua-expand">
+          <div class="ua-threshold" id="budget-threshold-val">80%</div>
+          <input id="budget-threshold" type="range" min="50" max="95" step="5" value="80" class="ua-slider"/>
+          <div class="ua-limit">
+            <div class="ua-limit-title">When the limit is reached</div>
+            <p class="ua-limit-desc">Configure the handoff protocol. The active agent will write a project brief to the specified file for the new agent to read.</p>
+            <div class="ua-field">
+              <label class="ua-flabel" for="budget-target">Hand off to</label>
+              <select id="budget-target" class="ua-select">
+                <option value="hermes">Hermes</option>
+                <option value="gemini">Gemini</option>
+                <option value="codex">Codex</option>
+              </select>
+            </div>
+            <div class="ua-field">
+              <label class="ua-flabel" for="budget-dest">Write the brief to</label>
+              <select id="budget-dest" class="ua-select">
+                <option value="HANDOFF.md">HANDOFF.md (temporary)</option>
+                <option value="AGENTS.md">AGENTS.md (persistent memory)</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="budget-field">
-          <label class="budget-flabel" for="budget-dest">Write the brief to</label>
-          <select id="budget-dest" class="budget-select">
-            <option value="HANDOFF.md">HANDOFF.md (temporary)</option>
-            <option value="AGENTS.md">AGENTS.md (persistent memory)</option>
-          </select>
-        </div>
-        <div class="budget-hint">The current agent writes the brief to this file; the new agent reads it to continue.</div>
       </div>
 
-      <div class="budget-handoff">
-        <button id="budget-write-brief" class="modal-btn-confirm">1 · Write handoff brief</button>
-        <button id="budget-continue" class="modal-btn-confirm budget-continue">2 · Continue on <span id="budget-continue-agent">Hermes</span> →</button>
-      </div>
-
-      <div class="modal-actions">
-        <button class="modal-btn-cancel" id="budget-done">Done</button>
-      </div>
+      <button id="budget-handoff-now" class="ua-perform">Perform Handoff Now</button>
+      <div id="budget-status" class="ua-status" data-state="idle" hidden></div>
     </div>
   </div>
 
