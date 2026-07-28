@@ -4076,6 +4076,9 @@ let openBudgetModal = null;
   const gWeek      = document.getElementById('ua-gauge-week');
   const subSession = document.getElementById('ua-session-sub');
   const subWeek    = document.getElementById('ua-week-sub');
+  // Route the target/dest selects through the app's canonical custom dropdown.
+  enhanceSelect(targetEl); targetEl.closest('.ct-select')?.classList.add('ua-ct');
+  enhanceSelect(destEl);   destEl.closest('.ct-select')?.classList.add('ua-ct');
 
   let lastLimits = null, armedResetAt = null, lastCheck = 0, handoffBusy = false, countdownTimer = null;
   const governing = () => budgetGovern(lastLimits);
