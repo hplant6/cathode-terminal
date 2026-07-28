@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-28
+
+### Added
+- **Mission Control surfaces running localhost servers that aren't in a project.** If a dev server is up but its folder isn't a tracked project (e.g. one the agent just cloned + started), it now appears in a "Running on localhost — not in a project" section with **Open** (in the browser) and **Open as project** (adopt the folder, registering the live port so its card shows ACTIVE). Detection combines the localhost port scanner with a probe of common dev ports, so it catches WSL-hosted servers too.
+
+### Changed
+- **Budget Guard is now "Usage Assistance," reworked.** Two live dial gauges (session + weekly), an **Auto Handoff** toggle that collapses the threshold + handoff config when off, and a single **Perform Handoff Now** button that fuses the old two steps into one seamless action — write the brief, wait for it to actually land, then start the target agent and switch. With Auto Handoff on, that whole flow runs automatically when the session **or** weekly limit crosses the threshold, behind a cancelable countdown.
+- **Settings menu grouped into sections** — Core Engine & Configurations, Appearance & Workflow Preferences, and System & Support.
+- Mission Control's active-card glow now follows the theme accent instead of a fixed orange.
+
+### Removed
+- **AI Spend dashboard** — consolidated onto Usage Assistance (the shared budget threshold/handoff lived in both).
+
 ## [1.2.0] - 2026-07-27
 
 ### Added
