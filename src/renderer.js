@@ -3830,7 +3830,6 @@ ipcRenderer.on(IPC.SETTINGS_ACTION, (_, action) => {
     case 'about':         openAboutModal();      break;
     case 'perf-report':   openPerfReportModal?.(); break;
     case 'localhost':     openLocalhostModal?.(); break;
-    case 'spend':         openSpendModal?.();     break;
     case 'budget':        openBudgetModal?.();    break;
     case 'watch-approval': openWatchApprovalModal?.(); break;
   }
@@ -4009,115 +4008,6 @@ let openLocalhostModal = null;
   openLocalhostModal = function() { ports = []; filterEl.value = ''; if (showAllEl) showAllEl.checked = false; ctl.open(); scan(); };
 })();
 
-// ── AI Spend dashboard (Settings → AI Spend) ─────────────────────
-let openSpendModal = null;
-(function initSpend() {
-  const modal = document.getElementById('spend-modal');
-  if (!modal) return;
-  const ctl = wireModal(modal);
-  const bodyEl = document.getElementById('spend-body');
-  const refreshBtn = document.getElementById('spend-refresh');
-  const handoffBtn = document.getElementById('spend-handoff');
-  let report = null, busy = false, limits = null;
-  const limitPct = (m) => m && typeof m.utilization === 'number' ? m.utilization : null;   // utilization is already a 0–100 %
-
-  const usd = (n) => { n = n || 0; return n >= 100 ? '$' + Math.round(n).toLocaleString() : n >= 1 ? '$' + n.toFixed(2) : '$' + n.toFixed(n < 0.01 ? 4 : 2); };
-  const tok = (n) => { n = n || 0; return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); };
-  const modelName = (m) => String(m).replace(/^claude-/, '');
-  const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-  const monthSpend = (byDay) => { const ym = new Date().toISOString().slice(0, 7); return (byDay || []).filter(d => d.date.startsWith(ym)).reduce((s, d) => s + d.cost, 0); };
-
-  function render() {
-    bodyEl.innerHTML = '';
-    if (busy && !report) { bodyEl.appendChild(el('div', 'lh-empty', 'Scanning transcripts…')); return; }
-    if (!report || !report.ok) { bodyEl.appendChild(el('div', 'lh-empty', 'No spend data found (no Claude transcripts).')); return; }
-    const month = monthSpend(report.byDay);
-
-    // Summary stats
-    const sum = el('div', 'spend-summary');
-    [[usd(report.totalCost), 'Total (all time)'], [usd(month), 'This month'], [tok(report.totalTokens), 'Total tokens']].forEach(([v, l]) => {
-      const s = el('div', 'spend-stat'); s.append(el('div', 'spend-stat-val', v), el('div', 'spend-stat-lbl', l)); sum.appendChild(s);
-    });
-    bodyEl.appendChild(sum);
-
-    // Session budget — hand off before you run out of your Claude session limit.
-    // Shares the threshold with Budget Guard (one setting, settable from either place).
-    const bcfg = budgetConfig();
-    const bw = el('div', 'spend-budget');
-    const bh = el('div', 'spend-budget-head');
-    bh.appendChild(el('span', null, 'Session budget'));
-    const pctSpan = el('span', 'spend-budget-pct', bcfg.threshold + '%');
-    bh.appendChild(pctSpan);
-    bw.appendChild(bh);
-    const sl = document.createElement('input'); sl.type = 'range'; sl.min = '50'; sl.max = '95'; sl.step = '5'; sl.value = bcfg.threshold; sl.className = 'ds-slider';
-    // input → update label + fill live (no rebuild, so the drag isn't interrupted);
-    // change (drag end) → one render() so the usage bar/note reflect the new threshold.
-    sl.addEventListener('input', () => { const c = budgetConfig(); c.threshold = parseInt(sl.value, 10) || 80; saveBudgetConfig(c); pctSpan.textContent = c.threshold + '%'; updateDsSlider(sl); });
-    sl.addEventListener('change', () => render());
-    updateDsSlider(sl);
-    bw.appendChild(sl);
-    const cur = limits && limits.ok ? limitPct(limits.fiveHour) : null;
-    if (cur != null) {
-      const bar = el('div', 'spend-bar'); const fill = el('div', 'spend-bar-fill' + (cur >= bcfg.threshold ? ' over' : cur >= bcfg.threshold * 0.9 ? ' warn' : ''));
-      fill.style.width = Math.min(100, cur) + '%'; bar.appendChild(fill); bw.appendChild(bar);
-      bw.appendChild(el('div', 'spend-budget-note', `${Math.round(cur)}% of your session limit used · hand off at ${bcfg.threshold}%`));
-    } else {
-      bw.appendChild(el('div', 'spend-budget-note', 'Hand off at this share of your 5-hour session limit. (Sign in to Claude Code to see live usage.)'));
-    }
-    bodyEl.appendChild(bw);
-
-    // Trend — last 14 days
-    const dayMap = {}; report.byDay.forEach(d => { dayMap[d.date] = d.cost; });
-    const todayUTC = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
-    const days = []; for (let i = 13; i >= 0; i--) { const key = new Date(todayUTC.getTime() - i * 86400000).toISOString().slice(0, 10); days.push({ date: key, cost: dayMap[key] || 0 }); }
-    const maxDay = Math.max(...days.map(d => d.cost), 0.01);
-    const tr = el('div', 'spend-section'); tr.appendChild(el('div', 'spend-section-title', 'Last 14 days'));
-    const chart = el('div', 'spend-chart');
-    days.forEach(d => { const col = el('div', 'spend-chart-col'); const b = el('div', 'spend-chart-bar'); b.style.height = Math.max(3, (d.cost / maxDay) * 100) + '%'; b.title = d.date + ' · ' + usd(d.cost); col.appendChild(b); chart.appendChild(col); });
-    tr.appendChild(chart); bodyEl.appendChild(tr);
-
-    // By model
-    const models = report.byModel.filter(m => m.cost > 0).slice(0, 6);
-    if (models.length) {
-      const ms = el('div', 'spend-section'); ms.appendChild(el('div', 'spend-section-title', 'By model'));
-      const maxM = Math.max(...models.map(m => m.cost), 0.01);
-      models.forEach(m => { const row = el('div', 'spend-mrow'); row.appendChild(el('span', 'spend-mname', modelName(m.model))); const t = el('div', 'spend-mtrack'); const f = el('div', 'spend-mfill'); f.style.width = (m.cost / maxM * 100) + '%'; t.appendChild(f); row.appendChild(t); row.appendChild(el('span', 'spend-mval', usd(m.cost))); ms.appendChild(row); });
-      bodyEl.appendChild(ms);
-    }
-
-    // By project
-    const projs = report.byProject.slice(0, 8);
-    if (projs.length) {
-      const ps = el('div', 'spend-section'); ps.appendChild(el('div', 'spend-section-title', 'By project'));
-      projs.forEach(p => { const row = el('div', 'spend-prow'); const info = el('div', 'spend-pinfo'); info.append(el('div', 'spend-pname', p.name), el('div', 'spend-ppath', p.path)); const meta = el('div', 'spend-pmeta'); meta.append(el('div', 'spend-pcost', usd(p.cost)), el('div', 'spend-psub', tok(p.tokens) + ' tok · ' + p.sessions + ' sess')); row.append(info, meta); ps.appendChild(row); });
-      bodyEl.appendChild(ps);
-    }
-    bodyEl.appendChild(el('div', 'spend-foot', `Estimated from ${report.scannedFiles} transcripts · list prices, excludes subscription plans`));
-  }
-
-  async function scan() {
-    busy = true; render();
-    try { report = await ipcRenderer.invoke(IPC.SPEND_REPORT); }
-    catch (_) { report = { ok: false }; }
-    finally { busy = false; render(); }
-  }
-  async function refreshLimits() {
-    try { limits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); } catch (_) { limits = null; }
-    if (modal.classList.contains('open')) render();
-  }
-  refreshBtn?.addEventListener('click', () => { report = null; scan(); refreshLimits(); });
-  handoffBtn?.addEventListener('click', () => {
-    const r = writeHandoffBriefNow();
-    const orig = handoffBtn.textContent;
-    handoffBtn.textContent = r.ok ? `Brief requested → ${r.dest}` : 'Open an agent chat first';
-    handoffBtn.disabled = true;
-    setTimeout(() => { handoffBtn.textContent = orig; handoffBtn.disabled = false; }, 2600);
-  });
-  document.getElementById('spend-close')?.addEventListener('click', ctl.close);
-  document.getElementById('spend-done')?.addEventListener('click', ctl.close);
-  openSpendModal = function() { ctl.open(); report ? render() : scan(); refreshLimits(); };
-})();
-
 // Paint a .ds-slider's accent fill up to its value (Chromium can't do it in pure CSS).
 function updateDsSlider(el) {
   if (!el) return;
@@ -4127,7 +4017,7 @@ function updateDsSlider(el) {
   el.style.setProperty('--_pct', pct + '%');
 }
 
-// ── Budget Guard config + handoff (shared by Budget Guard + the AI Spend modal) ──
+// ── Budget Guard config + handoff ──
 const BUDGET_CFG_KEY = 'cathode-budget';
 const BUDGET_AGENT_LABEL = { hermes: 'Hermes', gemini: 'Gemini', codex: 'Codex' };
 const BUDGET_DEFAULTS = { threshold: 80, watchWeekly: false, autoOpen: true, target: 'hermes', dest: 'HANDOFF.md' };
@@ -4233,7 +4123,7 @@ let openBudgetModal = null;
     const now = Date.now();
     if (auto && now - lastCheck < 60000) return;   // throttle event-driven checks
     lastCheck = now;
-    Object.assign(cfg, budgetConfig());   // pick up a threshold changed from the AI Spend modal
+    Object.assign(cfg, budgetConfig());   // pick up any externally-changed threshold
     try { lastLimits = await ipcRenderer.invoke(IPC.GET_RATE_LIMITS); }
     catch (_) { lastLimits = { ok: false }; }
     if (!modal.classList.contains('open')) { /* status refreshes on open */ } else renderStatus();

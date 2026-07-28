@@ -27,7 +27,6 @@ const IPC = Object.freeze({
   SERVER_RAM: 'server-ram',           // per-server memory (RSS) by port
   PROJECT_CAPTURE: 'project-capture', // snapshot the browser pane → project preview
   PROJECT_PREVIEW: 'project-preview', // path to a project's cached preview image
-  SPEND_REPORT: 'spend-report',
   SESSIONS_LIST: 'sessions-list',
   ACP_CANCEL: 'acp-cancel',
   ACP_CLOSED: 'acp-closed',
