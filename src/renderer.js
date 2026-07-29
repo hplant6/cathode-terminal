@@ -10200,7 +10200,7 @@ document.getElementById('sb-folder')?.addEventListener('click', () => document.g
     'uniform float uT; uniform vec2 uR;',
     'float hash(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
     'float noise(vec2 p){ vec2 i=floor(p), f=fract(p); float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.)); vec2 u=f*f*(3.-2.*f); return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }',
-    'float fbm(vec2 p){ float s=0.,a=0.5; for(int i=0;i<4;i++){ s+=a*noise(p); p*=2.02; a*=0.5; } return s; }',
+    'float fbm(vec2 p){ float s=0.,a=0.5; for(int i=0;i<3;i++){ s+=a*noise(p); p*=2.02; a*=0.5; } return s; }',
     'vec3 iri(float x){ return 0.5+0.5*cos(6.28318*(x+vec3(0.0,0.35,0.62))); }',
     // one flowing sheet field (single domain warp) — the "wind"
     'float field(vec2 p, float t, float seed){ vec2 q=vec2(fbm(p+seed), fbm(p+vec2(3.1,seed)+t*0.05)); return fbm(p + 1.6*q + vec2(t*0.06, seed)); }',
@@ -10210,18 +10210,18 @@ document.getElementById('sb-folder')?.addEventListener('click', () => document.g
     '  vec3 col = vec3(0.0); float alpha = 0.0;',
     '  for(int s=0; s<2; s++){',
     '    float seed = float(s)*13.7;',
-    '    vec2 pp = p*1.15 + vec2(float(s)*0.5, -float(s)*0.25);',
-    '    float e = 0.006;',
-    '    float f  = field(pp*1.3, t + float(s)*2.0, seed);',
-    '    float fx = field((pp+vec2(e,0.))*1.3, t + float(s)*2.0, seed) - f;',
-    '    float fy = field((pp+vec2(0.,e))*1.3, t + float(s)*2.0, seed) - f;',
+    '    vec2 pp = p*0.85 + vec2(float(s)*0.5, -float(s)*0.25);',
+    '    float e = 0.012;',
+    '    float f  = field(pp*0.5, t + float(s)*2.0, seed);',
+    '    float fx = field((pp+vec2(e,0.))*0.5, t + float(s)*2.0, seed) - f;',
+    '    float fy = field((pp+vec2(0.,e))*0.5, t + float(s)*2.0, seed) - f;',
     '    vec2 g = vec2(fx,fy)/e; float gm = length(g);',
-    '    float ca = clamp(gm*0.03, 0.0, 0.4);',           // chromatic split on folds
-    '    float ph = f*1.4 + gm*0.12 + seed*0.1;',
+    '    float ca = clamp(gm*0.06, 0.0, 0.4);',           // chromatic split on folds
+    '    float ph = f*1.4 + gm*0.2 + seed*0.1;',
     '    vec3 ir = vec3(iri(ph-ca).r, iri(ph).g, iri(ph+ca).b);',
     '    float diag = smoothstep(-0.9, 0.7, p.x + p.y*0.55);',   // more presence toward the right/bottom
     '    float body = smoothstep(0.34, 0.72, f) * diag;',
-    '    float rim  = smoothstep(0.55, 1.7, gm) * diag;',        // bright iridescent folds
+    '    float rim  = smoothstep(0.18, 0.85, gm) * diag;',       // bright iridescent folds (fewer, larger)
     '    float a = body*0.42 + rim*0.6;',
     '    col += ir * (0.32 + rim*1.0) * a;',
     '    alpha += a;',
