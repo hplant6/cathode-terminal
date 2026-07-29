@@ -1723,11 +1723,11 @@ html, body {
 .ubc-x {
   flex-shrink: 0; min-width: 0; width: 26px; height: auto; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent); border: none; border-radius: 0;
+  background: var(--spec-accent-dark); border: none; border-radius: 0;   /* accent 1 (rest) — matches the chip body */
   color: #fff; font-size: 11px; cursor: pointer;
-  transition: filter 0.12s;
+  transition: background 0.12s;
 }
-.ubc-x:hover { filter: brightness(1.1); }
+.usage-budget-chip:hover .ubc-x { background: var(--spec-accent); }   /* accent 2 (hover) — brightens with the bar */
 #btn-usage.active { color: var(--accent); }
 
 /* ── Toasts (transient, auto-dismiss) ── */
