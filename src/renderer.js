@@ -9821,11 +9821,19 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         else if (r && !r.canceled) showToast('Export failed: ' + (r.error || 'unknown'), { duration: 6000 });
       } catch (_) { showToast('Export failed', { duration: 5000 }); }
     }
-    async function importProject() {
+    async function importProject() {   // Import FAB — pick a .cathode file
       let picked = null;
       try { picked = await ipcRenderer.invoke(IPC.PROJECT_IMPORT_PICK); } catch (_) {}
       if (!picked || !picked.ok) { if (picked && picked.error) showToast('Import failed: ' + picked.error, { duration: 6000 }); return; }
-      const bundle = picked.bundle;
+      importBundle(picked.bundle);
+    }
+    async function importProjectFromPath(p) {   // .cathode opened via the OS (double-click)
+      let r = null;
+      try { r = await ipcRenderer.invoke(IPC.PROJECT_IMPORT_READ, { path: p }); } catch (_) {}
+      if (!r || !r.ok) { if (r && r.error) showToast('Import failed: ' + r.error, { duration: 6000 }); return; }
+      importBundle(r.bundle);
+    }
+    async function importBundle(bundle) {
       const remote = bundle.project && bundle.project.repo && bundle.project.repo.remote;
       let parentDir = '', targetDir = '', clone = false;
       if (remote) { parentDir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG); if (!parentDir) return; clone = true; }
@@ -9972,6 +9980,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
     document.getElementById('mc-close')?.addEventListener('click', () => mc.close());
     document.getElementById('mc-import')?.addEventListener('click', importProject);
+    ipcRenderer.on(IPC.OPEN_BUNDLE_FILE, (_, { path: p } = {}) => { if (p) importProjectFromPath(p); });   // .cathode double-clicked in the OS
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
       if (dir) { activateProject(dir); await seedServers(getProject(getActiveId())); renderMC(); }

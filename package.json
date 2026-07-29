@@ -54,6 +54,14 @@
       "buildResources": "assets",
       "output": "dist"
     },
+    "fileAssociations": [
+      {
+        "ext": "cathode",
+        "name": "Cathode Project",
+        "description": "Cathode Project Bundle",
+        "role": "Editor"
+      }
+    ],
     "files": [
       "main.js",
       "icon.png",

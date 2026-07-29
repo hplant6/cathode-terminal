@@ -1063,6 +1063,13 @@ ipcMain.handle(IPC.PROJECT_IMPORT_PICK, async () => {
     return { ok: true, bundle };
   } catch (e) { return { ok: false, error: e.message }; }
 });
+ipcMain.handle(IPC.PROJECT_IMPORT_READ, (_, { path: p } = {}) => {
+  try {
+    const bundle = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Cathode project bundle' };
+    return { ok: true, bundle };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle(IPC.PROJECT_IMPORT_APPLY, async (_, { bundle, parentDir, targetDir, clone } = {}) => {
   try {
     if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'bad bundle' };
@@ -2999,6 +3006,7 @@ ipcMain.on(IPC.NATIVE_THEME, (_, source) => {
 ipcMain.on(IPC.RENDERER_READY, () => {
   repositionBrowserView();
   broadcastLayout();
+  rendererReadyOnce = true; flushBundle();   // deliver a .cathode file opened via the OS, now the UI can handle it
   // Re-sync the renderer with the restored browser URL. At boot the renderer registers
   // its browser-url-changed listener only after the initial did-navigate may have already
   // fired, so without this re-push the restored page stays hidden behind the empty state.
@@ -5046,6 +5054,28 @@ function relaunchWithScale(scale) {
   const args = process.argv.slice(1).filter(a => !a.startsWith('--force-device-scale-factor'));
   app.relaunch({ args });
   app.exit(0);
+}
+
+// ── .cathode file association (Phase 5) ──────────────────────────
+// Double-clicking a .cathode file opens Cathode straight into that project.
+// Windows/Linux: the path arrives in argv (first launch) or via second-instance
+// (already running). macOS: the open-file event. Only works in an installed build.
+let pendingBundlePath = '', rendererReadyOnce = false;
+function bundlePathFromArgv(argv) { return (argv || []).find(a => typeof a === 'string' && /\.cathode$/i.test(a)) || ''; }
+function flushBundle() {
+  if (!pendingBundlePath || !rendererReadyOnce || !mainWindow || mainWindow.isDestroyed()) return;
+  try { mainWindow.webContents.send(IPC.OPEN_BUNDLE_FILE, { path: pendingBundlePath }); pendingBundlePath = ''; } catch (_) {}
+}
+function deliverBundle(p) { if (p) { pendingBundlePath = p; flushBundle(); } }
+if (!app.requestSingleInstanceLock()) {
+  app.quit();   // a primary instance already runs — it will receive our file via second-instance
+} else {
+  app.on('second-instance', (_e, argv) => {
+    deliverBundle(bundlePathFromArgv(argv));
+    if (mainWindow && !mainWindow.isDestroyed()) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+  });
+  app.on('open-file', (e, p) => { e.preventDefault(); deliverBundle(p); });   // macOS
+  pendingBundlePath = bundlePathFromArgv(process.argv);   // first launch via double-click
 }
 
 app.whenReady().then(async () => {
