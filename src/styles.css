@@ -4605,7 +4605,7 @@ button:active { background: var(--btn-active); }
 #sb-setup {
   display: flex; flex: 1; flex-direction: column; align-items: stretch; justify-content: flex-start;
   padding: 0; position: relative;   /* anchor for the corner Back button */
-  background: linear-gradient(var(--spec-dropdown-bg), var(--spec-header-bg));   /* match the Working File empty state (shade 4 → shade 6) */
+  background: #000;   /* pure black so the iridescent sheets blend into black, like the reference */
 }
 .sb-inner {
   width: 100%; max-width: none; flex: 1; min-height: 0;

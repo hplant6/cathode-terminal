@@ -10206,7 +10206,7 @@ document.getElementById('sb-folder')?.addEventListener('click', () => document.g
     'float field(vec2 p, float t, float seed){ vec2 q=vec2(fbm(p+seed), fbm(p+vec2(3.1,seed)+t*0.05)); return fbm(p + 1.6*q + vec2(t*0.06, seed)); }',
     'void main(){',
     '  vec2 p = (gl_FragCoord.xy - 0.5*uR)/uR.y;',   // aspect-correct, centered
-    '  float t = uT*0.4;',
+    '  float t = uT*0.62;',
     '  vec3 col = vec3(0.0); float alpha = 0.0;',
     '  for(int s=0; s<2; s++){',
     '    float seed = float(s)*13.7;',
