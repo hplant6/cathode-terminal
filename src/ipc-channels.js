@@ -73,6 +73,9 @@ const IPC = Object.freeze({
   RESOLVE_SERVER_DIRS: 'resolve-server-dirs',   // resolve cwd + launch cmd of the process on each port (attribute running servers to a project by folder)
   DIR_INFO: 'dir-info',               // project-ish signals for a folder (git/pkg/branch/remote/name)
   PROJECT_TRIGGER: 'project-trigger', // main → renderer: a new-work signal (new branch / cloned repo) that may warrant a project
+  PROJECT_EXPORT: 'project-export',            // write a portable .cathode bundle for a project
+  PROJECT_IMPORT_PICK: 'project-import-pick',  // open + parse a .cathode bundle
+  PROJECT_IMPORT_APPLY: 'project-import-apply',// clone-from-remote / scaffold a bundle into a folder
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',

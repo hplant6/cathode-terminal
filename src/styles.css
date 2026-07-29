@@ -522,6 +522,14 @@ html, body {
 /* Open Project button */
 .mc-open-fab { position: absolute; right: 40px; bottom: 24px; padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 .mc-open-fab:hover { filter: brightness(1.08); }
+/* Secondary FAB: Import (bottom-left, outlined) */
+.mc-import-fab { right: auto; left: 40px; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); color: var(--spec-text); }
+.mc-import-fab:hover { filter: none; background: var(--spec-structural); }
+/* Export icon button in a card footer — mirrors the remove (X) button's per-state fill */
+.mc-foot-export { color: var(--spec-text-dim); }
+.mc-card-active .mc-foot-export { background: #1A191C; }
+.mc-card-idle .mc-foot-export { background: var(--spec-structural); }
+.mc-foot-export:hover { color: var(--accent); }
 
 /* Running-but-untracked localhost servers */
 /* Untracked-servers panel — rendered as a card in the grid's first slot; the

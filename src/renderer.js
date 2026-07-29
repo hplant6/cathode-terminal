@@ -9807,6 +9807,49 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
 
     // The active (selected) project — expanded server table (or Add-server form).
+    // ── Export / import a portable .cathode bundle (Phase 4) ─────
+    const ICON_EXPORT = '<svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V3"/><path d="M6 6l3-3 3 3"/><path d="M3.5 11v2.5A1.5 1.5 0 0 0 5 15h8a1.5 1.5 0 0 0 1.5-1.5V11"/></svg>';
+    function exportBtn(p) {
+      const b = document.createElement('button'); b.className = 'mc-icn mc-foot-export'; b.innerHTML = ICON_EXPORT; b.title = 'Export project (.cathode)';
+      b.addEventListener('click', (e) => { e.stopPropagation(); exportProject(p); });
+      return b;
+    }
+    async function exportProject(p) {
+      try {
+        const r = await ipcRenderer.invoke(IPC.PROJECT_EXPORT, { dir: p.rootDir });
+        if (r && r.ok) showToast('Exported ' + (p.name || 'project') + ' → ' + r.path, { duration: 6000 });
+        else if (r && !r.canceled) showToast('Export failed: ' + (r.error || 'unknown'), { duration: 6000 });
+      } catch (_) { showToast('Export failed', { duration: 5000 }); }
+    }
+    async function importProject() {
+      let picked = null;
+      try { picked = await ipcRenderer.invoke(IPC.PROJECT_IMPORT_PICK); } catch (_) {}
+      if (!picked || !picked.ok) { if (picked && picked.error) showToast('Import failed: ' + picked.error, { duration: 6000 }); return; }
+      const bundle = picked.bundle;
+      const remote = bundle.project && bundle.project.repo && bundle.project.repo.remote;
+      let parentDir = '', targetDir = '', clone = false;
+      if (remote) { parentDir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG); if (!parentDir) return; clone = true; }
+      else { targetDir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG); if (!targetDir) return; }
+      const busy = showToast(clone ? ('Cloning ' + (bundle.project.name || 'project') + '…') : 'Importing…', { spinner: true });
+      let res = null;
+      try { res = await ipcRenderer.invoke(IPC.PROJECT_IMPORT_APPLY, { bundle, parentDir, targetDir, clone }); } catch (e) { res = { ok: false, error: String(e) }; }
+      busy.dismiss();
+      if (!res || !res.ok) { showToast('Import failed: ' + ((res && res.error) || 'unknown'), { duration: 7000 }); return; }
+      const entry = registerProject(res.dir, res.name);
+      try {   // hydrate servers/repo from the just-written manifest
+        const { manifest } = await ipcRenderer.invoke(IPC.MANIFEST_READ, { dir: res.dir });
+        if (manifest) updateProject(entry.id, p => {
+          if (Array.isArray(manifest.servers)) p.servers = manifest.servers.map(s => ({ id: s.id || genId(), name: s.name, role: s.role, cmd: s.cmd, cwd: s.cwd, port: s.port || null, runIn: s.runIn || 'wsl', autostart: !!s.autostart }));
+          if (manifest.repo) p.repo = manifest.repo;
+        });
+      } catch (_) {}
+      activateProject(res.dir, res.name);
+      renderMC();
+      showToast('Imported ' + res.name, { duration: 5000 });
+      const proj = getProject(entry.id);
+      if (proj && (proj.servers || []).length && confirm('Start ' + res.name + '’s servers now?')) startAll(proj);
+    }
+
     function activeCard(p) {
       const card = document.createElement('div'); card.className = 'mc-card mc-card-active'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, true));
@@ -9836,7 +9879,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       });
       const add = document.createElement('button'); add.className = 'mc-btn mc-btn-add'; add.textContent = 'Add server';
       add.addEventListener('click', () => { addFormProject = p.id; renderMC(); });
-      foot.append(x, pause, add);
+      foot.append(x, exportBtn(p), pause, add);
       card.appendChild(foot);
       return card;
     }
@@ -9891,7 +9934,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
       const sw = document.createElement('button'); sw.className = 'mc-btn mc-btn-switch'; sw.textContent = 'Switch to project';
       sw.addEventListener('click', () => { activateProject(p.rootDir); renderMC(); });
-      foot.append(x, sw);
+      foot.append(x, exportBtn(p), sw);
       card.appendChild(foot);
       return card;
     }
@@ -9928,6 +9971,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
 
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
     document.getElementById('mc-close')?.addEventListener('click', () => mc.close());
+    document.getElementById('mc-import')?.addEventListener('click', importProject);
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
       if (dir) { activateProject(dir); await seedServers(getProject(getActiveId())); renderMC(); }

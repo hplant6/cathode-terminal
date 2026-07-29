@@ -1010,6 +1010,82 @@ ipcMain.handle(IPC.MANIFEST_WRITE, (_, { dir, data } = {}) => {
   return r;
 });
 
+// ── Export / import a portable .cathode bundle (Phase 4) ─────────
+// A self-contained JSON file: the manifest (identity + server launch recipes) plus
+// small embedded env files and notes. Code isn't bundled — it's re-cloned from the
+// repo remote on import. Dependency-free (no zip lib).
+const BUNDLE_ENV_FILES = ['.env', '.env.local', '.env.development', '.env.production'];
+function buildBundle(dir) {
+  const m = readProjectManifest(dir) || {};
+  const bundle = {
+    cathode: 1, kind: 'project-bundle', exportedAt: new Date().toISOString(),
+    project: { name: m.name || path.basename(String(dir).replace(/[\\/]+$/, '')), repo: m.repo || undefined, servers: m.servers || [] },
+    env: {}, notes: '',
+  };
+  for (const en of BUNDLE_ENV_FILES) { try { bundle.env[en] = fs.readFileSync(path.join(dir, en), 'utf8'); } catch (_) {} }
+  try { bundle.notes = fs.readFileSync(path.join(dir, '.cathode', 'notes.md'), 'utf8'); } catch (_) {}
+  return bundle;
+}
+// git clone <remote> into <dir> (host path), in the env dev work runs in (WSL on Windows).
+// remote/target are passed as argv (no shell), so they can't inject.
+function gitCloneInto(remote, dir, branch) {
+  return new Promise((resolve) => {
+    const target = IS_WIN_HOST ? platform.toWslPath(dir) : dir;
+    const args = ['clone']; if (branch) args.push('--branch', branch); args.push(remote, target);
+    let err = '', done = false;
+    const fin = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      const child = IS_WIN_HOST ? platform.nixSpawn(['git', ...args], { windowsHide: true }) : spawn('git', args);
+      if (child.stderr) child.stderr.on('data', d => err += d);
+      child.on('close', (code) => fin(code === 0 ? { ok: true } : { ok: false, error: (err || ('git clone exited ' + code)).slice(0, 400) }));
+      child.on('error', (e) => fin({ ok: false, error: e.message }));
+      setTimeout(() => { try { child.kill(); } catch (_) {} fin({ ok: false, error: 'clone timed out' }); }, 120000);
+    } catch (e) { fin({ ok: false, error: e.message }); }
+  });
+}
+ipcMain.handle(IPC.PROJECT_EXPORT, async (_, { dir } = {}) => {
+  if (!dir) return { ok: false, error: 'no dir' };
+  try {
+    const bundle = buildBundle(dir);
+    const def = (bundle.project.name || 'project').replace(/[^a-z0-9._-]+/gi, '-') + '.cathode';
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, { title: 'Export Project', defaultPath: def, filters: [{ name: 'Cathode Project', extensions: ['cathode'] }] });
+    if (canceled || !filePath) return { ok: false, canceled: true };
+    fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2));
+    return { ok: true, path: filePath };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle(IPC.PROJECT_IMPORT_PICK, async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { title: 'Import Project', properties: ['openFile'], filters: [{ name: 'Cathode Project', extensions: ['cathode'] }] });
+    if (canceled || !filePaths || !filePaths.length) return { ok: false, canceled: true };
+    const bundle = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
+    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Cathode project bundle' };
+    return { ok: true, bundle };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle(IPC.PROJECT_IMPORT_APPLY, async (_, { bundle, parentDir, targetDir, clone } = {}) => {
+  try {
+    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'bad bundle' };
+    let dir = targetDir;
+    if (clone) {
+      const remote = bundle.project && bundle.project.repo && bundle.project.repo.remote;
+      if (!remote) return { ok: false, error: 'bundle has no repo to clone' };
+      if (!parentDir) return { ok: false, error: 'no destination folder' };
+      const nm = (bundle.project.name || 'project').replace(/[^a-z0-9._-]+/gi, '-');
+      dir = path.join(parentDir, nm);
+      const r = await gitCloneInto(remote, dir, bundle.project.repo.branch);
+      if (!r.ok) return { ok: false, error: r.error || 'clone failed' };
+    }
+    if (!dir) return { ok: false, error: 'no target folder' };
+    writeProjectManifest(dir, { name: bundle.project && bundle.project.name, rootDir: dir, repo: bundle.project && bundle.project.repo, servers: (bundle.project && bundle.project.servers) || [] });
+    for (const [rel, txt] of Object.entries(bundle.env || {})) {
+      try { const fp = path.join(dir, rel); if (!fs.existsSync(fp)) fs.writeFileSync(fp, txt); } catch (_) {}   // never clobber an existing env file
+    }
+    if (bundle.notes) { try { fs.mkdirSync(path.join(dir, '.cathode'), { recursive: true }); fs.writeFileSync(path.join(dir, '.cathode', 'notes.md'), bundle.notes); } catch (_) {} }
+    return { ok: true, dir, name: (bundle.project && bundle.project.name) || path.basename(dir) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // The Storybook URL for a project dir: its own running instance first, else the
 // active instance. Injected as STORYBOOK_URL when agent sessions spawn.
 function storybookUrlFor(dir) {
