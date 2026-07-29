@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-29
+
+### Changed
+- **Storybook "offline" empty state redesigned.** The tabbed setup is now a single screen: a "Storybook Offline" hero with a **Run existing storybook** button, three inline build rows (**Build from Project** = auto-detect scaffold, **Build from Figma** = Figma URL, **Build from Framework** = framework picker), and the "reminder before each message" toggle pinned to the footer.
+
+### Added
+- **Animated WebGL backdrop** behind the Storybook offline hero — two slowly undulating translucent iridescent "cellophane" sheets with chromatic dispersion on the folds and a drifting warm glow, composited over black. Dependency-free (a raw fragment shader), resolution-capped, and only renders while the state is on screen.
+
 ## [1.4.0] - 2026-07-29
 
 ### Added
