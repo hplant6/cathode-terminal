@@ -4619,9 +4619,9 @@ button:active { background: var(--btn-active); }
 #sb-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
 .sb-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
 .sb-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; max-width: 8ch; }
-.sb-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: var(--spec-text-dim); margin: 20px 0 0; }
-.sb-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent-dark); color: #fff; border: none; border-radius: 6px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
-.sb-hero-btn:hover:not(:disabled) { background: var(--spec-accent); }
+.sb-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
+.sb-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
+.sb-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
 .sb-hero-btn:disabled { opacity: 0.7; cursor: default; }
 #sb-setup .sb-hero #sb-status { margin-top: 16px; }
 
@@ -4633,7 +4633,7 @@ button:active { background: var(--btn-active); }
 .sb-build-input:focus { border-color: var(--accent); }
 #sb-folder.sb-build-input { cursor: pointer; }
 #sb-folder-pick { display: none; }   /* kept only for its picker handler — never a grid cell (id beats any button display rule) */
-.sb-build-btn { height: 42px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s; }
+.sb-build-btn { height: 42px; background: var(--accent); border: none; border-radius: 3px; color: #fff; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s; }
 .sb-build-btn:hover { filter: brightness(1.08); }
 /* framework combo fills the input column, matching .sb-build-input */
 .sb-build-row .sb-fw-combo { position: relative; }
