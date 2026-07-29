@@ -1742,7 +1742,61 @@ function repositionBrowserView(overrideFraction) {
 let currentProjectDir = '';
 function homeDir() { return platform.homeDir(); }
 function sessionCwd() { return currentProjectDir || homeDir(); }
-ipcMain.on(IPC.SET_PROJECT_DIR, (_, { dir } = {}) => { currentProjectDir = dir || ''; });
+ipcMain.on(IPC.SET_PROJECT_DIR, (_, { dir } = {}) => { currentProjectDir = dir || ''; startProjectWatchers(currentProjectDir); });
+
+// ── Project auto-detect (Phase 3) ────────────────────────────────
+// Project-ish signals for a folder — used to gate the classify prompt and to
+// prefill a manifest (repo remote/branch) when a project is created.
+function gitBranchOf(dir) {
+  try {
+    const head = fs.readFileSync(path.join(dir, '.git', 'HEAD'), 'utf8').trim();
+    const m = /^ref:\s*refs\/heads\/(.+)$/.exec(head);
+    return m ? m[1] : head.slice(0, 12);   // detached HEAD → short sha
+  } catch (_) { return ''; }
+}
+function gitRemoteOf(dir) {
+  try {
+    const cfg = fs.readFileSync(path.join(dir, '.git', 'config'), 'utf8');
+    const m = /\[remote "origin"\][\s\S]*?url\s*=\s*(.+)/.exec(cfg);
+    return m ? m[1].trim() : '';
+  } catch (_) { return ''; }
+}
+function dirInfo(dir) {
+  if (!dir) return { hasGit: false, hasPkg: false };
+  const hasGit = fs.existsSync(path.join(dir, '.git'));
+  let hasPkg = false, name = path.basename(String(dir).replace(/[\\/]+$/, ''));
+  try { const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')); hasPkg = true; if (pkg.name) name = pkg.name; } catch (_) {}
+  return { hasGit, hasPkg, name, branch: hasGit ? gitBranchOf(dir) : '', remote: hasGit ? gitRemoteOf(dir) : '' };
+}
+ipcMain.handle(IPC.DIR_INFO, (_, { dir } = {}) => dirInfo(dir));
+
+// Poll the active project for two new-work signals: a branch switch, and a repo
+// cloned into an immediate subfolder. Cheap (one file read + one shallow readdir);
+// avoids fs.watch noise. The renderer decides whether to prompt.
+let _watchTimer = null, _lastBranch = '', _knownChildren = new Set();
+function startProjectWatchers(dir) {
+  clearInterval(_watchTimer); _watchTimer = null;
+  _lastBranch = ''; _knownChildren = new Set();
+  if (!dir) return;
+  _lastBranch = gitBranchOf(dir);
+  // Seed with all existing children so only folders that appear *after* launch (a fresh
+  // clone) can fire — and steady-state ticks do zero .git probes.
+  try { for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) _knownChildren.add(e.name); } catch (_) {}
+  _watchTimer = setInterval(() => {
+    if (dir !== currentProjectDir) return;   // stale timer guard
+    const b = gitBranchOf(dir);
+    if (b && _lastBranch && b !== _lastBranch) { _lastBranch = b; uiSend(IPC.PROJECT_TRIGGER, { dir, reason: 'branch', branch: b, ...dirInfo(dir) }); }
+    else if (b) _lastBranch = b;
+    try {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!e.isDirectory() || _knownChildren.has(e.name)) continue;
+        _knownChildren.add(e.name);   // probe each new child once
+        const child = path.join(dir, e.name);
+        if (fs.existsSync(path.join(child, '.git'))) uiSend(IPC.PROJECT_TRIGGER, { dir: child, reason: 'repo', ...dirInfo(child) });
+      }
+    } catch (_) {}
+  }, 5000);
+}
 
 // ── Agent runtime environment (WSL vs Windows vs native) ──────────
 // Most tools (claude/hermes) run in WSL on Windows. Gemini/Codex may be

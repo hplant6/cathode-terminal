@@ -9295,9 +9295,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   // Write-through: mirror a project into its folder manifest (<dir>/.cathode/manifest.json),
   // the emerging source of truth. Best-effort; localStorage stays authoritative for now.
   function syncManifest(project) {
-    if (!project || !project.rootDir) return;
+    if (!project || !project.rootDir || project.branchScoped) return;   // branch-scoped projects share a folder → no per-folder manifest (needs worktrees)
     const data = {
-      id: project.id, name: project.name, rootDir: project.rootDir,
+      id: project.id, name: project.name, rootDir: project.rootDir, repo: project.repo || undefined,
       servers: (project.servers || []).map(s => ({
         id: s.id, name: s.name,
         role: s.role || (/storybook/i.test(s.name || '') ? 'storybook' : undefined),
@@ -9321,7 +9321,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function addServer(projectId, def) {
     updateProject(projectId, p => {
       p.servers = p.servers || [];
-      p.servers.push({ id: genId(), name: def.name || 'server', cmd: def.cmd || '', port: def.port || null, runIn: def.runIn || 'wsl' });
+      p.servers.push({ id: genId(), name: def.name || 'server', cmd: def.cmd || '', cwd: def.cwd || '.', port: def.port || null, runIn: def.runIn || 'wsl', role: def.role, autostart: !!def.autostart });
     });
   }
   // Pause a project's running servers (stop + flag) — used by the manual Pause
@@ -9569,10 +9569,11 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         const owner = info && info.dir ? projects.find(p => sameOrInside(info.dir, p.rootDir)) : null;
         if (owner) {
           if (!(owner.servers || []).some(s => +s.port === port)) {   // capture the running server onto its project (once)
-            addServer(owner.id, { name: info.comm || 'dev', cmd: info.cmd || '', port, runIn: 'wsl' });
+            addServer(owner.id, { name: info.comm || 'dev', cmd: info.cmd || '', cwd: info.dir, port, runIn: 'wsl' });
           }
         } else {
           untracked.push({ port, name });
+          if (info && info.dir) maybeAskServerProject(info.dir, info.comm || name, port);   // Phase 3: offer to make it a project
         }
       }
       renderUntracked(untracked.sort((a, b) => a.port - b.port));
@@ -9582,10 +9583,100 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // (trailing slashes, separators, case) so C:\A\b matches C:/a running server cwd.
     function sameOrInside(child, parent) {
       if (!child || !parent) return false;
-      const norm = s => String(s).replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
-      const c = norm(child), p = norm(parent);
+      const c = normDir(child), p = normDir(parent);
       return c === p || c.startsWith(p + '/');
     }
+    const normDir = s => String(s || '').replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+    const isKnownProject = (dir) => loadProjects().some(p => sameOrInside(dir, p.rootDir));
+
+    // ── Project classification prompt (Phase 3) ──────────────────
+    // Decision memory so we never re-ask about a folder/branch we've already ruled on.
+    const DECISIONS_KEY = 'cathode-project-decisions';
+    const loadDecisions = () => { try { return JSON.parse(localStorage.getItem(DECISIONS_KEY) || '{}'); } catch (_) { return {}; } };
+    const decisionKey = (dir, branch) => normDir(dir) + (branch ? '@' + branch : '');
+    const saveDecision = (key, val) => { try { const d = loadDecisions(); d[key] = val; localStorage.setItem(DECISIONS_KEY, JSON.stringify(d)); } catch (_) {} };
+    const promptedThisSession = new Set();   // avoid re-queuing the same dir every poll before a decision lands
+
+    // Anchored, app-owned card (one at a time; extras queue) — the app drives the ask,
+    // not the agent, so it's reliable and costs no tokens.
+    let pcQueue = [], pcActive = false;
+    function askClassify(opts) { pcQueue.push(opts); if (!pcActive) nextClassify(); }
+    function nextClassify() {
+      const opts = pcQueue.shift();
+      if (!opts) { pcActive = false; return; }
+      pcActive = true;
+      const card = document.createElement('div'); card.className = 'pc-prompt';
+      const text = document.createElement('div'); text.className = 'pc-text'; text.textContent = opts.question;
+      const acts = document.createElement('div'); acts.className = 'pc-acts';
+      (opts.buttons || []).forEach(b => {
+        const btn = document.createElement('button'); btn.className = 'pc-btn' + (b.kind ? ' ' + b.kind : '');
+        btn.textContent = b.label;
+        btn.addEventListener('click', () => { try { b.onPick && b.onPick(); } finally { card.remove(); nextClassify(); } });
+        acts.appendChild(btn);
+      });
+      card.append(text, acts);
+      document.body.appendChild(card);
+    }
+
+    // Turn a folder into a tracked project (repo remote/branch prefilled into the manifest).
+    function adoptDirAsProject(dir, info) {
+      const entry = registerProject(dir, (info && info.name) || undefined);
+      if (entry && info && info.remote) updateProject(entry.id, p => { p.repo = { remote: info.remote, branch: info.branch }; });
+      renderMenu();
+    }
+    // A new branch tracked as its own project — folder is shared, so it's localStorage-only
+    // (no per-folder manifest; true per-branch manifests need worktrees, a later slice).
+    function createBranchProject(t) {
+      const id = projId(t.dir) + '#' + t.branch;
+      const list = loadProjects();
+      if (list.some(p => p.id === id)) return;
+      list.push({ id, name: `${nameFor(t.dir)} (${t.branch})`, rootDir: t.dir, branch: t.branch, branchScoped: true, repo: t.remote ? { remote: t.remote, branch: t.branch } : undefined, lastActiveAt: Date.now() });
+      saveProjects(list); renderMenu();
+    }
+
+    // Trigger: a dev server running in an unknown, project-ish folder.
+    async function maybeAskServerProject(dir, name, port) {
+      const key = decisionKey(dir);
+      if (!dir || promptedThisSession.has(key) || loadDecisions()[key] || isKnownProject(dir)) return;
+      promptedThisSession.add(key);
+      let di = {};
+      try { di = await ipcRenderer.invoke(IPC.DIR_INFO, { dir }); } catch (_) {}
+      if (!di || (!di.hasGit && !di.hasPkg)) return;   // not project-ish → don't nag
+      const active = activeProject();
+      const buttons = [{ label: 'New project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); adoptDirAsProject(dir, di); } }];
+      if (active) buttons.push({ label: 'Part of ' + active.name, onPick: () => { saveDecision(key, 'attach'); addServer(active.id, { name: name || 'dev', cwd: dir, port, runIn: 'wsl' }); } });
+      buttons.push({ label: 'Not a project', onPick: () => saveDecision(key, 'ignore') });
+      askClassify({ question: `A dev server is running in “${di.name}” (${dir}), not part of any project. Track it?`, buttons });
+    }
+
+    // Triggers from main: a new branch, or a repo cloned into a subfolder.
+    ipcRenderer.on(IPC.PROJECT_TRIGGER, (_, t) => {
+      if (!t || !t.dir) return;
+      if (t.reason === 'branch') {
+        const key = decisionKey(t.dir, t.branch);
+        if (promptedThisSession.has(key) || loadDecisions()[key]) return;
+        promptedThisSession.add(key);
+        const active = activeProject(); const aName = active ? active.name : 'this project';
+        askClassify({
+          question: `Switched to branch “${t.branch}”. Track it as a separate project, or keep it under ${aName}?`,
+          buttons: [
+            { label: 'New project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); createBranchProject(t); } },
+            { label: 'Keep under ' + aName, onPick: () => saveDecision(key, 'keep') },
+          ],
+        });
+      } else if (t.reason === 'repo') {
+        const key = decisionKey(t.dir);
+        if (promptedThisSession.has(key) || loadDecisions()[key] || isKnownProject(t.dir)) return;
+        promptedThisSession.add(key);
+        askClassify({
+          question: `New repo “${t.name}” at ${t.dir}. Track it as a project?`,
+          buttons: [
+            { label: 'New project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); adoptDirAsProject(t.dir, t); } },
+            { label: 'Not a project', onPick: () => saveDecision(key, 'ignore') },
+          ],
+        });
+      }
+    });
 
     // Update the cache and (re)insert the untracked panel as the first grid card.
     function renderUntracked(items) {

@@ -71,6 +71,8 @@ const IPC = Object.freeze({
   MANIFEST_READ:  'manifest-read',    // read <dir>/.cathode/manifest.json (project source of truth)
   MANIFEST_WRITE: 'manifest-write',   // write-through a project into its folder manifest
   RESOLVE_SERVER_DIRS: 'resolve-server-dirs',   // resolve cwd + launch cmd of the process on each port (attribute running servers to a project by folder)
+  DIR_INFO: 'dir-info',               // project-ish signals for a folder (git/pkg/branch/remote/name)
+  PROJECT_TRIGGER: 'project-trigger', // main → renderer: a new-work signal (new branch / cloned repo) that may warrant a project
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',
