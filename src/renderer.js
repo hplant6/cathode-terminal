@@ -9405,7 +9405,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   const mcModal = document.getElementById('mission-control');
   const mcGrid  = document.getElementById('mc-grid');
   if (mcModal && mcGrid) {
-    const mcUntracked = document.getElementById('mc-untracked');
+    let untrackedItems = [];   // cache of running localhost servers not tied to a project (rendered as the first grid card)
     const COMMON_DEV_PORTS = [3000, 3001, 3002, 3003, 3333, 4000, 4173, 4200, 4321, 5000, 5100, 5173, 5174, 5175, 5273, 6006, 7000, 7070, 8000, 8080, 8081, 8888, 9000];
     const DEV_NAME_RE = /^(node|nodejs|deno|bun|python|py|ruby|php|java|dotnet|caddy|nginx|vite|esbuild|next|webpack)/i;
     let statusTimer = null, ramTimer = null;
@@ -9503,7 +9503,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // Surface localhost dev servers that are running but not tied to any tracked
     // project (e.g. one the agent started in a folder you haven't opened yet).
     async function refreshUntracked() {
-      if (!mcUntracked) return;
+      if (!mcGrid) return;
       const tracked = new Set();
       loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) tracked.add(+s.port); }));
       const found = new Map();   // port → process name
@@ -9521,15 +9521,28 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       renderUntracked([...found.entries()].map(([port, name]) => ({ port, name })).sort((a, b) => a.port - b.port));
     }
 
+    // Update the cache and (re)insert the untracked panel as the first grid card.
     function renderUntracked(items) {
-      mcUntracked.innerHTML = '';
-      if (!items.length) { mcUntracked.hidden = true; return; }
-      mcUntracked.hidden = false;
+      untrackedItems = items || [];
+      insertUntrackedCard();
+    }
+
+    // Prepend the untracked-servers card into the grid (removing any prior one),
+    // so it occupies the first card slot at the same width as the project cards.
+    // Uses the cached items so it can run synchronously after renderMC rebuilds
+    // the grid, without waiting on a re-probe.
+    function insertUntrackedCard() {
+      if (!mcGrid) return;
+      mcGrid.querySelector('.mc-untracked-card')?.remove();
+      mcGrid.querySelector('.mc-empty')?.remove();   // stray servers count as content
+      if (!untrackedItems.length) return;
+      const card = document.createElement('div');
+      card.className = 'mc-card mc-card-idle mc-untracked-card';
       const label = document.createElement('div'); label.className = 'mc-untracked-label';
       label.textContent = 'Running on localhost — not in a project';
-      mcUntracked.appendChild(label);
+      card.appendChild(label);
       const list = document.createElement('div'); list.className = 'mc-untracked-list';
-      items.forEach(({ port, name }) => {
+      untrackedItems.forEach(({ port, name }) => {
         const row = document.createElement('div'); row.className = 'mc-untracked-item';
         row.innerHTML = '<span class="mc-untracked-dot"></span><span class="mc-untracked-port"></span><span class="mc-untracked-name"></span><span class="mc-untracked-acts"></span>';
         row.querySelector('.mc-untracked-port').textContent = 'localhost:' + port;
@@ -9550,7 +9563,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         acts.append(open, adopt);
         list.appendChild(row);
       });
-      mcUntracked.appendChild(list);
+      card.appendChild(list);
+      mcGrid.insertBefore(card, mcGrid.firstChild);
     }
 
     // Start every stopped server in a project.
@@ -9733,14 +9747,15 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         return (b.lastActiveAt || 0) - (a.lastActiveAt || 0);
       });
       mcGrid.innerHTML = '';
-      if (!list.length) {
+      if (!list.length && !untrackedItems.length) {
         const e = document.createElement('div'); e.className = 'mc-empty';
         e.textContent = 'No projects yet — open one to get started.';
         mcGrid.appendChild(e);
         return;
       }
       list.forEach(p => mcGrid.appendChild(p.id === activeId ? activeCard(p) : idleCard(p)));
-      refreshStatus();
+      insertUntrackedCard();   // prepend the untracked-servers card into the first slot (uses the cache, so no flicker)
+      if (list.length) refreshStatus();
     }
 
     async function openMC() {

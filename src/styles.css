@@ -524,10 +524,10 @@ html, body {
 .mc-open-fab:hover { filter: brightness(1.08); }
 
 /* Running-but-untracked localhost servers */
-/* Card shell — matches .mc-card so the untracked-servers panel reads as one of the cards */
-#mc-untracked { flex-shrink: 0; margin-bottom: 24px; padding: 24px; background: var(--spec-header-bg); border-radius: 22px; box-sizing: border-box; }
-.mc-untracked-label { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mc-amber); margin-bottom: 12px; }
-.mc-untracked-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }   /* scrolls inside the card when many servers are running */
+/* Untracked-servers panel — rendered as a card in the grid's first slot; the
+   .mc-card .mc-card-idle base gives it the same width/shell as the other cards. */
+.mc-untracked-label { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mc-amber); margin-bottom: 4px; }
+.mc-untracked-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }   /* fills the card and scrolls when many servers are running */
 .mc-untracked-item { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px solid #1A191C; }   /* tabular rows like .mc-row */
 .mc-untracked-item:last-child { border-bottom: none; }
 .mc-untracked-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--mc-green); box-shadow: 0 0 5px color-mix(in srgb, var(--mc-green) 60%, transparent); }
