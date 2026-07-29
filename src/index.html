@@ -690,8 +690,13 @@
         <div id="sb-setup">
           <div class="sb-inner">
             <button id="sb-back" class="sb-back-btn" hidden><svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.0498 10.75C15.0498 9.06558 13.6844 7.70018 12 7.70018H2.25C1.8634 7.70018 1.5498 7.38658 1.5498 6.99998C1.5498 6.61339 1.8634 6.29979 2.25 6.29979H12C14.4576 6.29979 16.4502 8.29239 16.4502 10.75C16.4502 13.2076 14.4576 15.2002 12 15.2002H8.25C7.8634 15.2002 7.5498 14.8866 7.5498 14.5C7.5498 14.1134 7.8634 13.7998 8.25 13.7998H12C13.6844 13.7998 15.0498 12.4344 15.0498 10.75Z"/><path d="M5.25488 3.00486C5.52824 2.73149 5.97174 2.73149 6.24511 3.00486C6.51848 3.27823 6.51848 3.72173 6.24511 3.99509L3.24023 6.99998L6.24511 10.0049C6.51848 10.2782 6.51848 10.7217 6.24511 10.9951C5.97174 11.2685 5.52824 11.2685 5.25488 10.9951L1.75488 7.49509C1.48151 7.22173 1.48151 6.77823 1.75488 6.50486L5.25488 3.00486Z"/></svg>Back to Storybook</button>
-            <h2 class="sb-title">Set up a Storybook</h2>
-            <p class="sb-desc">A running Storybook gives your agent live context about your components and design tokens — so the UI it builds matches your system.</p>
+            <div class="sb-hero">
+              <h2 class="sb-hero-title">Storybook Offline</h2>
+              <p class="sb-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
+              <button id="sb-start" class="sb-hero-btn">Run existing storybook</button>
+              <input id="sb-url" type="hidden" value="http://localhost:6006"/>
+              <div id="sb-status" class="sb-status" hidden></div>
+            </div>
 
             <!-- The 3 ways to get a Storybook running -->
             <div class="sb-ways-title">connect a storybook with these options</div>
@@ -714,77 +719,49 @@
               </button>
             </div>
 
-            <div class="wf-panel">
-              <div class="wf-tabpanel" data-sbpanel="connect">
-                <div class="wf-headline">point at a Storybook that's already running.</div>
-                <div class="wf-subdesc">Enter the URL of a Storybook you already have running, local or remote. Cathode connects to it directly so your agent can reference your live design system.</div>
-                <div class="wf-panel-form">
-                  <input id="sb-url" type="text" value="http://localhost:6006" placeholder="http://localhost:6006" spellcheck="false"/>
-                  <button id="sb-connect">Connect</button>
-                </div>
+            <div class="sb-build-rows">
+              <div class="sb-build-row">
+                <span class="sb-build-label">Build from project</span>
+                <input id="sb-folder" class="sb-build-input" placeholder="Project folder" spellcheck="false" readonly/>
+                <button id="sb-folder-pick" hidden></button>
+                <button id="sb-build-project" class="sb-build-btn">Build</button>
               </div>
-              <div class="wf-tabpanel" data-sbpanel="start" hidden>
-                <div class="wf-headline">run the Storybook already in your project.</div>
-                <div class="wf-subdesc">Cathode starts your project's Storybook server and wires it up automatically. Your agent then has live access to every component and token in your design system.</div>
-                <button id="sb-start" class="sb-connect-btn">Start Storybook</button>
+              <div class="sb-build-row">
+                <span class="sb-build-label">Build from figma</span>
+                <input id="sb-figma-url" class="sb-build-input" type="text" placeholder="Figma file URL" spellcheck="false"/>
+                <button id="sb-build" class="sb-build-btn">Build</button>
               </div>
-              <div class="wf-tabpanel" data-sbpanel="figma" hidden>
-                <div class="wf-headline">build it from a Figma design.</div>
-                <div class="wf-subdesc">Paste a Figma file URL and your agent recreates its components and stories through the Figma MCP. It reproduces the layout, colors, type, and assets as faithfully as it can.</div>
-                <div class="wf-panel-form">
-                  <input id="sb-figma-url" type="text" placeholder="Figma file URL" spellcheck="false"/>
-                  <button id="sb-build">Build</button>
-                </div>
-              </div>
-              <div class="wf-tabpanel" data-sbpanel="framework" hidden>
-                <div class="wf-headline">scaffold one for your project's components.</div>
-                <div class="wf-subdesc">Your agent installs Storybook for your project's framework and writes stories for your existing components. Leave it on auto-detect, or pick a framework to guide it.</div>
-                <div class="wf-panel-form">
-                  <div class="sb-fw-combo">
-                    <input id="sb-framework" type="text" placeholder="Auto-detect framework" spellcheck="false" autocomplete="off"/>
-                    <button class="sb-fw-toggle" type="button" tabindex="-1" aria-label="Choose framework"><span class="ui-chev"></span></button>
-                    <div class="sb-fw-menu" hidden>
-                      <div class="sb-fw-opt" data-val="">Auto-detect (recommended)</div>
-                      <div class="sb-fw-opt" data-val="HTML / static site">HTML / static site</div>
-                      <div class="sb-fw-opt" data-val="React">React</div>
-                      <div class="sb-fw-opt" data-val="Vue">Vue</div>
-                      <div class="sb-fw-opt" data-val="Angular">Angular</div>
-                      <div class="sb-fw-opt" data-val="Svelte">Svelte</div>
-                      <div class="sb-fw-opt" data-val="SolidJS">SolidJS</div>
-                      <div class="sb-fw-opt" data-val="Preact">Preact</div>
-                      <div class="sb-fw-opt" data-val="Web Components">Web Components</div>
-                      <div class="sb-fw-opt" data-val="Next.js">Next.js</div>
-                      <div class="sb-fw-opt" data-val="Nuxt">Nuxt</div>
-                      <div class="sb-fw-opt" data-val="SvelteKit">SvelteKit</div>
-                    </div>
+              <div class="sb-build-row">
+                <span class="sb-build-label">Build from framework</span>
+                <div class="sb-fw-combo">
+                  <input id="sb-framework" type="text" placeholder="Choose framework" spellcheck="false" autocomplete="off"/>
+                  <button class="sb-fw-toggle" type="button" tabindex="-1" aria-label="Choose framework"><span class="ui-chev"></span></button>
+                  <div class="sb-fw-menu" hidden>
+                    <div class="sb-fw-opt" data-val="">Auto-detect (recommended)</div>
+                    <div class="sb-fw-opt" data-val="HTML / static site">HTML / static site</div>
+                    <div class="sb-fw-opt" data-val="React">React</div>
+                    <div class="sb-fw-opt" data-val="Vue">Vue</div>
+                    <div class="sb-fw-opt" data-val="Angular">Angular</div>
+                    <div class="sb-fw-opt" data-val="Svelte">Svelte</div>
+                    <div class="sb-fw-opt" data-val="SolidJS">SolidJS</div>
+                    <div class="sb-fw-opt" data-val="Preact">Preact</div>
+                    <div class="sb-fw-opt" data-val="Web Components">Web Components</div>
+                    <div class="sb-fw-opt" data-val="Next.js">Next.js</div>
+                    <div class="sb-fw-opt" data-val="Nuxt">Nuxt</div>
+                    <div class="sb-fw-opt" data-val="SvelteKit">SvelteKit</div>
                   </div>
-                  <button id="sb-build-fw">Build</button>
                 </div>
+                <button id="sb-build-fw" class="sb-build-btn">Build</button>
               </div>
             </div>
 
-            <div class="sb-folder-field sb-field" data-tip-now title="The folder Cathode runs the agent in, and writes CLAUDE.md / AGENTS.md / GEMINI.md into so every model references your Storybook.">
-              <label class="sb-label">Project folder</label>
-              <div class="sb-folder-row">
-                <input id="sb-folder" type="text" class="sb-input" placeholder="Bundled demo Storybook" spellcheck="false" readonly/>
-                <button id="sb-folder-pick" class="sb-folder-btn" title="Choose project folder">Browse…</button>
-              </div>
-              <div class="sb-folder-hint">Defaults to the bundled demo — pick your project to run or generate its Storybook.</div>
+            <div class="sb-offline-foot">
+              <label class="sb-check-row" data-tip-now title="Helps agents that don't read a project memory file">
+                <input type="checkbox" id="sb-auto" checked/>
+                <span class="sb-switch"><span class="sb-switch-knob"><span class="sb-switch-led"></span></span></span>
+                <span>Add storybook reminder before each message</span>
+              </label>
             </div>
-
-            <div id="sb-status" class="sb-status" hidden></div>
-
-            <!-- Project folder + reminder, tucked into a Settings drawer -->
-            <details class="sb-settings">
-              <summary><span class="sb-settings-chev ui-chev"></span>Settings</summary>
-              <div class="sb-settings-body">
-                <label class="sb-check-row" data-tip-now title="Helps agents that don't read a project memory file">
-                  <input type="checkbox" id="sb-auto" checked/>
-                  <span class="sb-switch"><span class="sb-switch-knob"><span class="sb-switch-led"></span></span></span>
-                  <span>Add a storybook reminder before each message.</span>
-                </label>
-              </div>
-            </details>
           </div>
         </div>
 

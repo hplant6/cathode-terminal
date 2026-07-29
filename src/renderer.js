@@ -10115,7 +10115,7 @@ document.getElementById('sb-disconnect')?.addEventListener('click', async () => 
 // autoInject is set at connect time via the setup checkbox #sb-auto.)
 
 document.getElementById('sb-url')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sb-connect').click(); }
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('sb-connect')?.click(); }
   e.stopPropagation();
 });
 
@@ -10133,7 +10133,7 @@ ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {
     sbStatusEl.dataset.state = state || '';
     sbStatusEl.hidden = !state;
   }
-  if (sbStartBtn) { sbStartBtn.disabled = state === 'starting'; sbStartBtn.textContent = state === 'starting' ? 'Starting…' : 'Start Storybook'; }
+  if (sbStartBtn) { sbStartBtn.disabled = state === 'starting'; sbStartBtn.textContent = state === 'starting' ? 'Starting…' : 'Run existing storybook'; }
   if (state === 'ready' && url) {
     // main already loaded the live view — mirror the manual Connect tail so the picker + memory are wired up
     document.getElementById('sb-url').value = url;
@@ -10181,6 +10181,8 @@ async function buildStorybook({ figma = '', framework = '' } = {}) {
 }
 document.getElementById('sb-build')?.addEventListener('click', () => buildStorybook({ figma: document.getElementById('sb-figma-url').value.trim() }));
 document.getElementById('sb-build-fw')?.addEventListener('click', () => buildStorybook({ framework: document.getElementById('sb-framework').value.trim() }));
+document.getElementById('sb-build-project')?.addEventListener('click', () => buildStorybook({}));   // scaffold auto-detecting the project's framework
+document.getElementById('sb-folder')?.addEventListener('click', () => document.getElementById('sb-folder-pick')?.click());   // readonly folder input → open the picker
 
 // Storybook setup — the 3 ways (Start / Build / Connect) as tabs
 const sbTabs   = Array.from(document.querySelectorAll('#sb-setup .wf-tab'));
