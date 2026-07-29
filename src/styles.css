@@ -520,10 +520,11 @@ html, body {
 .mc-addform-btns { display: flex; gap: 10px; margin-top: auto; }
 
 /* Open Project button */
-.mc-open-fab { position: absolute; right: 40px; bottom: 24px; padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
+#mc-fabs { position: absolute; right: 40px; bottom: 24px; display: flex; gap: 12px; align-items: center; z-index: 5; }
+.mc-open-fab { padding: 14px 26px; background: var(--accent); border: none; border-radius: 6px; color: #fff; font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
 .mc-open-fab:hover { filter: brightness(1.08); }
-/* Secondary FAB: Import (bottom-left, outlined) */
-.mc-import-fab { right: auto; left: 40px; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); color: var(--spec-text); }
+/* Secondary FABs: Import / Create (outlined) */
+.mc-import-fab { background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); color: var(--spec-text); }
 .mc-import-fab:hover { filter: none; background: var(--spec-structural); }
 /* Export icon button in a card footer — mirrors the remove (X) button's per-state fill */
 .mc-foot-export { color: var(--spec-text-dim); }
@@ -771,6 +772,10 @@ html, body {
 .pc-btn:hover { background: var(--spec-structural); }
 .pc-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pc-btn.primary:hover { filter: brightness(1.08); }
+.pc-input { width: 100%; box-sizing: border-box; font-family: var(--font-mono); font-size: 13px; padding: 8px 10px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 7px; color: var(--spec-text); outline: none; }
+.pc-input:focus { border-color: var(--accent); }
+/* Inline project-title rename (double-click the card title) */
+.mc-hd-title-edit { font-family: var(--font-title); font-weight: 600; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; background: var(--spec-input-bg); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 6px; outline: none; width: 100%; box-sizing: border-box; }
 .budget-hint { font-size: 11px; color: var(--spec-text-faint); line-height: 1.5; }
 .budget-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--spec-text-dim); cursor: pointer; }
 .budget-check input { accent-color: var(--spec-accent); }

@@ -9794,6 +9794,21 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const hd = document.createElement('div'); hd.className = 'mc-hd ' + (isActive ? 'mc-hd-active' : 'mc-hd-idle');
       const l = document.createElement('div'); l.className = 'mc-hd-col mc-hd-l';
       const title = document.createElement('div'); title.className = 'mc-hd-title'; title.textContent = p.name;
+      title.title = 'Double-click to rename';
+      title.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const input = document.createElement('input'); input.className = 'mc-hd-title-edit'; input.value = p.name; input.spellcheck = false;
+        title.replaceWith(input); input.focus(); input.select();
+        let done = false;
+        const commit = (save) => {
+          if (done) return; done = true;
+          const nv = input.value.trim();
+          if (save && nv && nv !== p.name) { updateProject(p.id, pr => { pr.name = nv; }); if (getActiveId() === p.id) updateChip(); }
+          renderMC();
+        };
+        input.addEventListener('keydown', (ev) => { ev.stopPropagation(); if (ev.key === 'Enter') { ev.preventDefault(); commit(true); } else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); } });
+        input.addEventListener('blur', () => commit(true));
+      });
       const path  = document.createElement('div'); path.className  = 'mc-hd-path';  path.textContent  = p.rootDir;
       l.append(title, path);
       const r = document.createElement('div'); r.className = 'mc-hd-col mc-hd-r';
@@ -9807,6 +9822,45 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
 
     // The active (selected) project — expanded server table (or Add-server form).
+    // Small inline text prompt (Electron blocks window.prompt). Resolves to the
+    // trimmed value or null. Styled like the classify card.
+    function promptText(question, placeholder, okLabel) {
+      return new Promise((resolve) => {
+        const card = document.createElement('div'); card.className = 'pc-prompt';
+        const text = document.createElement('div'); text.className = 'pc-text'; text.textContent = question;
+        const input = document.createElement('input'); input.className = 'pc-input'; input.placeholder = placeholder || ''; input.spellcheck = false;
+        const acts = document.createElement('div'); acts.className = 'pc-acts';
+        const cancel = document.createElement('button'); cancel.className = 'pc-btn'; cancel.textContent = 'Cancel';
+        const ok = document.createElement('button'); ok.className = 'pc-btn primary'; ok.textContent = okLabel || 'OK';
+        let done = false;
+        const finish = (v) => { if (done) return; done = true; card.remove(); resolve(v); };
+        cancel.addEventListener('click', () => finish(null));
+        ok.addEventListener('click', () => finish(input.value.trim() || null));
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); finish(input.value.trim() || null); } else if (e.key === 'Escape') { e.preventDefault(); finish(null); } });
+        acts.append(cancel, ok);
+        card.append(text, input, acts);
+        document.body.appendChild(card);
+        input.focus();
+      });
+    }
+
+    // Create New Project — a blank-slate folder (mkdir + git init + manifest), activated.
+    async function createNewProject() {
+      const name = await promptText('Name your new project', 'e.g. my-app', 'Create');
+      if (!name) return;
+      const parent = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
+      if (!parent) return;
+      const busy = showToast('Creating ' + name + '…', { spinner: true });
+      let res = null;
+      try { res = await ipcRenderer.invoke(IPC.PROJECT_CREATE, { parentDir: parent, name }); } catch (e) { res = { ok: false, error: String(e) }; }
+      busy.dismiss();
+      if (!res || !res.ok) { showToast('Create failed: ' + ((res && res.error) || 'unknown'), { duration: 6000 }); return; }
+      registerProject(res.dir, res.name);
+      activateProject(res.dir, res.name);
+      renderMC();
+      showToast('Created ' + res.name, { duration: 4000 });
+    }
+
     // ── Export / import a portable .cathode bundle (Phase 4) ─────
     const ICON_EXPORT = '<svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V3"/><path d="M6 6l3-3 3 3"/><path d="M3.5 11v2.5A1.5 1.5 0 0 0 5 15h8a1.5 1.5 0 0 0 1.5-1.5V11"/></svg>';
     function exportBtn(p) {
@@ -9980,6 +10034,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     mcBtn?.addEventListener('click', (e) => { e.stopPropagation(); openMC(); });
     document.getElementById('mc-close')?.addEventListener('click', () => mc.close());
     document.getElementById('mc-import')?.addEventListener('click', importProject);
+    document.getElementById('mc-create')?.addEventListener('click', createNewProject);
     ipcRenderer.on(IPC.OPEN_BUNDLE_FILE, (_, { path: p } = {}) => { if (p) importProjectFromPath(p); });   // .cathode double-clicked in the OS
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);

@@ -1043,6 +1043,31 @@ function gitCloneInto(remote, dir, branch) {
     } catch (e) { fin({ ok: false, error: e.message }); }
   });
 }
+// git init <dir> in the dev env (best-effort — a project is still usable without git).
+function gitInit(dir) {
+  return new Promise((resolve) => {
+    const target = IS_WIN_HOST ? platform.toWslPath(dir) : dir;
+    try {
+      const child = IS_WIN_HOST ? platform.nixSpawn(['git', 'init', target], { windowsHide: true }) : spawn('git', ['init', target]);
+      child.on('close', () => resolve()); child.on('error', () => resolve());
+      setTimeout(() => { try { child.kill(); } catch (_) {} resolve(); }, 15000);
+    } catch (_) { resolve(); }
+  });
+}
+ipcMain.handle(IPC.PROJECT_CREATE, async (_, { parentDir, name } = {}) => {
+  try {
+    const nm = String(name || '').trim();
+    if (!nm) return { ok: false, error: 'name required' };
+    if (!parentDir) return { ok: false, error: 'no location chosen' };
+    const folder = nm.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'project';
+    const dir = path.join(parentDir, folder);
+    if (fs.existsSync(dir)) return { ok: false, error: 'A folder named "' + folder + '" already exists there' };
+    fs.mkdirSync(dir, { recursive: true });
+    await gitInit(dir);
+    writeProjectManifest(dir, { name: nm, rootDir: dir, servers: [] });
+    return { ok: true, dir, name: nm };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 ipcMain.handle(IPC.PROJECT_EXPORT, async (_, { dir } = {}) => {
   if (!dir) return { ok: false, error: 'no dir' };
   try {

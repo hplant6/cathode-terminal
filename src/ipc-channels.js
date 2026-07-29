@@ -78,6 +78,7 @@ const IPC = Object.freeze({
   PROJECT_IMPORT_APPLY: 'project-import-apply',// clone-from-remote / scaffold a bundle into a folder
   PROJECT_IMPORT_READ: 'project-import-read',  // parse a .cathode bundle from a given path (file-association open)
   OPEN_BUNDLE_FILE: 'open-bundle-file',        // main → renderer: a .cathode file was opened via the OS (double-click)
+  PROJECT_CREATE: 'project-create',            // create a brand-new project folder (mkdir + git init + manifest)
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',
