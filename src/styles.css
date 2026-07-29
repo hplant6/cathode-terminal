@@ -4641,7 +4641,7 @@ button:active { background: var(--btn-active); }
 .sb-build-row .sb-fw-combo input:focus { border-color: var(--accent); }
 .sb-build-row .sb-fw-toggle { position: absolute; right: 4px; top: 0; bottom: 0; width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--spec-text-dim); cursor: pointer; }
 
-.sb-offline-foot { display: flex; align-items: center; justify-content: center; padding: 18px; border-top: 1px solid var(--spec-structural); background: var(--spec-black); }
+.sb-offline-foot { display: flex; align-items: center; justify-content: center; padding: 18px; border-top: 1px solid var(--spec-structural); background: var(--spec-header-bg); }
 .sb-offline-foot .sb-check-row { font-family: var(--font-mono); }
 .sb-hero-icon { color: var(--accent); opacity: 0.6; margin-bottom: 16px; }
 .sb-title { font-family: var(--font-title); font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); margin: 0 0 10px; text-align: center; }
