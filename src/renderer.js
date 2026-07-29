@@ -10184,6 +10184,110 @@ document.getElementById('sb-build-fw')?.addEventListener('click', () => buildSto
 document.getElementById('sb-build-project')?.addEventListener('click', () => buildStorybook({}));   // scaffold auto-detecting the project's framework
 document.getElementById('sb-folder')?.addEventListener('click', () => document.getElementById('sb-folder-pick')?.click());   // readonly folder input → open the picker
 
+// ── Storybook offline background — two undulating iridescent "cellophane" sheets ──
+// Raw WebGL fragment shader (no dependency). Renders premultiplied-alpha over the
+// dark gradient, confined behind the hero, and only runs while the state is visible.
+(function initSbFx() {
+  const canvas = document.getElementById('sb-fx');
+  if (!canvas) return;
+  let gl = null;
+  try { gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true, depth: false }); } catch (_) {}
+  if (!gl) return;
+
+  const VS = 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
+  const FS = [
+    'precision highp float;',
+    'uniform float uT; uniform vec2 uR;',
+    'float hash(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
+    'float noise(vec2 p){ vec2 i=floor(p), f=fract(p); float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.)); vec2 u=f*f*(3.-2.*f); return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }',
+    'float fbm(vec2 p){ float s=0.,a=0.5; for(int i=0;i<4;i++){ s+=a*noise(p); p*=2.02; a*=0.5; } return s; }',
+    'vec3 iri(float x){ return 0.5+0.5*cos(6.28318*(x+vec3(0.0,0.35,0.62))); }',
+    // one flowing sheet field (single domain warp) — the "wind"
+    'float field(vec2 p, float t, float seed){ vec2 q=vec2(fbm(p+seed), fbm(p+vec2(3.1,seed)+t*0.05)); return fbm(p + 1.6*q + vec2(t*0.06, seed)); }',
+    'void main(){',
+    '  vec2 p = (gl_FragCoord.xy - 0.5*uR)/uR.y;',   // aspect-correct, centered
+    '  float t = uT*0.4;',
+    '  vec3 col = vec3(0.0); float alpha = 0.0;',
+    '  for(int s=0; s<2; s++){',
+    '    float seed = float(s)*13.7;',
+    '    vec2 pp = p*1.15 + vec2(float(s)*0.5, -float(s)*0.25);',
+    '    float e = 0.006;',
+    '    float f  = field(pp*1.3, t + float(s)*2.0, seed);',
+    '    float fx = field((pp+vec2(e,0.))*1.3, t + float(s)*2.0, seed) - f;',
+    '    float fy = field((pp+vec2(0.,e))*1.3, t + float(s)*2.0, seed) - f;',
+    '    vec2 g = vec2(fx,fy)/e; float gm = length(g);',
+    '    float ca = clamp(gm*0.03, 0.0, 0.4);',           // chromatic split on folds
+    '    float ph = f*1.4 + gm*0.12 + seed*0.1;',
+    '    vec3 ir = vec3(iri(ph-ca).r, iri(ph).g, iri(ph+ca).b);',
+    '    float diag = smoothstep(-0.9, 0.7, p.x + p.y*0.55);',   // more presence toward the right/bottom
+    '    float body = smoothstep(0.34, 0.72, f) * diag;',
+    '    float rim  = smoothstep(0.55, 1.7, gm) * diag;',        // bright iridescent folds
+    '    float a = body*0.42 + rim*0.6;',
+    '    col += ir * (0.32 + rim*1.0) * a;',
+    '    alpha += a;',
+    '  }',
+    // slow-drifting warm glow lobe (the orange/red bloom)
+    '  vec2 gp = vec2(0.4 + 0.18*sin(t*0.3), -0.05 + 0.16*cos(t*0.24));',
+    '  float gd = length(p - gp); float glow = exp(-gd*gd*7.0);',
+    '  col += vec3(1.0,0.36,0.12) * glow * 0.28; alpha += glow*0.22;',
+    // keep the middle (behind the title/button) calmer for legibility
+    '  float cm = smoothstep(0.0, 0.6, length(p*vec2(0.75,1.0)));',
+    '  col *= mix(0.4, 1.0, cm); alpha *= mix(0.45, 1.0, cm);',
+    '  alpha = clamp(alpha, 0.0, 1.0); col = clamp(col, 0.0, 1.0);',
+    '  gl_FragColor = vec4(col*alpha, alpha);',            // premultiplied
+    '}',
+  ].join('\n');
+
+  function compile(type, src) { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.warn('[sb-fx]', gl.getShaderInfoLog(sh)); return sh; }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[sb-fx] link failed', gl.getProgramInfoLog(prog)); return; }
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);   // one big triangle
+  const aLoc = gl.getAttribLocation(prog, 'a');
+  gl.enableVertexAttribArray(aLoc);
+  gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  const uT = gl.getUniformLocation(prog, 'uT');
+  const uR = gl.getUniformLocation(prog, 'uR');
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // premultiplied-alpha over the page
+
+  let W = 0, H = 0;
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    const scale = Math.min(1, 1000 / Math.max(r.width || 1, r.height || 1));   // cap long side for perf (soft bg)
+    const w = Math.max(2, Math.round((r.width || 2) * scale));
+    const h = Math.max(2, Math.round((r.height || 2) * scale));
+    if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; }
+  }
+
+  let raf = 0, t0 = performance.now(), running = false;
+  function frame(now) {
+    if (!running) return;
+    resize();
+    gl.viewport(0, 0, W, H);
+    gl.uniform1f(uT, (now - t0) / 1000);
+    gl.uniform2f(uR, W, H);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    raf = requestAnimationFrame(frame);
+  }
+  function start() { if (running) return; running = true; raf = requestAnimationFrame(frame); }
+  function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+
+  // Only render while the offline state is actually on screen (saves GPU otherwise).
+  try {
+    const io = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting && !document.hidden) start(); else stop(); } });
+    io.observe(canvas);
+  } catch (_) { start(); }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else if (canvas.offsetParent !== null) start(); });
+})();
+
 // Storybook setup — the 3 ways (Start / Build / Connect) as tabs
 const sbTabs   = Array.from(document.querySelectorAll('#sb-setup .wf-tab'));
 const sbPanels = Array.from(document.querySelectorAll('#sb-setup .wf-tabpanel'));

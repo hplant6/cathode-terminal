@@ -691,11 +691,14 @@
           <div class="sb-inner">
             <button id="sb-back" class="sb-back-btn" hidden><svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.0498 10.75C15.0498 9.06558 13.6844 7.70018 12 7.70018H2.25C1.8634 7.70018 1.5498 7.38658 1.5498 6.99998C1.5498 6.61339 1.8634 6.29979 2.25 6.29979H12C14.4576 6.29979 16.4502 8.29239 16.4502 10.75C16.4502 13.2076 14.4576 15.2002 12 15.2002H8.25C7.8634 15.2002 7.5498 14.8866 7.5498 14.5C7.5498 14.1134 7.8634 13.7998 8.25 13.7998H12C13.6844 13.7998 15.0498 12.4344 15.0498 10.75Z"/><path d="M5.25488 3.00486C5.52824 2.73149 5.97174 2.73149 6.24511 3.00486C6.51848 3.27823 6.51848 3.72173 6.24511 3.99509L3.24023 6.99998L6.24511 10.0049C6.51848 10.2782 6.51848 10.7217 6.24511 10.9951C5.97174 11.2685 5.52824 11.2685 5.25488 10.9951L1.75488 7.49509C1.48151 7.22173 1.48151 6.77823 1.75488 6.50486L5.25488 3.00486Z"/></svg>Back to Storybook</button>
             <div class="sb-hero">
-              <h2 class="sb-hero-title">Storybook Offline</h2>
-              <p class="sb-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
-              <button id="sb-start" class="sb-hero-btn">Run existing storybook</button>
-              <input id="sb-url" type="hidden" value="http://localhost:6006"/>
-              <div id="sb-status" class="sb-status" hidden></div>
+              <canvas id="sb-fx" aria-hidden="true"></canvas>
+              <div class="sb-hero-content">
+                <h2 class="sb-hero-title">Storybook Offline</h2>
+                <p class="sb-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
+                <button id="sb-start" class="sb-hero-btn">Run existing storybook</button>
+                <input id="sb-url" type="hidden" value="http://localhost:6006"/>
+                <div id="sb-status" class="sb-status" hidden></div>
+              </div>
             </div>
 
             <!-- The 3 ways to get a Storybook running -->
