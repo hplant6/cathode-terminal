@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-29
+
+### Added
+- **Projects are now self-contained, portable, and auto-detected.** A per-project manifest (`.cathode/manifest.json`, kept out of git) is the source of truth for a project's identity and its servers' launch recipes:
+  - **Automatic detection.** When you switch to a new branch, an agent clones a repo into a subfolder, or a dev server starts in an untracked folder, Cathode asks — right in the app — whether it's a new project or part of an existing one, with persistent "don't ask again" memory.
+  - **Servers matched by working directory, not port.** A server the agent started in a project's folder is attributed to that project (its launch command captured) instead of showing as untracked.
+  - **Portable `.cathode` export / import.** Export a project to a single file (manifest + `.env` + notes); import re-clones it from its git remote and offers **Start All**. Double-clicking a `.cathode` file opens Cathode straight into that project (installed builds).
+  - **Agents always know the project.** An app-managed block in `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` tells every agent session which project it's in and how to launch its servers, regenerated each session.
+- **Create New Project** — a blank-slate project (new folder + `git init` + manifest) from Mission Control, alongside Open Project and Import Project.
+- **Rename projects inline** — double-click a project's title on its Mission Control card.
+- **Address-bar suggestions.** Typing (or focusing) the browser address bar drops down your visited-URL history and **running localhost dev servers** (including WSL-hosted ones), so `localhost:3000` is a keystroke away, and the browser view slides down so the list isn't hidden behind it.
+
+### Changed
+- **Usage Assistance styling** — the Auto Handoff panel uses shade-4 / shade-3 nesting, and the usage chip drops its border for a unified accent bar with a solid accent dismiss button.
+- **Mission Control's untracked-servers panel** is now a real card in the grid's first slot (same width as project cards) with a scrollable list.
+- **Box Select** — the "add a CSS property" control is pinned to the bottom of each element's drawer.
+
+### Fixed
+- **Auto-handoff no longer loops and burns usage credits.** The re-fire guard was in-memory only, so every launch re-triggered a handoff while usage stayed over threshold. It now fires at most once per limit window (persisted across restarts) and never merely because you launched already over the threshold.
+
 ## [1.3.0] - 2026-07-28
 
 ### Added
