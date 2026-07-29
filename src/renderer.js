@@ -4019,6 +4019,7 @@ function updateDsSlider(el) {
 
 // ── Budget Guard config + handoff ──
 const BUDGET_CFG_KEY = 'cathode-budget';
+const BUDGET_ARMED_KEY = 'cathode-budget-armed';   // resetsAt of the limit window we've already auto-handed-off for — persists so a restart doesn't re-fire the same window (usage stays over threshold until the window resets)
 const BUDGET_AGENT_LABEL = { hermes: 'Hermes', gemini: 'Gemini', codex: 'Codex' };
 const BUDGET_DEFAULTS = { threshold: 80, autoHandoff: false, target: 'hermes', dest: 'HANDOFF.md' };   // weekly is always watched; autoHandoff replaces autoOpen/watchWeekly
 function budgetConfig() { return Object.assign({}, BUDGET_DEFAULTS, safeParse(localStorage.getItem(BUDGET_CFG_KEY), {})); }
@@ -4080,7 +4081,10 @@ let openBudgetModal = null;
   enhanceSelect(targetEl); targetEl.closest('.ct-select')?.classList.add('ua-ct');
   enhanceSelect(destEl);   destEl.closest('.ct-select')?.classList.add('ua-ct');
 
-  let lastLimits = null, armedResetAt = null, lastCheck = 0, handoffBusy = false, countdownTimer = null;
+  // armedResetAt persists across restarts: the resetsAt of the window we last auto-fired for.
+  // Without this the in-memory guard reset to null every launch and re-fired while usage stayed over threshold — a credit-burning loop.
+  let lastLimits = null, armedResetAt = (localStorage.getItem(BUDGET_ARMED_KEY) || null), lastCheck = 0, handoffBusy = false, countdownTimer = null;
+  let firstAutoGovern = true;   // the first governed check after launch never auto-fires — it only arms, so launching already over threshold can't kick off a handoff
   const governing = () => budgetGovern(lastLimits);
   const pctOf = (m) => (m && typeof m.utilization === 'number' ? Math.round(m.utilization) : null);
 
@@ -4127,8 +4131,13 @@ let openBudgetModal = null;
     const g = governing();
     if (auto && cfg.autoHandoff && g && g.over && !handoffBusy) {
       const resetKey = g.reset || 'none';
-      if (armedResetAt !== resetKey) { armedResetAt = resetKey; startAutoCountdown(g); }
+      if (armedResetAt !== resetKey) {
+        armedResetAt = resetKey;
+        try { localStorage.setItem(BUDGET_ARMED_KEY, resetKey); } catch (_) {}   // persist so a restart won't re-fire this same window
+        if (!firstAutoGovern) startAutoCountdown(g);   // launched already over → arm silently, don't kick off a handoff on startup
+      }
     }
+    if (auto) firstAutoGovern = false;
   }
 
   // Wait for the current agent to actually write the brief: resolve when a turn
