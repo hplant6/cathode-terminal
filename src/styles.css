@@ -711,7 +711,7 @@ html, body {
 .ua-gauge-sub { font-family: var(--font-mono); font-size: 10px; color: var(--spec-text-dim); margin-top: 3px; }
 
 /* auto handoff panel */
-.ua-panel { background: var(--spec-input-bg); border-radius: 12px; padding: 18px; margin-bottom: 12px; }
+.ua-panel { background: var(--spec-dropdown-bg); border-radius: 12px; padding: 18px; margin-bottom: 12px; }   /* shade 4 */
 .ua-panel-head { display: flex; align-items: center; justify-content: center; gap: 14px; }
 .ua-panel-title { font-family: var(--font-title); font-weight: 600; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
 .ua-panel-desc { font-family: var(--font-mono); font-size: 12px; color: var(--spec-text-dim); text-align: center; margin: 8px 0 0; }
@@ -733,7 +733,7 @@ html, body {
 .ua-slider:focus { outline: none; }
 
 /* when-limit-reached sub-box */
-.ua-limit { background: var(--spec-header-bg); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.ua-limit { background: var(--spec-structural); border-radius: 10px; padding: 16px; margin-top: 16px; }   /* shade 3 */
 .ua-limit-title { font-family: var(--font-title); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-align: center; }
 .ua-limit-desc { font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim); text-align: center; line-height: 1.5; margin: 8px 0 12px; }
 .ua-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--spec-structural); }
@@ -1709,26 +1709,25 @@ html, body {
 .usage-budget-chip {
   display: flex; align-items: stretch; width: 100%; box-sizing: border-box;
   margin: 0 0 10px; overflow: hidden;
-  background: var(--spec-accent-dark); border: 1px solid var(--spec-accent); border-radius: var(--radius-md);
+  background: var(--spec-accent-dark); border: none; border-radius: var(--radius-md);
   transition: background 0.12s;
 }
 .usage-budget-chip:hover { background: var(--spec-accent); }
 .ubc-main {
   flex: 1; min-width: 0; height: auto; text-align: left;
   padding: 7px 6px 7px 10px; background: transparent; border: none; border-radius: 0;
-  color: var(--spec-text); font-family: var(--font-title); font-stretch: 112.5%;
+  color: #fff; font-family: var(--font-title); font-stretch: 112.5%;
   font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
 }
-.usage-budget-chip:hover .ubc-main { color: var(--text-on-accent); }
 .ubc-x {
   flex-shrink: 0; min-width: 0; width: 26px; height: auto; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none; border-radius: 0;
-  color: var(--spec-text); font-size: 11px; cursor: pointer; opacity: 0.7;
-  transition: opacity 0.12s, background 0.12s;
+  background: var(--accent); border: none; border-radius: 0;
+  color: #fff; font-size: 11px; cursor: pointer;
+  transition: filter 0.12s;
 }
-.ubc-x:hover { opacity: 1; background: rgba(0,0,0,0.18); color: var(--text-on-accent); }
+.ubc-x:hover { filter: brightness(1.1); }
 #btn-usage.active { color: var(--accent); }
 
 /* ── Toasts (transient, auto-dismiss) ── */
