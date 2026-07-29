@@ -9556,7 +9556,35 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       if (probe.length) {
         try { const { running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports: probe }); probe.forEach(p => { if (running[p]) found.set(p, ''); }); } catch (_) {}
       }
-      renderUntracked([...found.entries()].map(([port, name]) => ({ port, name })).sort((a, b) => a.port - b.port));
+      // Phase 2 — reconcile by working directory: resolve each found server's cwd and,
+      // if it lives inside a known project, attribute it there (capturing its launch
+      // command) instead of listing it as untracked. Only cwd-orphans stay untracked.
+      const foundPorts = [...found.keys()];
+      let dirs = {};
+      if (foundPorts.length) { try { ({ dirs } = await ipcRenderer.invoke(IPC.RESOLVE_SERVER_DIRS, { ports: foundPorts })); } catch (_) {} }
+      const projects = loadProjects();
+      const untracked = [];
+      for (const [port, name] of found) {
+        const info = dirs[port];
+        const owner = info && info.dir ? projects.find(p => sameOrInside(info.dir, p.rootDir)) : null;
+        if (owner) {
+          if (!(owner.servers || []).some(s => +s.port === port)) {   // capture the running server onto its project (once)
+            addServer(owner.id, { name: info.comm || 'dev', cmd: info.cmd || '', port, runIn: 'wsl' });
+          }
+        } else {
+          untracked.push({ port, name });
+        }
+      }
+      renderUntracked(untracked.sort((a, b) => a.port - b.port));
+    }
+
+    // Is `child` the same folder as, or nested inside, `parent`? Path-normalized
+    // (trailing slashes, separators, case) so C:\A\b matches C:/a running server cwd.
+    function sameOrInside(child, parent) {
+      if (!child || !parent) return false;
+      const norm = s => String(s).replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+      const c = norm(child), p = norm(parent);
+      return c === p || c.startsWith(p + '/');
     }
 
     // Update the cache and (re)insert the untracked panel as the first grid card.

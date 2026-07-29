@@ -1461,6 +1461,68 @@ ipcMain.on(IPC.BROWSER_SUGGEST_SPACE, (_, { height } = {}) => {
 ipcMain.handle(IPC.SERVER_DETECT,  (_, { dir } = {}) => detectServers(dir));
 ipcMain.handle(IPC.SERVER_LOG,     (_, { id } = {}) => { const i = projectServers.get(id); return { log: (i && i.log) || '', status: (i && i.status) || 'never started' }; });
 
+// ── Attribute running servers to a project by working directory ──
+// Convert a WSL path (/mnt/c/…) to its Windows host form so it can be matched
+// against a project's rootDir. POSIX hosts: identity (cwd is already host-native).
+function wslToHost(p) {
+  if (!IS_WIN_HOST || !p) return p;
+  const m = /^\/mnt\/([a-z])\/(.*)$/i.exec(p);
+  return m ? m[1].toUpperCase() + ':\\' + m[2].replace(/\//g, '\\') : p;
+}
+// Run a bash snippet in the *nix env (WSL on Windows, login shell on POSIX) and
+// resolve to its non-empty stdout lines. Best-effort with a hard timeout.
+function runNixCapture(script, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    let out = '', done = false;
+    const fin = () => { if (!done) { done = true; resolve(out.split('\n').filter(Boolean)); } };
+    try {
+      const p = platform.nixSpawn(['bash', '-lc', script], { windowsHide: true });
+      if (p.stdout) p.stdout.on('data', d => out += d);
+      p.on('close', fin); p.on('error', fin);
+      setTimeout(() => { try { p.kill(); } catch (_) {} fin(); }, timeoutMs);
+    } catch (_) { fin(); }
+  });
+}
+// For each given port, resolve the listening process's working dir + launch command
+// in whichever env dev servers run. Returns { [port]: { dir(host path), cmd, comm } }.
+async function resolveServerDirs(ports) {
+  const uniq = [...new Set((Array.isArray(ports) ? ports : []).map(safePort).filter(Boolean))];
+  if (!uniq.length) return {};
+  const out = {};
+  const parseWsl = (lines) => {
+    for (const ln of lines) {
+      const parts = ln.split('\t');
+      const port = safePort(parts[0]); const cwd = parts[1];
+      if (!port || !cwd) continue;
+      out[port] = { dir: wslToHost(cwd), comm: parts[2] || '', cmd: (parts.slice(3).join('\t') || '').trim() };
+    }
+  };
+  if (IS_WIN_HOST || process.platform !== 'darwin') {   // WSL (Windows) or native Linux: /proc has cwd/cmdline
+    const script = `for port in ${uniq.join(' ')}; do ` +
+      `pid=$(ss -tlnpH "sport = :$port" 2>/dev/null | grep -oP 'pid=\\K[0-9]+' | head -1); [ -n "$pid" ] || continue; ` +
+      `cwd=$(readlink /proc/$pid/cwd 2>/dev/null); ` +
+      `cmd=$(tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null); ` +
+      `comm=$(cat /proc/$pid/comm 2>/dev/null); ` +
+      `printf '%s\\t%s\\t%s\\t%s\\n' "$port" "$cwd" "$comm" "$cmd"; done`;
+    parseWsl(await runNixCapture(script, 6000));
+    return out;
+  }
+  // macOS: lsof for the pid, then its cwd descriptor.
+  await Promise.all(uniq.map(port => new Promise((resolve) => {
+    const script = `pid=$(lsof -ti tcp:${port} -sTCP:LISTEN 2>/dev/null | head -1); [ -n "$pid" ] || exit 0; ` +
+      `dir=$(lsof -a -d cwd -p $pid -Fn 2>/dev/null | grep '^n' | head -1 | cut -c2-); ` +
+      `comm=$(ps -o comm= -p $pid 2>/dev/null); cmd=$(ps -o command= -p $pid 2>/dev/null); ` +
+      `printf '%s\\t%s\\t%s\\n' "$dir" "$comm" "$cmd"`;
+    execFile('sh', ['-c', script], { timeout: 5000 }, (err, o) => {
+      const ln = (o || '').trim();
+      if (ln) { const pr = ln.split('\t'); if (pr[0]) out[port] = { dir: pr[0], comm: pr[1] || '', cmd: (pr.slice(2).join('\t') || '').trim() }; }
+      resolve();
+    });
+  })));
+  return out;
+}
+ipcMain.handle(IPC.RESOLVE_SERVER_DIRS, async (_, { ports } = {}) => ({ dirs: await resolveServerDirs(ports) }));
+
 // Best-effort RAM (bytes) of the process listening on a server's port + its
 // direct children — measured in whichever environment the server runs in.
 function measureRam(port, runIn) {

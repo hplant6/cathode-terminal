@@ -70,6 +70,7 @@ const IPC = Object.freeze({
   BROWSER_SUGGEST_SPACE: 'browser-suggest-space',   // nudge the browser view down so the suggestions dropdown isn't hidden
   MANIFEST_READ:  'manifest-read',    // read <dir>/.cathode/manifest.json (project source of truth)
   MANIFEST_WRITE: 'manifest-write',   // write-through a project into its folder manifest
+  RESOLVE_SERVER_DIRS: 'resolve-server-dirs',   // resolve cwd + launch cmd of the process on each port (attribute running servers to a project by folder)
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',
