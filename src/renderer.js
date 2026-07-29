@@ -6004,7 +6004,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const primary = props.filter(meaningful);
     const defaults = props.filter(p => !meaningful(p));
     renderSections(primary, body);
-    appendUserAddedSection(row, i, body);   // User Added — above the Defaults strip
 
     if (defaults.length) {
       // Collapsible strip for default/irrelevant props — same escape-hatch pattern as
@@ -6021,6 +6020,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       wrap.append(head, dbody);
       body.appendChild(wrap);
     }
+    appendUserAddedSection(row, i, body);   // User Added — pinned to the very bottom of the drawer
   }
 
   // Padding — always shown per element (even at 0), one slider per side. Padding
