@@ -9258,6 +9258,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     else if (name) entry.name = name;
     entry.lastActiveAt = Date.now();
     saveProjects(list);
+    syncManifest(entry);
     return entry;
   }
 
@@ -9290,9 +9291,26 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   // ── Per-project dev servers ─────────────────────────────────────
   const genId = () => 's_' + Math.random().toString(36).slice(2, 9);
   const getProject = (id) => loadProjects().find(p => p.id === id) || null;
+
+  // Write-through: mirror a project into its folder manifest (<dir>/.cathode/manifest.json),
+  // the emerging source of truth. Best-effort; localStorage stays authoritative for now.
+  function syncManifest(project) {
+    if (!project || !project.rootDir) return;
+    const data = {
+      id: project.id, name: project.name, rootDir: project.rootDir,
+      servers: (project.servers || []).map(s => ({
+        id: s.id, name: s.name,
+        role: s.role || (/storybook/i.test(s.name || '') ? 'storybook' : undefined),
+        cmd: s.cmd || '', cwd: s.cwd || '.', port: s.port || null,
+        runIn: s.runIn || 'wsl', autostart: !!s.autostart,
+      })),
+    };
+    ipcRenderer.invoke(IPC.MANIFEST_WRITE, { dir: project.rootDir, data }).catch(() => {});
+  }
+
   function updateProject(id, mut) {
     const list = loadProjects(); const p = list.find(x => x.id === id);
-    if (!p) return; mut(p); saveProjects(list);
+    if (!p) return; mut(p); saveProjects(list); syncManifest(p);
   }
   function updateServer(projectId, sid, patch) {
     updateProject(projectId, p => { const s = (p.servers || []).find(x => x.id === sid); if (s) Object.assign(s, patch); });
@@ -9344,6 +9362,26 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         });
       }
     } catch (_) {}
+  }
+
+  // Migrate/hydrate manifests: write one for any known project that lacks it, and
+  // pull servers from a manifest when localStorage has none (folder → source of truth).
+  // Best-effort, runs once at startup; invisible until later phases read manifests back.
+  async function reconcileManifests() {
+    const list = loadProjects();
+    let changed = false;
+    for (const p of list) {
+      if (!p.rootDir) continue;
+      let m = null;
+      try { ({ manifest: m } = await ipcRenderer.invoke(IPC.MANIFEST_READ, { dir: p.rootDir })); } catch (_) {}
+      if (m && Array.isArray(m.servers) && (!p.servers || !p.servers.length)) {
+        p.servers = m.servers.map(s => ({ id: s.id || genId(), name: s.name, role: s.role, cmd: s.cmd, cwd: s.cwd, port: s.port || null, runIn: s.runIn || 'wsl', autostart: !!s.autostart }));
+        changed = true;
+      } else if (!m) {
+        syncManifest(p);   // no manifest yet → migrate this project into its folder
+      }
+    }
+    if (changed) saveProjects(list);
   }
 
   function updateChip() {
@@ -9786,6 +9824,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     if (seed) activateProject(seed);
     else updateChip();
   }
+  reconcileManifests();   // migrate existing projects into folder manifests + hydrate any missing servers (best-effort)
 })();
 (async () => {
   try {   // sync any already-running instances (e.g. after a renderer-only reload)

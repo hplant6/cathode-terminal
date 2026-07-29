@@ -976,6 +976,36 @@ function clearSbManifest(dir) {
   try { fs.unlinkSync(path.join(dir, '.cathode', 'storybook.json')); } catch (_) {}
 }
 
+// ── Project manifest (<project>/.cathode/manifest.json) ──────────
+// Source of truth for a project: identity + server launch recipes. localStorage
+// mirrors this as a recents index. Kept out of git (.cathode/ auto-ignored).
+function manifestPath(dir) { return path.join(dir, '.cathode', 'manifest.json'); }
+function readProjectManifest(dir) {
+  try { return JSON.parse(fs.readFileSync(manifestPath(dir), 'utf8')); } catch (_) { return null; }
+}
+// Out-of-git: ensure the repo ignores .cathode/ (best-effort, only inside a git repo).
+function ensureCathodeIgnored(dir) {
+  try {
+    if (!fs.existsSync(path.join(dir, '.git'))) return;
+    const gi = path.join(dir, '.gitignore');
+    let cur = ''; try { cur = fs.readFileSync(gi, 'utf8'); } catch (_) {}
+    if (/^\s*\.cathode\/?\s*$/m.test(cur)) return;   // already ignored
+    fs.writeFileSync(gi, (cur && !cur.endsWith('\n') ? cur + '\n' : cur) + '.cathode/\n');
+  } catch (_) {}
+}
+function writeProjectManifest(dir, data) {
+  if (!dir || !data) return { ok: false, error: 'missing dir/data' };
+  try {
+    fs.mkdirSync(path.join(dir, '.cathode'), { recursive: true });
+    const merged = Object.assign({ schema: 1 }, data, { updatedAt: new Date().toISOString() });
+    fs.writeFileSync(manifestPath(dir), JSON.stringify(merged, null, 2) + '\n');
+    ensureCathodeIgnored(dir);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+ipcMain.handle(IPC.MANIFEST_READ,  (_, { dir } = {}) => ({ manifest: dir ? readProjectManifest(dir) : null }));
+ipcMain.handle(IPC.MANIFEST_WRITE, (_, { dir, data } = {}) => writeProjectManifest(dir, data));
+
 // The Storybook URL for a project dir: its own running instance first, else the
 // active instance. Injected as STORYBOOK_URL when agent sessions spawn.
 function storybookUrlFor(dir) {

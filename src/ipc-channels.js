@@ -68,6 +68,8 @@ const IPC = Object.freeze({
   BROWSER_HISTORY: 'browser-history',         // visited-URL history for address-bar suggestions
   LOCALHOST_SERVERS: 'localhost-servers',     // running localhost dev servers (for address-bar autocomplete)
   BROWSER_SUGGEST_SPACE: 'browser-suggest-space',   // nudge the browser view down so the suggestions dropdown isn't hidden
+  MANIFEST_READ:  'manifest-read',    // read <dir>/.cathode/manifest.json (project source of truth)
+  MANIFEST_WRITE: 'manifest-write',   // write-through a project into its folder manifest
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',
