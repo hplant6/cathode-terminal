@@ -657,8 +657,9 @@
         <div id="tabs-container"></div>
         <button id="btn-new-tab" title="New tab">&#xff0b;</button>
         <div id="address-wrap">
-          <input id="address-bar" type="text" placeholder="Enter URL or localhost:3000" spellcheck="false" />
+          <input id="address-bar" type="text" placeholder="Enter URL or localhost:3000" spellcheck="false" autocomplete="off" />
           <span id="browser-load" class="idle" title=""></span>
+          <div id="addr-suggest" hidden></div>
         </div>
         <button id="btn-reload" title="Reload"><svg viewBox="0 0 18 18" width="15" height="15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.4848 9C15.4848 5.3826 12.5524 2.4502 8.93496 2.4502C6.19775 2.45021 3.85143 4.12921 2.87246 6.51562C2.72573 6.87329 2.31704 7.04419 1.95937 6.89746C1.60171 6.75073 1.43081 6.34204 1.57754 5.98438C2.76456 3.09083 5.6102 1.04982 8.93496 1.0498C13.3256 1.0498 16.8852 4.6094 16.8852 9C16.8852 13.3906 13.3256 16.9502 8.93496 16.9502C6.19864 16.9502 3.7847 15.5674 2.35586 13.4648C2.13862 13.1451 2.2218 12.7095 2.5414 12.4922C2.86117 12.2749 3.29678 12.358 3.51406 12.6777C4.69323 14.4129 6.68147 15.5498 8.93496 15.5498C12.5524 15.5498 15.4848 12.6174 15.4848 9Z"/><path d="M1.7193 2.61163C2.10211 2.55879 2.45533 2.82646 2.50836 3.20929L2.81989 5.46027L5.07086 5.14972C5.45382 5.09678 5.80698 5.36442 5.85993 5.74738C5.91275 6.13014 5.64595 6.48333 5.26325 6.53644L2.31891 6.94367C1.93603 6.9966 1.58289 6.72887 1.52985 6.34601L1.12164 3.4007C1.0688 3.01789 1.33647 2.66467 1.7193 2.61163Z"/></svg></button>
         <button id="btn-device" title="Device emulation — resize the viewport to a device">

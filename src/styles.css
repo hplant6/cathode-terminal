@@ -4238,6 +4238,35 @@ html, body {
 @keyframes browser-spin { from { transform: translateY(-50%) rotate(0); } to { transform: translateY(-50%) rotate(360deg); } }
 @keyframes browser-err-pulse { 0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; } 50% { transform: translateY(-50%) scale(0.82); opacity: 0.45; } }
 
+/* Address-bar suggestions dropdown (history + running localhost servers).
+   The native browser view is nudged down (main: browserSuggestOffset) so this
+   HTML dropdown has room below the address bar instead of being clipped. */
+#addr-suggest {
+  position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 60;
+  background: var(--spec-header-bg);          /* shade 6 */
+  border: 1px solid var(--spec-structural);   /* shade 3 */
+  border-radius: 7px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  padding: 4px; max-height: 320px; overflow-y: auto;
+}
+#addr-suggest[hidden] { display: none; }
+.sg-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px; border-radius: 4px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 12px; color: var(--spec-text);   /* shade 0 */
+  overflow: hidden;
+}
+.sg-row.sel { background: var(--spec-structural); }   /* shade 3 highlight */
+.sg-ic { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sg-ic-server  { background: var(--accent); box-shadow: 0 0 5px color-mix(in srgb, var(--accent) 70%, transparent); }   /* running dev server */
+.sg-ic-history { background: var(--spec-text-faint); }   /* shade 2 — visited URL */
+.sg-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-sub {
+  flex: 0 0 auto; margin-left: 10px; padding-left: 10px;
+  color: var(--spec-text-dim); font-size: 11px;   /* shade 1 */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%;
+}
+
 #btn-reload {
   flex-shrink: 0;
   width: 34px; height: 34px;             /* square — matches the dropdown height */

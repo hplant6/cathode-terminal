@@ -65,6 +65,9 @@ const IPC = Object.freeze({
   BROWSER_TOGGLE_DEVTOOLS: 'browser-toggle-devtools',
   BROWSER_URL_CHANGED: 'browser-url-changed',
   BROWSER_LOADING: 'browser-loading',   // 'loading' | 'done' | 'error' for the address-bar indicator
+  BROWSER_HISTORY: 'browser-history',         // visited-URL history for address-bar suggestions
+  LOCALHOST_SERVERS: 'localhost-servers',     // running localhost dev servers (for address-bar autocomplete)
+  BROWSER_SUGGEST_SPACE: 'browser-suggest-space',   // nudge the browser view down so the suggestions dropdown isn't hidden
   CHECK_CLAUDE_AUTH: 'check-claude-auth',
   CHECK_MODEL: 'check-model',
   CHECK_WSL: 'check-wsl',

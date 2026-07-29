@@ -5126,11 +5126,94 @@ function renderTabs() {
 createTab('');
 document.getElementById('btn-new-tab')?.addEventListener('click', () => createTab(''));
 
-addressBar?.addEventListener('keydown', e => {
-  if (e.key === 'Enter')  { ipcRenderer.send(IPC.BROWSER_NAVIGATE, addressBar.value); addressBar.blur(); }
-  if (e.key === 'Escape') addressBar.blur();
-});
-addressBar?.addEventListener('focus', () => addressBar.select());
+// ── Address-bar suggestions (history + running localhost servers) ──
+(function initAddrSuggest() {
+  const box = document.getElementById('addr-suggest');
+  if (!addressBar || !box) return;
+
+  let history = [];      // [{ url, count, last }]
+  let servers = [];      // [{ port, name }]
+  let items   = [];      // current rendered rows
+  let sel     = -1;      // highlighted row index (-1 = none / use typed text)
+  let open    = false;
+  let lastPush = 0;      // last browser-view offset sent, to avoid redundant IPC
+
+  // Pull fresh data when the bar gains focus (servers probed once, not per keystroke).
+  async function refreshData() {
+    try { const h = await ipcRenderer.invoke(IPC.BROWSER_HISTORY);   history = (h && h.items)   || []; } catch (_) { history = []; }
+    try { const s = await ipcRenderer.invoke(IPC.LOCALHOST_SERVERS); servers = (s && s.servers) || []; } catch (_) { servers = []; }
+  }
+
+  function build(q) {
+    q = (q || '').trim().toLowerCase();
+    const portOf = {};   // port → project name, for nicer labels
+    try { loadProjects().forEach(p => (p.servers || []).forEach(s => { if (s.port) portOf[+s.port] = p.name; })); } catch (_) {}
+
+    const out = [], seen = new Set();
+    const add = it => { if (!seen.has(it.url)) { seen.add(it.url); out.push(it); } };
+
+    // Running localhost servers — the headline case. Always offered, filtered by query.
+    for (const s of servers) {
+      const host = 'localhost:' + s.port;
+      if (q && !host.includes(q) && !String(s.port).startsWith(q.replace(/\D/g, ''))) continue;
+      add({ url: 'http://' + host, label: host, sub: portOf[s.port] || prettyProc(s.name) || 'running', kind: 'server' });
+    }
+    // Visited history — matched anywhere in the URL; recent-first (already sorted).
+    for (const h of history) {
+      if (q && !h.url.toLowerCase().includes(q)) continue;
+      add({ url: h.url, label: h.url.replace(/^https?:\/\//, '').replace(/\/$/, ''), sub: '', kind: 'history' });
+      if (out.length >= 9) break;
+    }
+    return out.slice(0, 9);
+  }
+  const prettyProc = n => { n = String(n || '').toLowerCase().replace(/\.(exe|app)$/, ''); return n && n !== '?' ? n : ''; };
+
+  function render(q) {
+    items = build(q);
+    if (!items.length) { close(); return; }
+    if (sel >= items.length) sel = items.length - 1;
+    box.innerHTML = '';
+    items.forEach((it, i) => {
+      const row = document.createElement('div');
+      row.className = 'sg-row' + (i === sel ? ' sel' : '');
+      const ic = document.createElement('span'); ic.className = 'sg-ic sg-ic-' + it.kind; row.appendChild(ic);
+      const lb = document.createElement('span'); lb.className = 'sg-label'; lb.textContent = it.label; row.appendChild(lb);
+      if (it.sub) { const sb = document.createElement('span'); sb.className = 'sg-sub'; sb.textContent = it.sub; row.appendChild(sb); }
+      row.addEventListener('mousedown', e => { e.preventDefault(); go(it.url); });
+      row.addEventListener('mouseenter', () => { sel = i; paint(); });
+      box.appendChild(row);
+    });
+    show();
+  }
+  function paint() { [...box.children].forEach((r, i) => r.classList.toggle('sel', i === sel)); }
+
+  function show() {
+    box.hidden = false; open = true;
+    // Push the native browser view down so the dropdown isn't clipped behind it.
+    requestAnimationFrame(() => {
+      const h = box.offsetHeight + 6;
+      if (h !== lastPush) { lastPush = h; ipcRenderer.send(IPC.BROWSER_SUGGEST_SPACE, { height: h }); }
+    });
+  }
+  function close() {
+    if (!open && box.hidden) return;
+    box.hidden = true; open = false; sel = -1;
+    if (lastPush !== 0) { lastPush = 0; ipcRenderer.send(IPC.BROWSER_SUGGEST_SPACE, { height: 0 }); }
+  }
+  function go(url) { addressBar.value = url; close(); ipcRenderer.send(IPC.BROWSER_NAVIGATE, url); addressBar.blur(); }
+
+  // Focus selects the whole URL (about to be replaced), so show the browse menu:
+  // every running localhost server + recent history, unfiltered.
+  addressBar.addEventListener('focus', async () => { addressBar.select(); await refreshData(); render(''); });
+  addressBar.addEventListener('input', () => { sel = -1; render(addressBar.value); });
+  addressBar.addEventListener('blur', () => setTimeout(close, 150));   // let a row mousedown land first
+  addressBar.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { if (open) { e.preventDefault(); sel = Math.min(sel + 1, items.length - 1); paint(); } }
+    else if (e.key === 'ArrowUp') { if (open) { e.preventDefault(); sel = Math.max(sel - 1, -1); paint(); } }
+    else if (e.key === 'Enter') { const v = (open && sel >= 0) ? items[sel].url : addressBar.value.trim(); if (v) go(v); }   // typed value: main normalizes scheme (localhost→http, else https)
+    else if (e.key === 'Escape') { if (open) { e.preventDefault(); close(); } else addressBar.blur(); }
+  });
+})();
 document.getElementById('btn-reload')?.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_RELOAD));
 
 // ── Device emulation dropdown ─────────────────────────────────────

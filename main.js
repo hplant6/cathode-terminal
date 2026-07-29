@@ -106,9 +106,32 @@ function saveLastURL(url) {
   try { fs.writeFileSync(getStateFile(), JSON.stringify({ url })); } catch (e) { logErr('save last url', e); }
 }
 
+// ── Browser history (address-bar suggestions) ─────────────────────
+function getHistoryFile() {
+  return path.join(app.getPath('userData'), 'browser-history.json');
+}
+let _historyList = null;
+function loadHistoryList() {
+  if (_historyList) return _historyList;
+  try { _historyList = JSON.parse(fs.readFileSync(getHistoryFile(), 'utf8')) || []; }
+  catch (_) { _historyList = []; }
+  return _historyList;
+}
+function pushHistory(url) {
+  // Only real, top-level web navigations — skip blanks, SPA hash changes, data: URIs.
+  if (!url || url === 'about:blank' || !/^https?:\/\//i.test(url)) return;
+  const list = loadHistoryList();
+  const i = list.findIndex(e => e.url === url);
+  if (i >= 0) { list[i].count = (list[i].count || 1) + 1; list[i].last = Date.now(); }
+  else list.push({ url, count: 1, last: Date.now() });
+  if (list.length > 500) { list.sort((a, b) => (b.last || 0) - (a.last || 0)); list.length = 500; }
+  try { fs.writeFileSync(getHistoryFile(), JSON.stringify(list)); } catch (e) { logErr('save history', e); }
+}
+
 let mainWindow;
 let browserView;
 let browserLoadFailed = false;   // suppress the 'done' indicator when a load failed
+let browserSuggestOffset = 0;    // px to push the browser view down while the address-bar suggestions dropdown is open (so it isn't hidden behind the native view)
 let figmaView      = null;
 let storybookView  = null;
 let devToolsView   = null;  // WebContentsView hosting the embedded DevTools frontend
@@ -443,6 +466,7 @@ function createWindow() {
   browserView.webContents.on('did-navigate', (_, url) => {
     resetCDP();
     saveLastURL(url);
+    pushHistory(url);   // record for address-bar suggestions (top-level nav only)
     uiSend(IPC.BROWSER_URL_CHANGED, url);   // uiSend guards a destroyed window
     // Full navigation destroys the page context — any open tool result panel now
     // describes the OLD page. Tell the renderer to reset tools. (Not fired for
@@ -1371,6 +1395,39 @@ ipcMain.handle(IPC.SERVER_STATUS,  async (_, { ports } = {}) => {
   await Promise.all((Array.isArray(ports) ? ports : []).map(async p => { const sp = safePort(p); if (sp) running[sp] = await probePort(sp); }));
   return { running };
 });
+// Address-bar autocomplete: visited-URL history, most-recent first.
+ipcMain.handle(IPC.BROWSER_HISTORY, () =>
+  ({ items: loadHistoryList().slice().sort((a, b) => (b.last || 0) - (a.last || 0)).slice(0, 200) }));
+
+// Address-bar autocomplete: running localhost dev servers. Combines the host
+// port scan (names dev processes) with a probe of common dev ports — the probe
+// catches WSL-internal listeners the Windows scan can't see. Returns { port, name };
+// the renderer labels known ports with their project name from its own registry.
+const SUGGEST_DEV_NAME_RE = /^(node|nodejs|deno|bun|python|pythonw|py|ruby|php|java|javaw|dotnet|caddy|nginx|httpd|apache2|puma|gunicorn|uvicorn|rails|iisexpress|esbuild|vite|webpack|next)/i;
+const SUGGEST_COMMON_PORTS = [3000, 3001, 3002, 3003, 3333, 4000, 4173, 4200, 4321, 5000, 5100, 5173, 5174, 5175, 5273, 6006, 7000, 7070, 8000, 8080, 8081, 8888, 9000];
+ipcMain.handle(IPC.LOCALHOST_SERVERS, async () => {
+  const found = new Map();   // port -> process name ('' if only known via probe)
+  try {
+    const r = await platform.listPorts();
+    if (r && r.ok) for (const p of r.ports) {
+      const n = String(p.name || '').toLowerCase().replace(/\.(exe|app)$/, '');
+      if (SUGGEST_DEV_NAME_RE.test(n)) found.set(p.port, p.name || '');
+    }
+  } catch (_) {}
+  await Promise.all(SUGGEST_COMMON_PORTS.filter(p => !found.has(p)).map(async p => {
+    if (await probePort(p, 350)) found.set(p, '');
+  }));
+  return { servers: [...found.entries()].map(([port, name]) => ({ port, name })).sort((a, b) => a.port - b.port) };
+});
+
+// The suggestions dropdown pushes the native browser view down so it isn't hidden behind it.
+ipcMain.on(IPC.BROWSER_SUGGEST_SPACE, (_, { height } = {}) => {
+  const h = Math.max(0, Math.min(600, Math.round(height || 0)));
+  if (h === browserSuggestOffset) return;
+  browserSuggestOffset = h;
+  repositionBrowserView();
+});
+
 ipcMain.handle(IPC.SERVER_DETECT,  (_, { dir } = {}) => detectServers(dir));
 ipcMain.handle(IPC.SERVER_LOG,     (_, { id } = {}) => { const i = projectServers.get(id); return { log: (i && i.log) || '', status: (i && i.status) || 'never started' }; });
 
@@ -1561,8 +1618,11 @@ function repositionBrowserView(overrideFraction) {
   // single-pane browser → the browser sits right of the fixed left strip;
   // otherwise it follows the split (left-panel width + the divider gutter).
   const rightX  = singlePane === 'browser' ? (STRIP_W + 1) : (leftW + DIVIDER_GUTTER);   // +1 = right-column left inset (matches #right-panel padding-left)
-  const panelY = topOffset;   // flush with the browser chrome — no top gap
-  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset) - PAD;
+  // Address-bar suggestions push the view down so the dropdown (HTML) has room
+  // above the native browser view; 0 when the dropdown is closed.
+  const suggestPush = deviceEmulation ? 0 : browserSuggestOffset;
+  const panelY = topOffset + suggestPush;   // flush with the browser chrome — no top gap
+  const panelW = (availW - rightX) - PAD, panelH = (winH - topOffset - suggestPush) - PAD;
 
   if (deviceEmulation) {
     // Device emulation: viewport centered horizontally, top-anchored (like
