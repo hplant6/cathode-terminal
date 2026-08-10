@@ -9540,7 +9540,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const r = await ipcRenderer.invoke(IPC.SERVER_DETECT, { dir: project.rootDir });
       if (r && r.servers && r.servers.length) {
         updateProject(project.id, p => {
-          if (!p.servers || !p.servers.length) p.servers = r.servers.slice(0, 5).map((s, i) => ({ id: genId(), name: s.name, cmd: s.cmd, port: s.port || null, autostart: i === 0 }));
+          if (!p.servers || !p.servers.length) p.servers = r.servers.slice(0, 5).map(s => ({ id: genId(), name: s.name, cmd: s.cmd, port: s.port || null, autostart: true }));
         });
       }
     } catch (_) {}

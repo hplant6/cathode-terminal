@@ -1611,9 +1611,15 @@ function detectServers(dir) {
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
     const scripts = pkg.scripts || {};
     const prefer = ['dev', 'start', 'serve', 'preview', 'storybook'];
+    // One-shot tasks that compile/check and exit — never long-running servers. They
+    // otherwise slip through on their command ("build": "astro build" matches astro,
+    // "build-storybook" matches storybook) and get a guessed port that collides with
+    // the real dev server's. A "watch"/"serve"/"dev" flavour of one is still a server.
+    const oneShot = /(^|[:_-])(build|test|lint|format|typecheck|tsc|clean|deploy|release|publish|prepare|prepack|postinstall|check)([:_-]|$)/i;
     const out = [];
     for (const key of Object.keys(scripts)) {
       const val = scripts[key] || '';
+      if ((oneShot.test(key) || /\b(build|tsc)\b/.test(val)) && !/(watch|serve|dev)/i.test(key + ' ' + val)) continue;
       const serverish = prefer.includes(key) || /(dev|serve|start|storybook|watch|preview)/.test(key)
         || /(vite|next|astro|webpack(-dev-server)?|serve\b|storybook|nodemon|http-server|remix)/.test(val);
       if (!serverish) continue;
