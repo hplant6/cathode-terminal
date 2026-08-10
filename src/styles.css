@@ -2836,7 +2836,7 @@ html, body {
   border-radius: 0 0 var(--r-blob) var(--r-blob);   /* match footer so its bg doesn't fill the rounded corners */
 }
 /* Persistent update notification — a full-width band above the composer input, in the
-   secondary-button color. Click to update; the X dismisses it. No auto-dismiss. */
+   Accent 2 color. Click to update; the X dismisses it. No auto-dismiss. */
 #update-band {
   display: flex;
   align-items: center;
@@ -2844,9 +2844,9 @@ html, body {
   flex-shrink: 0;
   margin: 4px 8px 8px;
   padding: 8px 12px;
-  background: var(--btn-hover);        /* secondary button color */
+  background: var(--spec-accent-dark);   /* accent 2 */
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--spec-accent-dark);
   border-radius: 8px;
   font-size: 11.5px;
   font-weight: 600;
@@ -2854,17 +2854,17 @@ html, body {
   cursor: pointer;
   transition: background 0.12s ease;
 }
-#update-band:hover { background: var(--btn-active); }
+#update-band:hover { background: color-mix(in srgb, var(--spec-accent-dark), #fff 12%); }
 #update-band-text { flex: 1; }
 #update-band-x {
   flex: none;
   width: 20px; height: 20px; min-width: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 0;
-  background: transparent; border: none; color: var(--text-dim);
+  background: transparent; border: none; color: rgba(255,255,255,0.6);
   border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1;
 }
-#update-band-x:hover { background: rgba(255,255,255,0.10); color: var(--text); }
+#update-band-x:hover { background: rgba(255,255,255,0.12); color: #fff; }
 /* Drag a file over the composer → dashed accent overlay + "Drop to attach" hint. */
 #ui-input-area.drag-over::after {
   content: 'Drop to attach';
