@@ -751,6 +751,20 @@ function showToast(text, { spinner = false, duration = 0 } = {}) {
   return { dismiss, el };
 }
 
+// Project-switch banner (top of the left panel) — a switch stops and starts real
+// servers, so it gets a persistent notice rather than a transient toast.
+function showSwitchBanner(text) {
+  const el = document.getElementById('switch-banner');
+  const t  = document.getElementById('switch-banner-text');
+  if (!el || !t) return;
+  t.textContent = text;
+  el.hidden = false;
+}
+function hideSwitchBanner() {
+  const el = document.getElementById('switch-banner');
+  if (el) el.hidden = true;
+}
+
 function selectModel(modelId) {
   const s = sessions.get(activeId);
   const key = sessionToolKey(s);
@@ -9360,7 +9374,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const sharedRoot = from && to && pNorm(from.rootDir) === pNorm(to.rootDir);
     // Only announce when there's actual work — otherwise the toast just flashes.
     const busy = ((from && !sharedRoot && (from.servers || []).length) || (to && (to.servers || []).length));
-    const toast = busy ? showToast(`Switching to ${(to && to.name) || 'project'}…`, { spinner: true }) : null;
+    if (busy) showSwitchBanner(`Switching to ${(to && to.name) || 'project'}`);
     try {
       if (from && !sharedRoot) await pauseProjectServers(from);
       if (token !== _switchSeq) return;
@@ -9369,7 +9383,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       // Storybook only on a real switch — the initial activation has its own re-adopt path.
       if (from && to && typeof switchStorybookToProject === 'function') await switchStorybookToProject(to.rootDir);
     } finally {
-      if (toast) toast.dismiss();
+      if (busy) hideSwitchBanner();
     }
   }
 

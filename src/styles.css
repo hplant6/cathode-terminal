@@ -1601,6 +1601,28 @@ html, body {
 .acp-copy-btn:hover { color: var(--text); border-color: var(--accent); }
 .acp-copy-btn.copied { color: #4ade80; border-color: rgba(74,222,128,0.4); }
 /* ── Usage panel ── */
+/* Project-switch banner — full-width notice while a switch stops/starts servers. */
+#switch-banner {
+  display: none;
+  align-items: center; justify-content: space-between; gap: 16px;
+  flex: 0 0 auto;
+  margin: 10px 12px 0;
+  padding: 15px 20px;
+  background: var(--mc-green-dark);
+  color: var(--mc-green);
+  border-radius: 10px;
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.01em;
+}
+#switch-banner:not([hidden]) { display: flex; }
+#switch-banner-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#switch-banner-spinner {
+  flex: none; width: 32px; height: 32px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--mc-green) 22%, transparent);
+  border-top-color: var(--mc-green);
+  animation: switch-banner-spin 0.9s linear infinite;
+}
+@keyframes switch-banner-spin { to { transform: rotate(360deg); } }
+
 #usage-panel {
   /* Figma "dark" fill — top→bottom gradient (light-mode-ready via tokens) */
   background: linear-gradient(180deg, var(--spec-input-bg) 0%, var(--spec-header-bg) 100%);
