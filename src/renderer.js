@@ -4978,7 +4978,7 @@ let _wfWasEmpty = false;
 function updateWfEmpty() {
   const empty = projectTabActive() && browserIsBlank();
   wfEmpty.classList.toggle('visible', empty);
-  if (empty && !_wfWasEmpty) renderRecentList();   // populate the recents list when the empty state appears
+  if (empty && !_wfWasEmpty) refreshRunningServers();   // rescan for live dev servers when the empty state appears
   _wfWasEmpty = empty;
   // Nothing loaded → the pick tools have nothing to act on: show them inactive.
   document.getElementById('toolbar')?.classList.toggle('tools-inactive', empty);
@@ -4991,73 +4991,123 @@ function sendToAgent(text) {
   sendUiMessage();
 }
 
-// "From a folder" — list detected local projects (package.json in the home dir) and run one.
-function listDevProjects() {
-  try {
-    const fs = require('fs'), os = require('os'), path = require('path');
-    const entries = fs.readdirSync(os.homedir(), { withFileTypes: true });
-    const out = [];
-    for (const e of entries) {
-      if (!e.isDirectory() || e.name.startsWith('.')) continue;
-      const dir = path.join(os.homedir(), e.name);
-      try { const pkg = path.join(dir, 'package.json'); if (fs.existsSync(pkg)) out.push({ name: e.name, path: dir, mtime: fs.statSync(pkg).mtimeMs }); } catch (_) {}
-    }
-    out.sort((a, b) => b.mtime - a.mtime);
-    return out;
-  } catch (_) { return []; }   // never let a slow/odd home dir break module load
-}
 function startDevServer(dir) {
   sendToAgent(`Start the local dev server for the project at "${dir}". Detect the project type (Node/Vite/Next/etc.) and the correct dev command, pick a free localhost port, start it, and reply with the exact http://localhost:<port> URL so I can open it in the Browser. Just start it — don't ask me to confirm the folder.`);
 }
 
-const wfPromptIn   = document.getElementById('wf-prompt-in');
 const wfFigmaIn    = document.getElementById('wf-figma-in');
-const wfRecentList = document.getElementById('wf-recent-list');
+const wfLoadBtn    = document.getElementById('wf-load-running');
+const wfRunMenu    = document.getElementById('wf-running-menu');
+const wfProjectIn  = document.getElementById('wf-project');
+const wfFolderIn   = document.getElementById('wf-folder');
 
-// Folder tab — scrollable list of detected recent projects.
-function renderRecentList() {
-  wfRecentList.innerHTML = '';
-  const projects = listDevProjects();
-  if (!projects.length) {
-    const empty = document.createElement('div');
-    empty.className = 'wf-recent-empty';
-    empty.textContent = 'No projects found in your home folder — use Browse to pick one.';
-    wfRecentList.appendChild(empty);
-    return;
-  }
-  projects.forEach(p => {
-    const btn = document.createElement('button');
-    btn.className = 'wf-recent-item';
-    btn.textContent = p.path;
-    btn.title = p.path;
-    btn.addEventListener('click', () => startDevServer(p.path));
-    wfRecentList.appendChild(btn);
-  });
+function wfOpenPort(port) { ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + port); }
+
+// ── Hero: load a server that's already running ──
+// Scans localhost. One → load it. Several → pick from a list. None → inactive.
+let wfRunning = [];
+async function refreshRunningServers() {
+  if (!wfLoadBtn) return;
+  if (wfRunMenu) { wfRunMenu.hidden = true; wfRunMenu.innerHTML = ''; }
+  wfLoadBtn.disabled = true;
+  wfLoadBtn.textContent = 'Scanning for servers…';
+  let servers = [];
+  try { ({ servers } = await ipcRenderer.invoke(IPC.LOCALHOST_SERVERS)); } catch (_) {}
+  wfRunning = servers || [];
+  if (!wfRunning.length) { wfLoadBtn.textContent = 'No running server found'; return; }
+  wfLoadBtn.disabled = false;
+  wfLoadBtn.textContent = wfRunning.length === 1
+    ? `Load running server · :${wfRunning[0].port}`
+    : `Load running server (${wfRunning.length})`;
 }
-document.getElementById('wf-browse')?.addEventListener('click', async () => {
-  const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
-  if (dir) startDevServer(dir);
+wfLoadBtn?.addEventListener('click', () => {
+  if (wfLoadBtn.disabled) return;
+  if (wfRunning.length === 1) { wfOpenPort(wfRunning[0].port); return; }
+  if (!wfRunMenu) return;
+  if (!wfRunMenu.hidden) { wfRunMenu.hidden = true; return; }
+  wfRunMenu.innerHTML = '';
+  wfRunning.forEach(sv => {
+    const o = document.createElement('div');
+    o.className = 'es-run-opt';
+    o.textContent = `localhost:${sv.port}` + (sv.name ? ` · ${sv.name}` : '');
+    o.addEventListener('click', () => { wfRunMenu.hidden = true; wfOpenPort(sv.port); });
+    wfRunMenu.appendChild(o);
+  });
+  wfRunMenu.hidden = false;
 });
 
-// Tab switching — folder is the default; show one panel at a time.
-const wfTabs   = Array.from(document.querySelectorAll('#wf-empty .wf-tab'));
-const wfPanels = Array.from(document.querySelectorAll('#wf-empty .wf-tabpanel'));
-function setWfTab(name) {
-  wfTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  wfPanels.forEach(p => { p.hidden = p.dataset.panel !== name; });
-  if (name === 'folder') renderRecentList();
-  else if (name === 'prompt') wfPromptIn.focus();
-  else if (name === 'figma') wfFigmaIn.focus();
-  else if (name === 'repo') wfRepo.focus();
-}
-wfTabs.forEach(t => t.addEventListener('click', () => setWfTab(t.dataset.tab)));
+// ── Row 1: run a saved project's dev server (its manifest recipe — no agent) ──
+function wfProjects() { try { return JSON.parse(localStorage.getItem(LS.projects) || '[]'); } catch (_) { return []; } }
+let wfProject = null;
+(function initWfProjectCombo() {
+  const combo = document.getElementById('wf-project-combo');
+  if (!combo) return;
+  const menu = combo.querySelector('.es-combo-menu');
+  const setOpen = (v) => { menu.hidden = !v; };
+  function render() {
+    menu.innerHTML = '';
+    const list = wfProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+    if (!list.length) {
+      const e = document.createElement('div');
+      e.className = 'es-combo-empty';
+      e.textContent = 'No saved projects yet — open one from the project switcher.';
+      menu.appendChild(e);
+      return;
+    }
+    list.forEach(pr => {
+      const o = document.createElement('div');
+      o.className = 'es-combo-opt';
+      const n = document.createElement('span'); n.textContent = pr.name || pr.rootDir;
+      const d = document.createElement('span'); d.className = 'es-combo-dir'; d.textContent = pr.rootDir;
+      o.append(n, d);
+      o.addEventListener('click', () => { wfProject = pr; wfProjectIn.value = pr.rootDir; setOpen(false); });
+      menu.appendChild(o);
+    });
+  }
+  combo.addEventListener('click', (e) => {
+    if (e.target.closest('.es-combo-menu')) return;
+    if (menu.hidden) { render(); setOpen(true); } else setOpen(false);
+  });
+  document.addEventListener('mousedown', (e) => { if (!combo.contains(e.target)) setOpen(false); });
+})();
 
-// Build actions (prompt / figma / repo) — each fires a complete task.
-function wfPromptGo() {
-  const v = wfPromptIn.value.trim();
-  if (!v) { wfPromptIn.focus(); return; }
-  sendToAgent(`Build a new web app: ${v}. Use the Cathode design system / Storybook components where they fit, scaffold it (a Vite + React app is fine), start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Browser. Just build and run it — don't ask me to confirm.`);
-  wfPromptIn.value = '';
+// Poll until the port answers, so we navigate only once the server is actually up.
+async function wfWaitForPort(port, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const { running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports: [port] });
+      if (running && running[port]) return true;
+    } catch (_) {}
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return false;
+}
+document.getElementById('wf-project-run')?.addEventListener('click', async () => {
+  const btn = document.getElementById('wf-project-run');
+  if (!wfProject) { document.getElementById('wf-project-combo')?.click(); return; }
+  const srv = (wfProject.servers || [])[0];
+  if (!srv || !srv.cmd) { startDevServer(wfProject.rootDir); return; }   // no recipe yet → let the agent work it out
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Starting…';
+  const r = await ipcRenderer.invoke(IPC.SERVER_START, {
+    id: srv.id, projectId: wfProject.id, name: srv.name, cmd: srv.cmd,
+    cwd: wfProject.rootDir, port: srv.port, runIn: srv.runIn,
+  }).catch(() => null);
+  const port = (r && r.port) || srv.port;
+  if (port && await wfWaitForPort(port)) wfOpenPort(port);
+  btn.disabled = false; btn.textContent = label;
+});
+
+// ── Rows 2-4: hand the build off to the agent ──
+document.getElementById('wf-folder-pick')?.addEventListener('click', async () => {
+  const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
+  if (dir) wfFolderIn.value = dir;
+});
+wfFolderIn?.addEventListener('click', () => document.getElementById('wf-folder-pick')?.click());
+function wfFolderGo() {
+  const dir = wfFolderIn.value.trim();
+  if (!dir) { document.getElementById('wf-folder-pick')?.click(); return; }
+  startDevServer(dir);
 }
 function wfFigmaGo() {
   const v = wfFigmaIn.value.trim();
@@ -5071,10 +5121,9 @@ function wfCloneGo() {
   sendToAgent(`Clone the repository at ${repo} into my project folder, install its dependencies, and start its dev server on a free, open localhost port. When it's running, reply with the exact http://localhost:<port> URL so I can open it here in the Browser.`);
   wfRepo.value = '';
 }
-document.getElementById('wf-prompt-go')?.addEventListener('click', wfPromptGo);
+document.getElementById('wf-folder-go')?.addEventListener('click', wfFolderGo);
 document.getElementById('wf-figma-go')?.addEventListener('click', wfFigmaGo);
 document.getElementById('wf-clone-go')?.addEventListener('click', wfCloneGo);
-wfPromptIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfPromptGo(); } });
 wfFigmaIn.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfFigmaGo(); } });
 wfRepo.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); wfCloneGo(); } });
 
@@ -10248,11 +10297,12 @@ document.getElementById('sb-build-fw')?.addEventListener('click', () => buildSto
 document.getElementById('sb-build-project')?.addEventListener('click', () => buildStorybook({}));   // scaffold auto-detecting the project's framework
 document.getElementById('sb-folder')?.addEventListener('click', () => document.getElementById('sb-folder-pick')?.click());   // readonly folder input → open the picker
 
-// ── Storybook offline background — two undulating iridescent "cellophane" sheets ──
+// ── Empty-state background — two undulating iridescent "cellophane" sheets ──
 // Raw WebGL fragment shader (no dependency). Renders premultiplied-alpha over the
 // dark gradient, confined behind the hero, and only runs while the state is visible.
-(function initSbFx() {
-  const canvas = document.getElementById('sb-fx');
+// Shared by the Storybook and Browser empty states (one canvas each).
+function initEmptyStateFx(canvasId) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   let gl = null;
   try { gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true, depth: false }); } catch (_) {}
@@ -10302,12 +10352,12 @@ document.getElementById('sb-folder')?.addEventListener('click', () => document.g
     '}',
   ].join('\n');
 
-  function compile(type, src) { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.warn('[sb-fx]', gl.getShaderInfoLog(sh)); return sh; }
+  function compile(type, src) { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.warn('[es-fx]', gl.getShaderInfoLog(sh)); return sh; }
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
   gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(prog);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[sb-fx] link failed', gl.getProgramInfoLog(prog)); return; }
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[es-fx] link failed', gl.getProgramInfoLog(prog)); return; }
   gl.useProgram(prog);
 
   const buf = gl.createBuffer();
@@ -10350,7 +10400,9 @@ document.getElementById('sb-folder')?.addEventListener('click', () => document.g
     io.observe(canvas);
   } catch (_) { start(); }
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else if (canvas.offsetParent !== null) start(); });
-})();
+}
+initEmptyStateFx('sb-fx');   // Storybook offline hero
+initEmptyStateFx('wf-fx');   // Browser "add a server" hero
 
 // Storybook setup — the 3 ways (Start / Build / Connect) as tabs
 const sbTabs   = Array.from(document.querySelectorAll('#sb-setup .wf-tab'));

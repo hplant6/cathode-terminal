@@ -4409,16 +4409,13 @@ html, body {
 #wf-empty {
   display: none;
   position: absolute; inset: 0;
-  align-items: flex-start; justify-content: center;   /* top-aligned, horizontally centered */
-  padding: 50px 24px 24px; overflow-y: auto;
-  background: linear-gradient(var(--spec-dropdown-bg), var(--spec-header-bg));   /* shade 4 → shade 6 (top → bottom) */
+  flex-direction: column; align-items: stretch; justify-content: flex-start;
+  min-height: 0; padding: 0; overflow-y: auto;
+  background: #000;   /* pure black so the iridescent sheets blend into black (matches the Storybook empty state) */
 }
 #wf-empty.visible { display: flex; }
-.wf-empty-inner {
-  width: 100%; max-width: 720px;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-}
-.wf-title { font-family: var(--font-title); font-stretch: 112.5%; font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); margin: 0 0 8px; }
+/* Shared empty-state shell — the Storybook and Browser empty states are one system. */
+.es-inner, .wf-title { font-family: var(--font-title); font-stretch: 112.5%; font-size: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); margin: 0 0 8px; }
 .wf-desc { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: var(--text-dim); margin: 0 0 22px; max-width: 480px; }
 .wf-desc strong { color: var(--text); font-weight: 600; }
 /* tab-panel forms (prompt / figma / repo): dark input + orange Zalando button */
@@ -4645,37 +4642,53 @@ button:active { background: var(--btn-active); }
 #sb-setup .sb-ways-title, #sb-setup .sb-ways { display: none; }
 
 /* ── Storybook offline empty state ── */
-.sb-hero { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px 24px; overflow: hidden; }
-#sb-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
-.sb-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
-.sb-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; }
-.sb-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
-.sb-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
-.sb-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
+.es-hero { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px 24px; overflow: hidden; }
+.es-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
+.es-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+.es-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; }
+.es-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
+.es-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
+.es-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
 /* Inactive (starting / running): accent at 50% alpha, solid white text, no hover change. */
-.sb-hero-btn:disabled,
-.sb-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
+.es-hero-btn:disabled,
+.es-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
 /* Folder chooser under the Run button — pick which project's Storybook to run. */
-.sb-run-folder { margin-top: 12px; min-width: 440px; max-width: 90%; height: 40px; padding: 0 16px; text-align: center; text-overflow: ellipsis; background: color-mix(in srgb, var(--spec-input-bg) 65%, transparent); border: 1px solid var(--spec-structural); border-radius: 3px; color: #fff; font-family: var(--font-mono); font-size: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: border-color 0.12s; }
-.sb-run-folder::placeholder { color: var(--spec-text-dim); }
-.sb-run-folder:hover { border-color: var(--accent); }
-#sb-setup .sb-hero #sb-status { margin-top: 16px; }
+.es-run-folder { margin-top: 12px; min-width: 440px; max-width: 90%; height: 40px; padding: 0 16px; text-align: center; text-overflow: ellipsis; background: color-mix(in srgb, var(--spec-input-bg) 65%, transparent); border: 1px solid var(--spec-structural); border-radius: 3px; color: #fff; font-family: var(--font-mono); font-size: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: border-color 0.12s; }
+.es-run-folder::placeholder { color: var(--spec-text-dim); }
+.es-run-folder:hover { border-color: var(--accent); }
+#sb-setup .es-hero #sb-status { margin-top: 16px; }
 
-.sb-build-rows { display: flex; flex-direction: column; flex-shrink: 0; }
-.sb-build-row { display: grid; grid-template-columns: 220px 1fr 130px; gap: 20px; align-items: center; padding: 18px max(40px, calc((100% - 780px) / 2)); border-top: 1px solid var(--spec-structural); }
-.sb-build-label { font-family: var(--font-title); font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; }
-.sb-build-input { height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; outline: none; box-sizing: border-box; }
-.sb-build-input::placeholder { color: var(--spec-text-dim); }
-.sb-build-input:focus { border-color: var(--accent); }
-#sb-folder.sb-build-input { cursor: pointer; }
+.es-build-rows { display: flex; flex-direction: column; flex-shrink: 0; }
+.es-build-row { display: grid; grid-template-columns: 220px 1fr 130px; gap: 20px; align-items: center; padding: 18px max(40px, calc((100% - 780px) / 2)); border-top: 1px solid var(--spec-structural); }
+.es-build-label { font-family: var(--font-title); font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; }
+.es-build-input { height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; outline: none; box-sizing: border-box; }
+.es-build-input::placeholder { color: var(--spec-text-dim); }
+.es-build-input:focus { border-color: var(--accent); }
+#sb-folder.es-build-input { cursor: pointer; }
 #sb-folder-pick { display: none; }   /* kept only for its picker handler — never a grid cell (id beats any button display rule) */
-.sb-build-btn { height: 42px; background: var(--accent); border: none; border-radius: 3px; color: #fff; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s; }
-.sb-build-btn:hover { filter: brightness(1.08); }
-/* framework combo fills the input column, matching .sb-build-input */
-.sb-build-row .sb-fw-combo { position: relative; }
-.sb-build-row .sb-fw-combo input { width: 100%; height: 42px; padding: 0 34px 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; outline: none; box-sizing: border-box; }
-.sb-build-row .sb-fw-combo input:focus { border-color: var(--accent); }
-.sb-build-row .sb-fw-toggle { position: absolute; right: 4px; top: 0; bottom: 0; width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--spec-text-dim); cursor: pointer; }
+#wf-folder-pick { display: none; }   /* same: never a grid cell */
+#wf-folder.es-build-input, #wf-project { cursor: pointer; }
+.es-build-btn { height: 42px; background: var(--accent); border: none; border-radius: 3px; color: #fff; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s; }
+.es-build-btn:hover { filter: brightness(1.08); }
+/* Project combo in a build row (Run server from project) — matches .es-build-input. */
+.es-combo { position: relative; }
+.es-combo input { width: 100%; height: 42px; padding: 0 34px 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; outline: none; box-sizing: border-box; cursor: pointer; text-overflow: ellipsis; }
+.es-combo input:focus { border-color: var(--accent); }
+.es-combo-toggle { position: absolute; right: 4px; top: 0; bottom: 0; width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--spec-text-dim); cursor: pointer; }
+.es-combo-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: 240px; overflow-y: auto; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.55); }
+.es-combo-opt { padding: 9px 14px; font-family: var(--font-mono); font-size: 12px; color: var(--spec-text); cursor: pointer; }
+.es-combo-opt:hover { background: var(--btn-hover); }
+.es-combo-opt .es-combo-dir { display: block; color: var(--spec-text-dim); font-size: 10.5px; margin-top: 2px; }
+.es-combo-empty { padding: 10px 14px; font-family: var(--font-mono); font-size: 11.5px; color: var(--spec-text-dim); }
+/* Running-server picker under the hero button (shown when several are live). */
+.es-run-menu { margin-top: 12px; min-width: 440px; max-width: 90%; text-align: left; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 3px; overflow: hidden; }
+.es-run-opt { padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; color: #fff; cursor: pointer; }
+.es-run-opt:hover { background: var(--btn-hover); }
+/* framework combo fills the input column, matching .es-build-input */
+.es-build-row .sb-fw-combo { position: relative; }
+.es-build-row .sb-fw-combo input { width: 100%; height: 42px; padding: 0 34px 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; outline: none; box-sizing: border-box; }
+.es-build-row .sb-fw-combo input:focus { border-color: var(--accent); }
+.es-build-row .sb-fw-toggle { position: absolute; right: 4px; top: 0; bottom: 0; width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--spec-text-dim); cursor: pointer; }
 
 .sb-offline-foot { display: flex; align-items: center; justify-content: center; padding: 18px; border-top: 1px solid var(--spec-structural); background: var(--spec-header-bg); }
 .sb-offline-foot .sb-check-row { font-family: var(--font-mono); }

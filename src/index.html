@@ -694,13 +694,13 @@
         <div id="sb-setup">
           <div class="sb-inner">
             <button id="sb-back" class="sb-back-btn" hidden><svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.0498 10.75C15.0498 9.06558 13.6844 7.70018 12 7.70018H2.25C1.8634 7.70018 1.5498 7.38658 1.5498 6.99998C1.5498 6.61339 1.8634 6.29979 2.25 6.29979H12C14.4576 6.29979 16.4502 8.29239 16.4502 10.75C16.4502 13.2076 14.4576 15.2002 12 15.2002H8.25C7.8634 15.2002 7.5498 14.8866 7.5498 14.5C7.5498 14.1134 7.8634 13.7998 8.25 13.7998H12C13.6844 13.7998 15.0498 12.4344 15.0498 10.75Z"/><path d="M5.25488 3.00486C5.52824 2.73149 5.97174 2.73149 6.24511 3.00486C6.51848 3.27823 6.51848 3.72173 6.24511 3.99509L3.24023 6.99998L6.24511 10.0049C6.51848 10.2782 6.51848 10.7217 6.24511 10.9951C5.97174 11.2685 5.52824 11.2685 5.25488 10.9951L1.75488 7.49509C1.48151 7.22173 1.48151 6.77823 1.75488 6.50486L5.25488 3.00486Z"/></svg>Back to Storybook</button>
-            <div class="sb-hero">
-              <canvas id="sb-fx" aria-hidden="true"></canvas>
-              <div class="sb-hero-content">
-                <h2 class="sb-hero-title">Storybook<br/><span id="sb-hero-state">Offline</span></h2>
-                <p class="sb-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
-                <button id="sb-start" class="sb-hero-btn">Run existing storybook</button>
-                <input id="sb-run-folder" class="sb-run-folder" placeholder="Choose a storybook folder…" spellcheck="false" readonly/>
+            <div class="es-hero">
+              <canvas id="sb-fx" class="es-fx" aria-hidden="true"></canvas>
+              <div class="es-hero-content">
+                <h2 class="es-hero-title">Storybook<br/><span id="sb-hero-state">Offline</span></h2>
+                <p class="es-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
+                <button id="sb-start" class="es-hero-btn">Run existing storybook</button>
+                <input id="es-run-folder" class="es-run-folder" placeholder="Choose a storybook folder…" spellcheck="false" readonly/>
                 <input id="sb-url" type="hidden" value="http://localhost:6006"/>
                 <div id="sb-status" class="sb-status" hidden></div>
               </div>
@@ -727,20 +727,20 @@
               </button>
             </div>
 
-            <div class="sb-build-rows">
-              <div class="sb-build-row">
-                <span class="sb-build-label">Build from project</span>
-                <input id="sb-folder" class="sb-build-input" placeholder="Project folder" spellcheck="false" readonly/>
+            <div class="es-build-rows">
+              <div class="es-build-row">
+                <span class="es-build-label">Build from project</span>
+                <input id="sb-folder" class="es-build-input" placeholder="Project folder" spellcheck="false" readonly/>
                 <button id="sb-folder-pick" hidden></button>
-                <button id="sb-build-project" class="sb-build-btn">Build</button>
+                <button id="sb-build-project" class="es-build-btn">Build</button>
               </div>
-              <div class="sb-build-row">
-                <span class="sb-build-label">Build from figma</span>
-                <input id="sb-figma-url" class="sb-build-input" type="text" placeholder="Figma file URL" spellcheck="false"/>
-                <button id="sb-build" class="sb-build-btn">Build</button>
+              <div class="es-build-row">
+                <span class="es-build-label">Build from figma</span>
+                <input id="sb-figma-url" class="es-build-input" type="text" placeholder="Figma file URL" spellcheck="false"/>
+                <button id="sb-build" class="es-build-btn">Build</button>
               </div>
-              <div class="sb-build-row">
-                <span class="sb-build-label">Build from framework</span>
+              <div class="es-build-row">
+                <span class="es-build-label">Build from framework</span>
                 <div class="sb-fw-combo">
                   <input id="sb-framework" type="text" placeholder="Choose framework" spellcheck="false" autocomplete="off"/>
                   <button class="sb-fw-toggle" type="button" tabindex="-1" aria-label="Choose framework"><span class="ui-chev"></span></button>
@@ -759,7 +759,7 @@
                     <div class="sb-fw-opt" data-val="SvelteKit">SvelteKit</div>
                   </div>
                 </div>
-                <button id="sb-build-fw" class="sb-build-btn">Build</button>
+                <button id="sb-build-fw" class="es-build-btn">Build</button>
               </div>
             </div>
 
@@ -806,69 +806,42 @@
       <!-- WebContentsView is positioned over this area by the main process -->
       <div id="browser-placeholder">
         <div id="wf-empty">
-          <div class="wf-empty-inner">
-            <h2 class="wf-title">Target a project to work on</h2>
-            <p class="wf-desc">Point the Browser at a <strong>live site</strong> or a <strong>local dev server</strong> — then use the tools and your agent to inspect, edit, and iterate on it.</p>
-
-            <div class="wf-or"><span>Start a dev server</span></div>
-
-            <div class="wf-tabs" role="tablist">
-              <button class="wf-tab active" data-tab="folder">
-                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M1.75,7.75V3.75c0-.552,.448-1,1-1h3.797c.288,0,.563,.125,.753,.342l2.325,2.658"></path><rect x="1.75" y="5.75" width="14.5" height="9.5" rx="2" ry="2"></rect></svg>
-                <span>From a folder</span>
-              </button>
-              <button class="wf-tab" data-tab="prompt">
-                <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M5.68341 3.0149L4.42041 2.5939L3.99941 1.3309C3.86241 0.922902 3.18741 0.922902 3.05041 1.3309L2.62941 2.5939L1.36641 3.0149C1.16241 3.0829 1.02441 3.2739 1.02441 3.4889C1.02441 3.7039 1.16241 3.8949 1.36641 3.9629L2.62941 4.3839L3.05041 5.6469C3.11841 5.8509 3.31041 5.9889 3.52541 5.9889C3.74041 5.9889 3.93141 5.8509 4.00041 5.6469L4.42141 4.3839L5.68441 3.9629C5.88841 3.8949 6.02641 3.7039 6.02641 3.4889C6.02641 3.2739 5.88741 3.0829 5.68341 3.0149Z"/><path d="M9.52539 2.07471C9.81254 2.07473 10.0711 2.25012 10.1768 2.51709L11.9756 7.07275L16.5332 8.87354C16.8002 8.97921 16.9756 9.23774 16.9756 9.5249C16.9756 9.81207 16.8002 10.0706 16.5332 10.1763L11.9756 11.9761L10.1768 16.5327C10.0711 16.7997 9.81254 16.9751 9.52539 16.9751C9.23823 16.9751 8.9797 16.7997 8.87402 16.5327L7.07227 11.9771L2.51758 10.1763C2.25058 10.0706 2.0752 9.81207 2.0752 9.5249C2.0752 9.23774 2.25058 8.97921 2.51758 8.87354L7.07227 7.07178L8.87402 2.51709L8.9209 2.42139C9.04502 2.20901 9.27417 2.07471 9.52539 2.07471ZM8.26367 7.86963C8.19252 8.04943 8.04992 8.19203 7.87012 8.26318L4.67969 9.5249L7.87012 10.7866L7.99707 10.853C8.1164 10.9315 8.21028 11.0452 8.26367 11.1802L9.52441 14.3696L10.7861 11.1802C10.8573 11.0004 10.9999 10.8578 11.1797 10.7866L14.3701 9.5249L11.1797 8.26318C10.9999 8.19203 10.8573 8.04943 10.7861 7.86963L9.52441 4.6792L8.26367 7.86963Z"/></svg>
-                <span>From a prompt</span>
-              </button>
-              <button class="wf-tab" data-tab="figma">
-                <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/><path d="M2.5 6.5h13"/><path d="M6.5 6.5v9"/></svg>
-                <span>From Figma</span>
-              </button>
-              <button class="wf-tab" data-tab="repo">
-                <svg viewBox="0 0 18 18" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.2998 12.25V8.75C8.2998 8.3634 8.6134 8.0498 9 8.0498C9.3866 8.0498 9.7002 8.3634 9.7002 8.75V12.25C9.7002 12.6366 9.3866 12.9502 9 12.9502C8.6134 12.9502 8.2998 12.6366 8.2998 12.25Z"/><path d="M4.0498 6.75V5.75C4.0498 5.3634 4.3634 5.0498 4.75 5.0498C5.1366 5.0498 5.4502 5.3634 5.4502 5.75V6.75C5.4502 7.4684 6.0316 8.0498 6.75 8.0498H11.25C11.9684 8.0498 12.5498 7.4684 12.5498 6.75V5.75C12.5498 5.3634 12.8634 5.0498 13.25 5.0498C13.6366 5.0498 13.9502 5.3634 13.9502 5.75V6.75C13.9502 8.2416 12.7416 9.4502 11.25 9.4502H6.75C5.2584 9.4502 4.0498 8.2416 4.0498 6.75Z"/><path d="M6.0498 3.75C6.0498 3.03203 5.46797 2.4502 4.75 2.4502C4.03203 2.4502 3.4502 3.03203 3.4502 3.75C3.4502 4.46797 4.03203 5.0498 4.75 5.0498C5.46797 5.0498 6.0498 4.46797 6.0498 3.75ZM7.4502 3.75C7.4502 5.24117 6.24117 6.4502 4.75 6.4502C3.25883 6.4502 2.0498 5.24117 2.0498 3.75C2.0498 2.25883 3.25883 1.0498 4.75 1.0498C6.24117 1.0498 7.4502 2.25883 7.4502 3.75Z"/><path d="M14.5498 3.75C14.5498 3.03203 13.968 2.4502 13.25 2.4502C12.532 2.4502 11.9502 3.03203 11.9502 3.75C11.9502 4.46797 12.532 5.0498 13.25 5.0498C13.968 5.0498 14.5498 4.46797 14.5498 3.75ZM15.9502 3.75C15.9502 5.24117 14.7412 6.4502 13.25 6.4502C11.7588 6.4502 10.5498 5.24117 10.5498 3.75C10.5498 2.25883 11.7588 1.0498 13.25 1.0498C14.7412 1.0498 15.9502 2.25883 15.9502 3.75Z"/><path d="M10.2998 14.25C10.2998 13.532 9.71797 12.9502 9 12.9502C8.28203 12.9502 7.7002 13.532 7.7002 14.25C7.7002 14.968 8.28203 15.5498 9 15.5498C9.71797 15.5498 10.2998 14.968 10.2998 14.25ZM11.7002 14.25C11.7002 15.7412 10.4912 16.9502 9 16.9502C7.50883 16.9502 6.2998 15.7412 6.2998 14.25C6.2998 12.7588 7.50883 11.5498 9 11.5498C10.4912 11.5498 11.7002 12.7588 11.7002 14.25Z"/></svg>
-                <span>From a repo</span>
-              </button>
+          <div class="es-inner">
+            <div class="es-hero">
+              <canvas id="wf-fx" class="es-fx" aria-hidden="true"></canvas>
+              <div class="es-hero-content">
+                <h2 class="es-hero-title">Add a<br/>Server</h2>
+                <p class="es-hero-sub">point the browser at a live site or a local dev server.</p>
+                <button id="wf-load-running" class="es-hero-btn">Load running server</button>
+                <div id="wf-running-menu" class="es-run-menu" hidden></div>
+              </div>
             </div>
 
-            <div class="wf-panel">
-              <div class="wf-tabpanel" data-panel="folder">
-                <div class="wf-headline">pick a local project and run it.</div>
-                <div class="wf-subdesc">Choose a recent project or browse for a folder on your machine. Cathode opens it in the Browser so you can inspect and edit it with your agent.</div>
-                <div class="wf-folder-cols">
-                  <div class="wf-folder-recent">
-                    <div class="wf-col-label">Select a recent project</div>
-                    <div class="wf-recent-list" id="wf-recent-list"></div>
-                  </div>
-                  <div class="wf-folder-browse">
-                    <div class="wf-col-label">Or select a folder</div>
-                    <button class="wf-browse-btn" id="wf-browse">Browse</button>
-                  </div>
+            <div class="es-build-rows">
+              <div class="es-build-row">
+                <span class="es-build-label">Run server from project</span>
+                <div class="es-combo" id="wf-project-combo">
+                  <input id="wf-project" type="text" placeholder="Choose a project" spellcheck="false" autocomplete="off" readonly/>
+                  <button class="es-combo-toggle" type="button" tabindex="-1" aria-label="Choose project"><span class="ui-chev"></span></button>
+                  <div class="es-combo-menu" hidden></div>
                 </div>
+                <button id="wf-project-run" class="es-build-btn">Run</button>
               </div>
-              <div class="wf-tabpanel" data-panel="prompt" hidden>
-                <div class="wf-headline">describe it and generate it</div>
-                <div class="wf-subdesc">Describe the app you want and your agent scaffolds it from scratch. It starts the dev server and opens the result here in the Browser.</div>
-                <div class="wf-panel-form">
-                  <input id="wf-prompt-in" type="text" placeholder="Describe the app to build…" spellcheck="false" />
-                  <button id="wf-prompt-go">Generate</button>
-                </div>
+              <div class="es-build-row">
+                <span class="es-build-label">Build from folder</span>
+                <input id="wf-folder" class="es-build-input" placeholder="Choose a folder" spellcheck="false" readonly/>
+                <button id="wf-folder-pick" hidden></button>
+                <button id="wf-folder-go" class="es-build-btn">Build</button>
               </div>
-              <div class="wf-tabpanel" data-panel="figma" hidden>
-                <div class="wf-headline">build it from a Figma frame</div>
-                <div class="wf-subdesc">Paste a Figma file or frame link and your agent rebuilds it as a running web app. It reads the frames over the Figma MCP and recreates them with your design system.</div>
-                <div class="wf-panel-form">
-                  <input id="wf-figma-in" type="text" placeholder="Paste a Figma file or frame link" spellcheck="false" />
-                  <button id="wf-figma-go">Build</button>
-                </div>
+              <div class="es-build-row">
+                <span class="es-build-label">Build from figma</span>
+                <input id="wf-figma-in" class="es-build-input" type="text" placeholder="Paste figma link" spellcheck="false"/>
+                <button id="wf-figma-go" class="es-build-btn">Build</button>
               </div>
-              <div class="wf-tabpanel" data-panel="repo" hidden>
-                <div class="wf-headline">clone a repo and run it</div>
-                <div class="wf-subdesc">Paste a Git URL and your agent clones the repo, installs its dependencies, and starts the dev server. When it's live, the app opens in the Browser.</div>
-                <div class="wf-panel-form">
-                  <input id="wf-repo" type="text" placeholder="https://github.com/owner/repo.git" spellcheck="false" />
-                  <button id="wf-clone-go">Clone &amp; run</button>
-                </div>
+              <div class="es-build-row">
+                <span class="es-build-label">Build from repo</span>
+                <input id="wf-repo" class="es-build-input" type="text" placeholder="Paste github link" spellcheck="false"/>
+                <button id="wf-clone-go" class="es-build-btn">Build</button>
               </div>
             </div>
           </div>
