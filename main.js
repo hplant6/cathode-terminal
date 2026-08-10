@@ -1335,7 +1335,9 @@ ipcMain.handle(IPC.STORYBOOK_DETECT, (_, { dir } = {}) => {
 });
 
 const sbStartingDirs = new Set();   // dirs with a start in flight (pre-registry await window)
-ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
+// Find + (if needed) start the Storybook for a folder, activating it when ready.
+// Shared by the Run button and the auto-start-on-project-switch path.
+async function startStorybookForDir(dir, port) {
   const rootDir = sbResolveDir(dir);
   // Search the picked folder (and its subfolders) for the Storybook — the user
   // may point at a repo/monorepo root while the config lives in a package.
@@ -1361,7 +1363,8 @@ ipcMain.handle(IPC.STORYBOOK_SERVER_START, async (_, { dir, port } = {}) => {
   } finally {
     sbStartingDirs.delete(projectDir);
   }
-});
+}
+ipcMain.handle(IPC.STORYBOOK_SERVER_START, (_, { dir, port } = {}) => startStorybookForDir(dir, port));
 
 async function sbStartServer(projectDir, bin, port) {
   ensurePreviewHead(projectDir);   // step 4: app-owned preview styling
@@ -1455,6 +1458,10 @@ ipcMain.handle(IPC.STORYBOOK_PROJECT_SWITCH, (_, { dir } = {}) => {
   }
   if (match) { setActiveStorybook(match.id); return { connected: true, url: match.url, managed: match.managed }; }
   if (activeSbId) { destroyStorybookView(); activeSbId = null; emitInstances(); }
+  // Nothing live for this project — auto-start it if the folder actually has a
+  // runnable Storybook. Fire-and-forget: status events drive the UI (Starting →
+  // ready auto-connects). Otherwise the renderer shows the offline setup.
+  if (dir && sbFindStorybook(dir)) { startStorybookForDir(dir).catch(() => {}); return { starting: true }; }
   return { connected: false };
 });
 
