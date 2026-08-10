@@ -455,10 +455,12 @@ html, body {
 .mc-rows { display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
 .mc-rows-empty { font-family: var(--font-mono); font-size: 11px; opacity: 0.4; padding: 12px 0; }
 .mc-row { border-bottom: 1px solid #1A191C; }
-/* Autostart toggle — lit when this server starts on switch into the project. */
-.mc-row-auto { opacity: 0.45; }
-.mc-row-auto:hover { opacity: 1; }
-.mc-row-auto[data-on="1"] { opacity: 1; color: var(--accent); }
+/* Autostart column — the app's standard LED toggle in the server table. */
+.mc-row-auto { display: flex; align-items: center; }
+/* Project memory total, under the card header. */
+.mc-ramtotal { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 0; font-family: var(--font-mono); font-size: 12px; }
+.mc-ramtotal-k { font-weight: 700; text-transform: uppercase; color: var(--spec-text-faint); }
+.mc-ramtotal-v { color: var(--spec-text-dim); }
 .mc-row-status { display: flex; align-items: center; gap: 7px; }
 .mc-row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--spec-text-faint); }
 .mc-row.up .mc-row-dot { background: var(--mc-green); }
