@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-10
+
+### Added
+- **Projects start and stop their own servers.** Switching projects now tears the old one down and brings the new one up as a single sequence: the project you leave is fully stopped, then the project you enter restores whatever was running when you left — or, on a cold start, starts the servers you've marked **Autostart**. The Browser then follows, waiting until the port actually answers before navigating, so it never lands on a refused connection.
+- **Autostart column in Mission Control.** Each server has a toggle for "start this when I switch to this project", stored in the project manifest so it travels with a `.cathode` export.
+- **Servers Cathode didn't start are adopted on switch.** A dev server the agent launched inside the project folder is attributed to it by working directory and stopped with the project, so "power down" is actually complete.
+- **A switch banner** covers the views bar while servers stop and start — it reports progress and blocks changing project mid-switch.
+- **Project memory total** on the Mission Control card, replacing per-server RAM with the number that answers "what is this project costing me?".
+
+### Changed
+- **The Browser empty state is a flat "Add a server" screen**, matching the Storybook empty state — the same hero and animated backdrop over four rows: run a saved project's server, or build from a folder, a Figma link, or a repo. Build-from-folder is now its own row and "from a prompt" is gone. Both empty states share one set of styles, so they can't drift apart.
+- **The running/active greens are themeable.** `--mc-green` / `--mc-green-dark` were fixed values; they're now theme tokens ("Running" / "Running Field") with a pair in all nine presets, so the switch banner and every Mission Control running indicator follow the active theme.
+
+### Fixed
+- **Build scripts are no longer detected as servers.** A script counted as a server if its command merely mentioned a framework, so `"build": "astro build"` was captured via *astro* and `build-storybook` via *storybook* — both one-shot tasks, handed guessed ports that collided with the real dev server's.
+- **Servers no longer survive a project switch.** Teardown skipped any server without a recorded port, and started the new project's servers without waiting for the old ones to die — so they raced for ports and were silently relocated.
+- **Update notifications were never clickable.** The toast stack is `pointer-events: none`, which every toast inherited; toasts also rendered behind modal overlays, so anything fired from Mission Control was invisible.
+
 ## [1.6.0] - 2026-08-10
 
 ### Added
