@@ -4625,6 +4625,10 @@ button:active { background: var(--btn-active); }
 /* Inactive (starting / running): accent at 50% alpha, solid white text, no hover change. */
 .sb-hero-btn:disabled,
 .sb-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
+/* Folder chooser under the Run button — pick which project's Storybook to run. */
+.sb-run-folder { margin-top: 12px; min-width: 440px; max-width: 90%; height: 40px; padding: 0 16px; text-align: center; text-overflow: ellipsis; background: color-mix(in srgb, var(--spec-input-bg) 65%, transparent); border: 1px solid var(--spec-structural); border-radius: 3px; color: #fff; font-family: var(--font-mono); font-size: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: border-color 0.12s; }
+.sb-run-folder::placeholder { color: var(--spec-text-dim); }
+.sb-run-folder:hover { border-color: var(--accent); }
 #sb-setup .sb-hero #sb-status { margin-top: 16px; }
 
 .sb-build-rows { display: flex; flex-direction: column; flex-shrink: 0; }

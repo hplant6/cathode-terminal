@@ -9188,6 +9188,7 @@ function renderSbTab() {
   // opened New Storybook while another is running), "Offline" when nothing is.
   const heroState = document.getElementById('sb-hero-state');
   if (heroState) heroState.textContent = hasLive ? 'Online' : 'Offline';
+  syncSbRunFolder();   // keep the hero folder chooser in step with #sb-folder
   const bar = document.getElementById('sb-bar');
   if (bar) bar.hidden = !(here && hasLive && !showSetup);
   document.getElementById('sb-setup').style.display     = (here && showSetup) ? 'flex' : 'none';
@@ -10073,10 +10074,23 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   renderSbSetup();
 })();
 
-document.getElementById('sb-folder-pick')?.addEventListener('click', async () => {
+// Mirror the single folder source (#sb-folder) into the hero chooser under the Run button.
+function syncSbRunFolder() {
+  const f = document.getElementById('sb-folder'), r = document.getElementById('sb-run-folder');
+  if (f && r) r.value = f.value;
+}
+// Shared folder-dialog flow for both the build-row input and the hero chooser.
+async function pickSbFolder() {
   const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);
-  if (dir) { document.getElementById('sb-folder').value = dir; detectStorybook(); }
-});
+  if (!dir) return;
+  document.getElementById('sb-folder').value = dir;
+  syncSbRunFolder();
+  detectStorybook();
+  const b = document.getElementById('sb-start');   // clear a stale error so a new folder re-invites a Run
+  if (b && b.dataset.state === 'error') { b.textContent = SB_RUN_LABEL; b.disabled = false; b.dataset.state = ''; }
+}
+document.getElementById('sb-folder-pick')?.addEventListener('click', pickSbFolder);   // hidden picker behind the build-row input
+document.getElementById('sb-run-folder')?.addEventListener('click', pickSbFolder);    // hero chooser under the Run button
 
 document.getElementById('sb-connect')?.addEventListener('click', async () => {
   const url  = document.getElementById('sb-url').value.trim();
