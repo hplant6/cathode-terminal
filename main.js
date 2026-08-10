@@ -1383,7 +1383,10 @@ async function sbStartServer(projectDir, bin, port) {
     // a .cmd/.bat launcher directly (the CVE-2024-27980 fix). platform.cmdSpawn runs
     // the bin verbatim on POSIX. windowsHide keeps the console window from flashing.
     proc = platform.cmdSpawn(['/c', bin, 'dev', '-p', String(usePort), '--ci'], {
-      cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      // detached → own process group for the POSIX group-kill; on Windows it forces a
+      // visible console window (and defeats windowsHide), so keep it off there — the
+      // taskkill /T stop path kills the tree by PID without needing a group.
+      cwd: projectDir, detached: !IS_WIN_HOST, stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       env: { ...process.env, BROWSER: 'none' },
     });
