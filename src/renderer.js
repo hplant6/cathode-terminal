@@ -10122,18 +10122,24 @@ document.getElementById('sb-url')?.addEventListener('keydown', e => {
 // ── Managed Storybook server: Start button + live status (auto-connects when ready) ──
 const sbStartBtn = document.getElementById('sb-start');
 const sbStatusEl = document.getElementById('sb-status');
+const SB_RUN_LABEL = 'Run existing storybook';
 sbStartBtn?.addEventListener('click', () => {
+  if (sbStartBtn.disabled) return;                 // starting/running: no-op. Error stays clickable → retry.
+  if (sbStatusEl) sbStatusEl.hidden = true;        // clear any lingering build-flow message
   ipcRenderer.invoke(IPC.STORYBOOK_SERVER_START, { dir: document.getElementById('sb-folder').value.trim() }).catch(() => {});
 });
 ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {}) => {
   if (log && (state === 'error' || (state === 'stopped'))) console.warn('[storybook server]', message || '', '\n' + log);
-  if (sbStatusEl) {
-    const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Failed to start', stopped: 'Storybook stopped' };
-    sbStatusEl.textContent = labels[state] || '';
-    sbStatusEl.dataset.state = state || '';
-    sbStatusEl.hidden = !state;
+  // The Run button IS the status surface now — its label reflects the run state.
+  if (sbStartBtn) {
+    const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Couldn’t start — click to retry', stopped: SB_RUN_LABEL };
+    sbStartBtn.textContent = labels[state] || SB_RUN_LABEL;
+    // Inactive while starting and once running; on error it stays active so it
+    // doubles as Retry (otherwise the error strands the user with no way back).
+    sbStartBtn.disabled = state === 'starting' || state === 'ready';
+    sbStartBtn.dataset.state = state || '';
   }
-  if (sbStartBtn) { sbStartBtn.disabled = state === 'starting'; sbStartBtn.textContent = state === 'starting' ? 'Starting…' : 'Run existing storybook'; }
+  if (sbStatusEl && state) sbStatusEl.hidden = true;   // status lives in the button, not the separate line
   if (state === 'ready' && url) {
     // main already loaded the live view — mirror the manual Connect tail so the picker + memory are wired up
     document.getElementById('sb-url').value = url;
