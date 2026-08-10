@@ -10136,7 +10136,7 @@ ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {
   if (log && (state === 'error' || (state === 'stopped'))) console.warn('[storybook server]', message || '', '\n' + log);
   // The Run button IS the status surface now — its label reflects the run state.
   if (sbStartBtn) {
-    const labels = { starting: 'Starting Storybook…', ready: 'Storybook running', error: message || 'Couldn’t start — click to retry', stopped: SB_RUN_LABEL };
+    const labels = { starting: 'Starting Storybook…', ready: 'Storybook is running', error: message || 'Couldn’t start — click to retry', stopped: SB_RUN_LABEL };
     sbStartBtn.textContent = labels[state] || SB_RUN_LABEL;
     // Inactive while starting and once running; on error it stays active so it
     // doubles as Retry (otherwise the error strands the user with no way back).

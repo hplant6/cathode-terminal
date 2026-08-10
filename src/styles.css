@@ -4622,7 +4622,9 @@ button:active { background: var(--btn-active); }
 .sb-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
 .sb-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
 .sb-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
-.sb-hero-btn:disabled { opacity: 0.7; cursor: default; }
+/* Inactive (starting / running): accent at 50% alpha, solid white text, no hover change. */
+.sb-hero-btn:disabled,
+.sb-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
 #sb-setup .sb-hero #sb-status { margin-top: 16px; }
 
 .sb-build-rows { display: flex; flex-direction: column; flex-shrink: 0; }
