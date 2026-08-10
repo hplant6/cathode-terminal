@@ -6,12 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-10
+
+### Added
+- **The Storybook now follows the active project.** Switching projects switches the Storybook with it: the previous project's managed Storybook is stopped, and the project you land on either reconnects to its live Storybook or — if it has one that isn't running — **starts it automatically**. Projects without a Storybook show their own offline setup, so the panel never sits on another project's Storybook.
+- **Storybook folder chooser in the offline hero.** A folder input beneath the Run button picks which project's Storybook to run, so you can change folders (and escape a "no Storybook here" state) without digging into the build rows. It shares one source with **Build from Project**, and choosing a folder clears a stale error.
+- **Quit confirmation while a Storybook / dev server is running under Cathode.** Closing the window when the app is hosting a managed Storybook or dev server now asks first (it would otherwise stop them silently). Anything launched in an external terminal is unaffected and the dialog says so.
+
+### Changed
+- **Storybook runs silently on Windows — no console window.** The managed Storybook was spawned `detached`, which forces its own terminal window on Windows (and overrides `windowsHide`); closing that window killed the Storybook. It now runs hidden as a background child of the app, fully under Cathode's lifecycle.
+- **The Run button is the Storybook's status surface.** Its label reflects the run state — *Starting Storybook… / Storybook is running / the error* — instead of a separate status line. It's inactive while starting and once running (accent at 50% alpha, solid white text, no hover), and stays active on an error so it doubles as **Retry**.
+- **The offline hero title reflects reality** — "Storybook **Online**" when one is live (e.g. opening *New Storybook* while another runs), "Offline" only when nothing is.
+- **Update notifications are now a persistent band above the composer** instead of a timed toast: full width, in the Accent 2 color, click to update, with an **✕** to dismiss. It no longer disappears on a timer.
+
 ### Fixed
 - **"Run existing storybook" no longer fails with `spawn EINVAL` on Windows.** The managed server spawned the `storybook.cmd` launcher directly, which modern Node rejects (the CVE-2024-27980 fix); it now launches through `cmd.exe`, matching every other Windows command in the app. Detection already found the Storybook — only the launch was broken.
 - **Stopping a Storybook on Windows now kills the whole process tree** (`taskkill /T`) instead of only the `cmd.exe` wrapper, so the underlying node/storybook process is no longer orphaned.
-
-### Added
-- **Quit confirmation while a Storybook / dev server is running under Cathode.** Closing the window when the app is hosting a managed Storybook or dev server now asks first (it would otherwise stop them silently). Anything launched in an external terminal is unaffected and the dialog says so.
+- **Update notifications were never clickable.** The toast stack is `pointer-events: none`, which every toast inherited — so "click to update" couldn't be clicked and showed no pointer cursor.
+- **A stray "Clear" ✕ floated in the Storybook offline hero.** The clearable-input wiring still targeted `#sb-url`, which the redesign turned into a hidden field holding the localhost URL.
+- **The offline hero title is centered.** Its `max-width: 8ch` was narrower than the word "STORYBOOK", so the word overflowed its own centered box and pulled the title off-center.
+- **A failed Storybook launch reads clearly** — the raw "No Storybook found in `<path>` — build one with your agent first." error is now a plain **"No Storybook found, try again?"** on the button.
 
 ## [1.5.1] - 2026-07-29
 
