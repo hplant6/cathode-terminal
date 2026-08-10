@@ -447,7 +447,7 @@ html, body {
 
 /* Active card — server table */
 .mc-table { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.mc-thead, .mc-row { display: grid; grid-template-columns: 140px 80px 84px 1fr auto; align-items: center; padding: 11px 0; }
+.mc-thead, .mc-row { display: grid; grid-template-columns: 100px 80px 72px 1fr auto; column-gap: 14px; align-items: center; padding: 11px 0; }
 .mc-thead { border-bottom: 1px solid #212026; }
 .mc-thead > span { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--spec-text-faint); }
 .mc-startall { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--accent); background: transparent; border: none; cursor: pointer; padding: 0; white-space: nowrap; justify-self: end; }
