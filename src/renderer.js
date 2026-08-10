@@ -9184,6 +9184,10 @@ function renderSbTab() {
   const here     = onStorybookTab();
   const hasLive  = sbInstances.length > 0;
   const showSetup = sbSetupOpen || !hasLive;
+  // The hero title reflects reality: "Storybook Online" when one is live (e.g. you
+  // opened New Storybook while another is running), "Offline" when nothing is.
+  const heroState = document.getElementById('sb-hero-state');
+  if (heroState) heroState.textContent = hasLive ? 'Online' : 'Offline';
   const bar = document.getElementById('sb-bar');
   if (bar) bar.hidden = !(here && hasLive && !showSetup);
   document.getElementById('sb-setup').style.display     = (here && showSetup) ? 'flex' : 'none';
