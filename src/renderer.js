@@ -727,9 +727,9 @@ function ensureSessionModel() {
 
 // ── Toasts ────────────────────────────────────────────────────────
 const toastStack = document.getElementById('toast-stack');
-function showToast(text, { spinner = false, duration = 0 } = {}) {
+function showToast(text, { spinner = false, duration = 0, variant = '' } = {}) {
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'toast' + (variant ? ' toast--' + variant : '');
   if (spinner) {
     const sp = document.createElement('div');
     sp.className = 'toast-spinner';
@@ -7482,9 +7482,8 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     : (behind
       ? `↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`
       : '↑ Update available — click to update');
-  const t = showToast(msg, { duration: 9000 });
+  const t = showToast(msg, { duration: 9000, variant: 'button' });
   if (t && t.el) {
-    t.el.style.cursor = 'pointer';
     t.el.addEventListener('click', () => { ipcRenderer.send(IPC.APP_CHECK_UPDATES); t.dismiss(); });
   }
 });
@@ -7524,8 +7523,8 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     installBtn.disabled = false;
     document.getElementById('btn-settings')?.classList.add('has-update');
     if (!dismissed) { modal.classList.add('open'); return; }   // ready while dismissed → non-intrusive toast that reopens it
-    const t = showToast('↑ Update ready — click to install', { duration: 9000 });
-    if (t && t.el) { t.el.style.cursor = 'pointer'; t.el.addEventListener('click', () => { open(); t.dismiss(); }); }
+    const t = showToast('↑ Update ready — click to install', { duration: 9000, variant: 'button' });
+    if (t && t.el) { t.el.addEventListener('click', () => { open(); t.dismiss(); }); }
   });
   ipcRenderer.on(IPC.UPDATE_ERROR, (_, e) => {
     if (!modal.classList.contains('open')) return;
