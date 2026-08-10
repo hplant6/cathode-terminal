@@ -963,6 +963,14 @@ const sbServers = new Map();   // id → { id, proc, port, url, dir, label, stat
 let activeSbId = null, sbSeq = 0, sbSetupOpen = false;
 
 function sbLabel(dir) { return !dir ? '' : (dir === SB_DEMO_DIR ? 'Demo' : (path.basename(dir.replace(/[\\/]+$/, '')) || 'Storybook')); }
+// Is `child` the same as, or nested inside, `parent`? (case-insensitive, separator-agnostic —
+// a Storybook's config dir can be a subfolder of the project root, e.g. in a monorepo.)
+function sbDirInside(parent, child) {
+  if (!parent || !child) return false;
+  const norm = p => p.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase();
+  const a = norm(parent), b = norm(child);
+  return b === a || b.startsWith(a + '/');
+}
 function sbSerialize() {
   return [...sbServers.values()].map(s => ({ id: s.id, port: s.port, url: s.url, label: s.label, status: s.status, managed: s.managed, active: s.id === activeSbId }));
 }
@@ -1422,18 +1430,33 @@ function safePort(port) {
   const n = Number(port);
   return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
 }
-function adoptPort(port) {
+function adoptPort(port, dir = '') {
   port = safePort(port);
   if (port === null) return null;
-  for (const s of sbServers.values()) if (s.port === port) { setActiveStorybook(s.id); return s; }
+  for (const s of sbServers.values()) if (s.port === port) { if (dir && !s.dir) s.dir = dir; setActiveStorybook(s.id); return s; }
   const id = 'sb' + (++sbSeq);
-  const inst = { id, proc: null, port, url: `http://localhost:${port}`, dir: '', label: 'Port ' + port, status: 'ready', log: '', managed: false };
+  // Record the project dir so an adopted external Storybook can still follow its project.
+  const inst = { id, proc: null, port, url: `http://localhost:${port}`, dir: dir || '', label: 'Port ' + port, status: 'ready', log: '', managed: false };
   sbServers.set(id, inst);
   setActiveStorybook(id);
   return inst;
 }
 ipcMain.handle(IPC.STORYBOOK_SCAN,  async () => ({ found: await scanPorts(new Set([...sbServers.values()].map(s => s.port))) }));
-ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port } = {}) => { const i = adoptPort(port); return i ? { ok: true, id: i.id, url: i.url } : { ok: false, error: 'invalid-port' }; });
+ipcMain.handle(IPC.STORYBOOK_ADOPT, (_, { port, dir } = {}) => { const i = adoptPort(port, dir); return i ? { ok: true, id: i.id, url: i.url } : { ok: false, error: 'invalid-port' }; });
+
+// Storybook follows the active project: stop managed Storybooks that don't belong to
+// the project we're switching into, then auto-connect that project's live Storybook
+// (its own running/adopted instance) if there is one — else the view is hidden and the
+// renderer shows that project's offline setup.
+ipcMain.handle(IPC.STORYBOOK_PROJECT_SWITCH, (_, { dir } = {}) => {
+  const match = [...sbServers.values()].find(s => s.status === 'ready' && s.dir && sbDirInside(dir, s.dir));
+  for (const s of [...sbServers.values()]) {
+    if (s.managed && (!match || s.id !== match.id) && !(s.dir && sbDirInside(dir, s.dir))) stopInstance(s.id);
+  }
+  if (match) { setActiveStorybook(match.id); return { connected: true, url: match.url, managed: match.managed }; }
+  if (activeSbId) { destroyStorybookView(); activeSbId = null; emitInstances(); }
+  return { connected: false };
+});
 
 // ── Project dev servers (multi-project workspaces, Increment 2) ────
 // App-managed dev servers per project. Spawned in the agent env

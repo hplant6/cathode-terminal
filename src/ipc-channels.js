@@ -200,6 +200,7 @@ const IPC = Object.freeze({
   SINGLE_PANE: 'single-pane',
   SPLIT_CHANGED: 'split-changed',
   STORYBOOK_ADOPT: 'storybook-adopt',
+  STORYBOOK_PROJECT_SWITCH: 'storybook-project-switch',   // storybook follows the active project
   STORYBOOK_CLEAR_MEMORY: 'storybook-clear-memory',
   STORYBOOK_DETECT: 'storybook-detect',
   STORYBOOK_DISCONNECT: 'storybook-disconnect',

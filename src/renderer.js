@@ -9280,6 +9280,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
     updateChip();
     if (typeof onProjectChanged === 'function') onProjectChanged();   // swap the visible session tabs to this project
+    // Storybook follows the project — only on a real switch (not the initial activation,
+    // which has its own re-adopt path).
+    if (switching && leaving && typeof switchStorybookToProject === 'function') switchStorybookToProject(entry.rootDir);
   }
 
   function removeProject(id) {
@@ -10068,7 +10071,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   if (m) {   // re-adopt the remembered Storybook only if it's actually still up
     try {
       const { found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN);
-      if ((found || []).some(f => f.port === +m[1])) { await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] }); return; }
+      if ((found || []).some(f => f.port === +m[1])) { await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1], dir: (sbConfig && sbConfig.projectDir) || '' }); return; }
     } catch (_) {}
   }
   renderSbSetup();
@@ -10078,6 +10081,26 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
 function syncSbRunFolder() {
   const f = document.getElementById('sb-folder'), r = document.getElementById('sb-run-folder');
   if (f && r) r.value = f.value;
+}
+// Storybook follows the active project: point the folder at the new project, then either
+// connect to its live Storybook (main tells us) or drop to its offline setup. main has
+// already stopped the project we left. Only runs on a real project switch.
+async function switchStorybookToProject(dir) {
+  const folder = document.getElementById('sb-folder');
+  if (folder) folder.value = dir || '';
+  syncSbRunFolder();
+  let r = null;
+  try { r = await ipcRenderer.invoke(IPC.STORYBOOK_PROJECT_SWITCH, { dir: dir || '' }); } catch (_) {}
+  if (r && r.connected && r.url) {
+    sbConfig = { value: r.url, projectDir: dir || '', managed: !!r.managed, autoInject: (sbConfig && sbConfig.autoInject) ?? true };
+    try { localStorage.setItem(LS.storybook, JSON.stringify(sbConfig)); } catch (_) {}
+    renderSbConnected();
+  } else {
+    sbConfig = null;
+    try { localStorage.removeItem(LS.storybook); } catch (_) {}
+    renderSbSetup();   // offline setup for the new project (folder pre-filled)
+  }
+  updateComponentPickerBtn?.();
 }
 // Shared folder-dialog flow for both the build-row input and the hero chooser.
 async function pickSbFolder() {
@@ -10109,7 +10132,7 @@ document.getElementById('sb-connect')?.addEventListener('click', async () => {
   try {
     await ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
     const m = /:(\d+)/.exec(url);
-    if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1] });   // adopt into the registry → bar/view
+    if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1], dir });   // adopt into the registry → bar/view
   } catch (_) { /* memory/adopt are best-effort — the UI must still reflect the connection */ }
   sbSetupOpen = false; renderSbTab();
   updateComponentPickerBtn?.();
