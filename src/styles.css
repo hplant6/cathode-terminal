@@ -1768,7 +1768,7 @@ html, body {
   align-items: center;
   gap: 6px;
   pointer-events: none;
-  z-index: 400;
+  z-index: 3100;   /* above modal backdrops (2000/2100) — a toast fired from Mission Control was rendering behind it */
 }
 .toast {
   display: flex;
