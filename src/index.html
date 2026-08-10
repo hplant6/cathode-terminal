@@ -78,6 +78,12 @@
           <div class="view-toggle"><span class="vt-label">System</span><button class="vt-switch" data-view="system" role="switch" aria-checked="false"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
           <div class="view-toggle"><span class="vt-label">DevTools</span><button class="vt-switch" data-view="devtools" role="switch" aria-checked="false"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button></div>
         </div>
+        <!-- Overlays the whole bar during a project switch: shows progress and
+             blocks changing project mid-switch. -->
+        <div id="switch-banner" hidden>
+          <span id="switch-banner-text"></span>
+          <span id="switch-banner-spinner" aria-hidden="true"></span>
+        </div>
       </div>
       <!-- System performance graph (CPU / RAM / GPU + top processes by memory) -->
       <div id="sysperf">
@@ -110,11 +116,6 @@
         <div id="sysperf-procs" style="display:none"></div>
       </div>
       <!-- Usage panel — sits under System Info (toggled by the Views bar) -->
-      <!-- Project-switch banner — shown while servers/Storybook stop and start -->
-      <div id="switch-banner" hidden>
-        <span id="switch-banner-text"></span>
-        <span id="switch-banner-spinner" aria-hidden="true"></span>
-      </div>
       <div id="usage-panel" style="display:none">
         <div id="usage-head">
           <span id="usage-title">Usage</span>
