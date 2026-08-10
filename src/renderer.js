@@ -727,9 +727,9 @@ function ensureSessionModel() {
 
 // ── Toasts ────────────────────────────────────────────────────────
 const toastStack = document.getElementById('toast-stack');
-function showToast(text, { spinner = false, duration = 0, variant = '' } = {}) {
+function showToast(text, { spinner = false, duration = 0 } = {}) {
   const el = document.createElement('div');
-  el.className = 'toast' + (variant ? ' toast--' + variant : '');
+  el.className = 'toast';
   if (spinner) {
     const sp = document.createElement('div');
     sp.className = 'toast-spinner';
@@ -7473,6 +7473,26 @@ ipcRenderer.on(IPC.APP_TOAST, (_, { message, duration = 8000 } = {}) => {
   if (message) showToast(message, { duration });
 });
 
+// Persistent update band above the composer (replaces the update toast): no
+// auto-dismiss, click to act, X to dismiss.
+function showUpdateBand(text, onClick) {
+  const band = document.getElementById('update-band');
+  const textEl = document.getElementById('update-band-text');
+  if (!band || !textEl) return;
+  textEl.textContent = text;
+  band._onClick = onClick || null;
+  band.hidden = false;
+}
+(function initUpdateBand() {
+  const band = document.getElementById('update-band');
+  if (!band) return;
+  band.addEventListener('click', (e) => {
+    if (e.target.closest('#update-band-x')) return;   // the X dismisses, doesn't act
+    if (typeof band._onClick === 'function') band._onClick();
+  });
+  document.getElementById('update-band-x')?.addEventListener('click', (e) => { e.stopPropagation(); band.hidden = true; });
+})();
+
 ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   const gear = document.getElementById('btn-settings');
   if (gear) gear.classList.add('has-update');
@@ -7482,10 +7502,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     : (behind
       ? `↑ ${behind} update${behind === 1 ? '' : 's'} available — click to update`
       : '↑ Update available — click to update');
-  const t = showToast(msg, { duration: 9000, variant: 'button' });
-  if (t && t.el) {
-    t.el.addEventListener('click', () => { ipcRenderer.send(IPC.APP_CHECK_UPDATES); t.dismiss(); });
-  }
+  showUpdateBand(msg, () => { ipcRenderer.send(IPC.APP_CHECK_UPDATES); });
 });
 
 // ── Auto-update modal (download progress bar) ─────────────────────
@@ -7523,8 +7540,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
     installBtn.disabled = false;
     document.getElementById('btn-settings')?.classList.add('has-update');
     if (!dismissed) { modal.classList.add('open'); return; }   // ready while dismissed → non-intrusive toast that reopens it
-    const t = showToast('↑ Update ready — click to install', { duration: 9000, variant: 'button' });
-    if (t && t.el) { t.el.addEventListener('click', () => { open(); t.dismiss(); }); }
+    showUpdateBand('↑ Update ready — click to install', () => { open(); });
   });
   ipcRenderer.on(IPC.UPDATE_ERROR, (_, e) => {
     if (!modal.classList.contains('open')) return;

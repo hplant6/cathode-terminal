@@ -1785,18 +1785,6 @@ html, body {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 .toast.show { opacity: 1; transform: translateY(0); }
-/* Actionable toast styled as a button (e.g. the click-to-update pill). */
-.toast--button {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
-  font-weight: 700;
-  padding: 9px 18px;
-  cursor: pointer;
-  pointer-events: auto;   /* the stack is pointer-events:none (inherited) — opt this actionable toast back in so it's clickable */
-  transition: opacity 0.2s ease, transform 0.2s ease, background 0.12s ease, box-shadow 0.12s ease;
-}
-.toast--button:hover { background: color-mix(in srgb, var(--accent), #000 12%); box-shadow: 0 10px 28px rgba(0,0,0,0.55); }
 .toast-spinner {
   width: 11px; height: 11px;
   border: 1.5px solid var(--accent-border);
@@ -2847,6 +2835,36 @@ html, body {
   background: var(--spec-input-bg);   /* shade 7 */
   border-radius: 0 0 var(--r-blob) var(--r-blob);   /* match footer so its bg doesn't fill the rounded corners */
 }
+/* Persistent update notification — a full-width band above the composer input, in the
+   secondary-button color. Click to update; the X dismisses it. No auto-dismiss. */
+#update-band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 4px 8px 8px;
+  padding: 8px 12px;
+  background: var(--btn-hover);        /* secondary button color */
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+#update-band:hover { background: var(--btn-active); }
+#update-band-text { flex: 1; }
+#update-band-x {
+  flex: none;
+  width: 20px; height: 20px; min-width: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  background: transparent; border: none; color: var(--text-dim);
+  border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1;
+}
+#update-band-x:hover { background: rgba(255,255,255,0.10); color: var(--text); }
 /* Drag a file over the composer → dashed accent overlay + "Drop to attach" hint. */
 #ui-input-area.drag-over::after {
   content: 'Drop to attach';
