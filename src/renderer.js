@@ -8058,8 +8058,8 @@ function attachClearButton(input) {
   sync();
 }
 (function wireClearableInputs() {
-  document.querySelectorAll('#ui-textarea, #address-bar, #sb-url, .modal-input').forEach(el => {
-    if (el.readOnly || el.type === 'number' || el.classList.contains('dev-num')) return;
+  document.querySelectorAll('#ui-textarea, #address-bar, .modal-input').forEach(el => {
+    if (el.readOnly || el.type === 'number' || el.type === 'hidden' || el.classList.contains('dev-num')) return;
     // Skip fields that share their row with other inputs (compact forms like the
     // device add W/H/name row) — wrapping one would disrupt the flex layout.
     if (el.id !== 'ui-textarea' && el.parentElement &&
