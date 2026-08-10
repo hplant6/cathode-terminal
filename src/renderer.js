@@ -9376,12 +9376,25 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const busy = ((from && !sharedRoot && (from.servers || []).length) || (to && (to.servers || []).length));
     if (busy) showSwitchBanner(`Switching to ${(to && to.name) || 'project'}`);
     try {
-      if (from && !sharedRoot) await pauseProjectServers(from);
+      // If the Browser is showing a page served by the project we're leaving, it's about
+      // to die — blank it so we don't strand the user on a connection error. Anything
+      // else they were browsing is left alone.
+      const leavingPorts = from ? new Set((from.servers || []).map(x => +x.port).filter(Boolean)) : new Set();
+      const showing = browserLocalPort();
+      if (from && !sharedRoot) {
+        await pauseProjectServers(from);
+        if (showing && leavingPorts.has(showing)) ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'about:blank');
+      }
       if (token !== _switchSeq) return;
-      if (to) await resumeProjectServers(getProject(to.id) || to);
+      const primary = to ? await resumeProjectServers(getProject(to.id) || to) : 0;
       if (token !== _switchSeq) return;
       // Storybook only on a real switch — the initial activation has its own re-adopt path.
       if (from && to && typeof switchStorybookToProject === 'function') await switchStorybookToProject(to.rootDir);
+      if (token !== _switchSeq) return;
+      // Point the Browser at the project we just brought up, once it actually answers.
+      if (primary && await waitForPort(primary) && token === _switchSeq) {
+        ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + primary);
+      }
     } finally {
       if (busy) hideSwitchBanner();
     }
@@ -9486,12 +9499,35 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // fresh launch, or servers never started) fall back to the autostart flags.
     const paused = servers.filter(s => s.paused);
     const start  = paused.length ? paused : servers.filter(s => s.autostart);
+    let primary = 0;   // the port to show in the Browser (first web server we started)
     for (const s of start) {
       if (!s.cmd) continue;
       const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: project.id, name: s.name, cmd: s.cmd, cwd: project.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
-      if (r && r.ok && r.port && r.port !== s.port) updateServer(project.id, s.id, { port: r.port });
+      const port = (r && r.ok && r.port) || s.port;
+      if (port && port !== s.port) updateServer(project.id, s.id, { port });
       updateServer(project.id, s.id, { paused: false });
+      if (!primary && port && s.role !== 'storybook') primary = port;   // Storybook has its own panel
     }
+    return primary;
+  }
+
+  // Poll until the port answers, so the Browser doesn't land on a refused connection.
+  async function waitForPort(port, tries = 25) {
+    for (let i = 0; i < tries; i++) {
+      try {
+        const { running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports: [port] });
+        if (running && running[port]) return true;
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 800));
+    }
+    return false;
+  }
+
+  // The localhost port the Browser is currently showing (0 if it isn't on localhost).
+  function browserLocalPort() {
+    const t = (typeof tabs !== 'undefined') ? tabs.find(x => x.id === activeTabId) : null;
+    const m = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::(\d+))?/i.exec((t && t.url) || '');
+    return m ? +(m[1] || 80) : 0;
   }
 
   // Seed a project's servers from its package.json scripts (once, if none defined).
