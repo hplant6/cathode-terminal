@@ -9358,12 +9358,19 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const to   = toId ? getProject(toId) : null;
     // Branch-scoped projects share a rootDir — tearing `from` down would kill `to`'s servers.
     const sharedRoot = from && to && pNorm(from.rootDir) === pNorm(to.rootDir);
-    if (from && !sharedRoot) await pauseProjectServers(from);
-    if (token !== _switchSeq) return;
-    if (to) await resumeProjectServers(getProject(to.id) || to);
-    if (token !== _switchSeq) return;
-    // Storybook only on a real switch — the initial activation has its own re-adopt path.
-    if (from && to && typeof switchStorybookToProject === 'function') await switchStorybookToProject(to.rootDir);
+    // Only announce when there's actual work — otherwise the toast just flashes.
+    const busy = ((from && !sharedRoot && (from.servers || []).length) || (to && (to.servers || []).length));
+    const toast = busy ? showToast(`Switching to ${(to && to.name) || 'project'}…`, { spinner: true }) : null;
+    try {
+      if (from && !sharedRoot) await pauseProjectServers(from);
+      if (token !== _switchSeq) return;
+      if (to) await resumeProjectServers(getProject(to.id) || to);
+      if (token !== _switchSeq) return;
+      // Storybook only on a real switch — the initial activation has its own re-adopt path.
+      if (from && to && typeof switchStorybookToProject === 'function') await switchStorybookToProject(to.rootDir);
+    } finally {
+      if (toast) toast.dismiss();
+    }
   }
 
   // Pull in servers running inside this project's folder that we didn't start
@@ -9480,7 +9487,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const r = await ipcRenderer.invoke(IPC.SERVER_DETECT, { dir: project.rootDir });
       if (r && r.servers && r.servers.length) {
         updateProject(project.id, p => {
-          if (!p.servers || !p.servers.length) p.servers = r.servers.slice(0, 5).map(s => ({ id: genId(), name: s.name, cmd: s.cmd, port: s.port || null }));
+          if (!p.servers || !p.servers.length) p.servers = r.servers.slice(0, 5).map((s, i) => ({ id: genId(), name: s.name, cmd: s.cmd, port: s.port || null, autostart: i === 0 }));
         });
       }
     } catch (_) {}
@@ -9575,6 +9582,8 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // Icons (from final icons/) — currentColor so CSS controls color per state.
     const ICON_CLOSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg>';
     const ICON_START  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5498 9.24974C1.54992 6.54918 2.99139 4.1933 5.13574 2.88841C5.46586 2.68755 5.89659 2.7919 6.09766 3.12181C6.29851 3.45193 6.19417 3.88265 5.86426 4.08372C4.11704 5.14678 2.95031 7.06075 2.9502 9.24974C2.9502 12.5911 5.6586 15.3005 9 15.3005C12.3414 15.3005 15.0498 12.5911 15.0498 9.24974C15.0497 7.06091 13.8833 5.14789 12.1357 4.08372C11.8057 3.88259 11.7013 3.45192 11.9023 3.12181C12.1035 2.79179 12.5341 2.68738 12.8643 2.88841C15.0084 4.19416 16.4501 6.54893 16.4502 9.24974C16.4502 13.3643 13.1146 16.6999 9 16.6999C4.8854 16.6999 1.5498 13.3643 1.5498 9.24974Z" fill="currentColor"/><path d="M8.2998 8.5V2C8.2998 1.6134 8.6134 1.2998 9 1.2998C9.3866 1.2998 9.7002 1.6134 9.7002 2V8.5C9.7002 8.8866 9.3866 9.2002 9 9.2002C8.6134 9.2002 8.2998 8.8866 8.2998 8.5Z" fill="currentColor"/></svg>';
+    // Lightning bolt — "start this server when I switch to the project".
+    const ICON_BOLT   = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.9 1.5 3.6 10.2h3.9l-.9 6.3 6.3-8.7H9l.9-6.3Z" fill="currentColor"/></svg>';
     const ICON_RELOAD = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.4852 9C15.4852 5.3826 12.5528 2.4502 8.93539 2.4502C6.19818 2.45021 3.85186 4.12921 2.87289 6.51562C2.72615 6.87329 2.31747 7.04419 1.9598 6.89746C1.60214 6.75073 1.43124 6.34204 1.57796 5.98438C2.76499 3.09083 5.61063 1.04982 8.93539 1.0498C13.326 1.0498 16.8856 4.6094 16.8856 9C16.8856 13.3906 13.326 16.9502 8.93539 16.9502C6.19906 16.9502 3.78513 15.5674 2.35629 13.4648C2.13904 13.1451 2.22223 12.7095 2.54183 12.4922C2.86159 12.2749 3.2972 12.358 3.51449 12.6777C4.69366 14.4129 6.6819 15.5498 8.93539 15.5498C12.5528 15.5498 15.4852 12.6174 15.4852 9Z" fill="currentColor"/><path d="M1.71954 2.61163C2.10235 2.55879 2.45557 2.82646 2.50861 3.20929L2.82013 5.46027L5.07111 5.14972C5.45406 5.09678 5.80723 5.36442 5.86017 5.74738C5.91299 6.13014 5.64619 6.48333 5.26349 6.53644L2.31915 6.94367C1.93627 6.9966 1.58313 6.72887 1.53009 6.34601L1.12189 3.4007C1.06905 3.01789 1.33672 2.66467 1.71954 2.61163Z" fill="currentColor"/></svg>';
 
     const ICON_PAUSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.7 1.92223C6.70081 1.53564 6.38808 1.2212 6.00148 1.21992C5.61488 1.21865 5.30082 1.53101 5.3 1.91761L6 1.91992L6.7 1.92223ZM5.27004 16.0774C5.26922 16.464 5.58196 16.7784 5.96855 16.7797C6.35515 16.781 6.66921 16.4686 6.67003 16.082L5.97003 16.0797L5.27004 16.0774ZM6 1.91992L5.3 1.91761L5.27004 16.0774L5.97003 16.0797L6.67003 16.082L6.7 1.92223L6 1.91992Z" fill="currentColor"/><path d="M12.7293 1.92223C12.7301 1.53564 12.4174 1.2212 12.0308 1.21992C11.6442 1.21865 11.3301 1.53101 11.3293 1.91761L12.0293 1.91992L12.7293 1.92223ZM11.2993 16.0774C11.2985 16.464 11.6113 16.7784 11.9978 16.7797C12.3844 16.781 12.6985 16.4686 12.6993 16.082L11.9993 16.0797L11.2993 16.0774ZM12.0293 1.91992L11.3293 1.91761L11.2993 16.0774L11.9993 16.0797L12.6993 16.082L12.7293 1.92223L12.0293 1.91992Z" fill="currentColor"/></svg>';
@@ -9907,7 +9916,17 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const del = document.createElement('button'); del.className = 'mc-icn mc-row-del'; del.innerHTML = ICON_CLOSE; del.title = 'Remove server';
       del.addEventListener('click', async () => { if (row.classList.contains('up')) await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {}); removeServer(p.id, s.id); renderMC(); });
 
-      acts.append(reload, pause, start, del);
+      // Autostart — start this server on a cold switch into the project (when there's
+      // nothing running to restore). Persisted to the manifest, so it travels on export.
+      const auto = document.createElement('button'); auto.className = 'mc-icn mc-row-auto'; auto.innerHTML = ICON_BOLT;
+      const syncAuto = () => {
+        auto.dataset.on = s.autostart ? '1' : '';
+        auto.title = s.autostart ? 'Autostart on: starts when you switch to this project' : 'Autostart off: click to start this server on project switch';
+      };
+      syncAuto();
+      auto.addEventListener('click', () => { s.autostart = !s.autostart; updateServer(p.id, s.id, { autostart: s.autostart }); syncAuto(); });
+
+      acts.append(auto, reload, pause, start, del);
       return row;
     }
 

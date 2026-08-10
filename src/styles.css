@@ -455,6 +455,10 @@ html, body {
 .mc-rows { display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
 .mc-rows-empty { font-family: var(--font-mono); font-size: 11px; opacity: 0.4; padding: 12px 0; }
 .mc-row { border-bottom: 1px solid #1A191C; }
+/* Autostart toggle — lit when this server starts on switch into the project. */
+.mc-row-auto { opacity: 0.45; }
+.mc-row-auto:hover { opacity: 1; }
+.mc-row-auto[data-on="1"] { opacity: 1; color: var(--accent); }
 .mc-row-status { display: flex; align-items: center; gap: 7px; }
 .mc-row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--spec-text-faint); }
 .mc-row.up .mc-row-dot { background: var(--mc-green); }
