@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **"Run existing storybook" no longer fails with `spawn EINVAL` on Windows.** The managed server spawned the `storybook.cmd` launcher directly, which modern Node rejects (the CVE-2024-27980 fix); it now launches through `cmd.exe`, matching every other Windows command in the app. Detection already found the Storybook — only the launch was broken.
+- **Stopping a Storybook on Windows now kills the whole process tree** (`taskkill /T`) instead of only the `cmd.exe` wrapper, so the underlying node/storybook process is no longer orphaned.
+
+### Added
+- **Quit confirmation while a Storybook / dev server is running under Cathode.** Closing the window when the app is hosting a managed Storybook or dev server now asks first (it would otherwise stop them silently). Anything launched in an external terminal is unaffected and the dialog says so.
+
 ## [1.5.1] - 2026-07-29
 
 ### Fixed

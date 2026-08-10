@@ -436,6 +436,34 @@ function createWindow() {
   mainWindow.on('maximize', sendMaxState);
   mainWindow.on('unmaximize', sendMaxState);
 
+  // Warn before quitting while Cathode is hosting a live Storybook / dev server —
+  // otherwise closing the window silently kills them (before-quit tears them down).
+  // Only guards processes Cathode owns; anything the user launched in an external
+  // terminal keeps running regardless, so we say so. Per-window flag lets the
+  // confirmed close (and a mac window recreate) go through cleanly.
+  let quitConfirmed = false;
+  mainWindow.on('close', (e) => {
+    if (quitConfirmed) return;
+    const sb  = [...sbServers.values()].filter(s => s.managed && (s.status === 'ready' || s.status === 'starting')).length;
+    const srv = [...projectServers.values()].filter(s => s.proc && s.status !== 'stopped' && s.status !== 'error').length;
+    if (!sb && !srv) return;   // nothing running under Cathode → close normally
+    e.preventDefault();
+    const parts = [];
+    if (sb)  parts.push(sb === 1 ? 'Storybook' : sb + ' Storybooks');
+    if (srv) parts.push(srv === 1 ? 'a dev server' : srv + ' dev servers');
+    const running = parts.join(' and ');
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Cancel', 'Quit anyway'],
+      defaultId: 0, cancelId: 0,
+      title: 'Cathode Terminal',
+      message: `${running} still running`,
+      detail: `Quitting Cathode will stop ${sb && srv ? 'them' : 'it'}. Anything you started in an external terminal keeps running.`,
+    }).then(({ response }) => {
+      if (response === 1) { quitConfirmed = true; mainWindow.close(); }
+    }).catch(() => {});
+  });
+
   browserView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
@@ -1184,7 +1212,17 @@ function stopInstance(id) {
   const inst = sbServers.get(id);
   if (!inst) return;
   sbServers.delete(id);
-  if (inst.managed && inst.proc) { try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) { try { inst.proc.kill(); } catch (_) {} } }
+  if (inst.managed && inst.proc && inst.proc.pid) {
+    // Windows has no process groups — the detached spawn is a cmd.exe wrapper around
+    // node; kill the whole tree with taskkill or the storybook child is orphaned.
+    // POSIX: negative pid signals the detached group (spawn used detached: true).
+    if (process.platform === 'win32') {
+      try { spawn('taskkill', ['/pid', String(inst.proc.pid), '/T', '/F'], { windowsHide: true }); }
+      catch (_) { try { inst.proc.kill(); } catch (_) {} }
+    } else {
+      try { process.kill(-inst.proc.pid, 'SIGTERM'); } catch (_) { try { inst.proc.kill(); } catch (_) {} }
+    }
+  }
   writeSbState();
   clearSbManifest(inst.dir);
   if (activeSbId === id) pickActiveOrHide(); else emitInstances();
@@ -1330,8 +1368,12 @@ async function sbStartServer(projectDir, bin, port) {
   sbStatus('starting', { url, dir: projectDir });
   let proc;
   try {
-    proc = spawn(bin, ['dev', '-p', String(usePort), '--ci'], {
+    // Launch through cmd.exe on Windows — Node's spawn throws EINVAL if you hand it
+    // a .cmd/.bat launcher directly (the CVE-2024-27980 fix). platform.cmdSpawn runs
+    // the bin verbatim on POSIX. windowsHide keeps the console window from flashing.
+    proc = platform.cmdSpawn(['/c', bin, 'dev', '-p', String(usePort), '--ci'], {
       cwd: projectDir, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
       env: { ...process.env, BROWSER: 'none' },
     });
   } catch (e) {
