@@ -9337,16 +9337,54 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     if (!entry) return;
     const leaving = getActiveId();
     const switching = leaving !== entry.id;
-    if (switching && leaving) { const lp = getProject(leaving); if (lp) pauseProjectServers(lp); }   // auto-pause the project we're leaving
     setActiveId(entry.id);
-    if (switching) resumeProjectServers(getProject(entry.id) || entry);   // auto-resume the project we're entering (no-op at startup: same project)
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir: entry.rootDir });
     try { localStorage.setItem(LS.projectDir, entry.rootDir); } catch (_) {}   // keep legacy key in sync
     updateChip();
     if (typeof onProjectChanged === 'function') onProjectChanged();   // swap the visible session tabs to this project
-    // Storybook follows the project — only on a real switch (not the initial activation,
-    // which has its own re-adopt path).
-    if (switching && leaving && typeof switchStorybookToProject === 'function') switchStorybookToProject(entry.rootDir);
+    if (switching) switchProjectServers(leaving, entry.id);   // servers + Storybook follow the project
+  }
+
+  // ── Project switch: tear down, then bring up (one awaited sequence) ──
+  // The old project must be fully stopped before the new one starts, or the new
+  // servers race the dying ones for their ports (and findFreePort silently
+  // relocates them, rewriting the manifest). A token supersedes an in-flight
+  // switch so rapid switching settles on the last project, not a mix.
+  let _switchSeq = 0;
+  const pNorm = (x) => String(x || '').replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase();
+  async function switchProjectServers(fromId, toId) {
+    const token = ++_switchSeq;
+    const from = fromId ? getProject(fromId) : null;
+    const to   = toId ? getProject(toId) : null;
+    // Branch-scoped projects share a rootDir — tearing `from` down would kill `to`'s servers.
+    const sharedRoot = from && to && pNorm(from.rootDir) === pNorm(to.rootDir);
+    if (from && !sharedRoot) await pauseProjectServers(from);
+    if (token !== _switchSeq) return;
+    if (to) await resumeProjectServers(getProject(to.id) || to);
+    if (token !== _switchSeq) return;
+    // Storybook only on a real switch — the initial activation has its own re-adopt path.
+    if (from && to && typeof switchStorybookToProject === 'function') await switchStorybookToProject(to.rootDir);
+  }
+
+  // Pull in servers running inside this project's folder that we didn't start
+  // (e.g. the agent launched one), so they're managed — and stopped — with it.
+  async function adoptForeignServers(project) {
+    if (!project || !project.rootDir) return;
+    let servers = [];
+    try { ({ servers } = await ipcRenderer.invoke(IPC.LOCALHOST_SERVERS)); } catch (_) {}
+    const ports = (servers || []).map(s => s.port);
+    const known = new Set(((getProject(project.id) || project).servers || []).map(s => +s.port).filter(Boolean));
+    const fresh = ports.filter(p => !known.has(+p));
+    if (!fresh.length) return;
+    let dirs = {};
+    try { ({ dirs } = await ipcRenderer.invoke(IPC.RESOLVE_SERVER_DIRS, { ports: fresh })); } catch (_) {}
+    for (const port of fresh) {
+      const info = dirs[port];
+      if (!info || !info.dir) continue;
+      const inside = pNorm(info.dir) === pNorm(project.rootDir) || pNorm(info.dir).startsWith(pNorm(project.rootDir) + '/');
+      if (!inside) continue;
+      addServer(project.id, { name: info.comm || 'dev', cmd: info.cmd || '', cwd: info.dir, port: +port, runIn: 'wsl' });
+    }
   }
 
   function removeProject(id) {
@@ -9399,24 +9437,36 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   // Pause a project's running servers (stop + flag) — used by the manual Pause
   // button and automatically when you switch away from a project.
   async function pauseProjectServers(project) {
-    const servers = (project && project.servers) || [];
+    if (!project) return;
+    await adoptForeignServers(project);   // capture agent-started servers first, so they stop too
+    const servers = ((getProject(project.id) || project).servers) || [];
+    if (!servers.length) return;
     const ports = servers.filter(s => s.port).map(s => s.port);
-    if (!ports.length) return;
     let running = {};
-    try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {}
+    if (ports.length) { try { ({ running } = await ipcRenderer.invoke(IPC.SERVER_STATUS, { ports })); } catch (_) {} }
     for (const s of servers) {
-      if (s.port && running[s.port]) {
-        await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => {});
-        updateServer(project.id, s.id, { paused: true });
-      }
+      const wasUp = s.port ? !!running[s.port] : false;
+      // Stop by id whether or not we know a port — a server with no recorded port
+      // used to be skipped entirely, so it survived the switch.
+      const r = await ipcRenderer.invoke(IPC.SERVER_STOP, { id: s.id }).catch(() => null);
+      const owned = !!(r && r.stopped);
+      // Still listening → we didn't own it (agent-started): free the port directly.
+      if (wasUp && !owned) await ipcRenderer.invoke(IPC.SERVER_KILL_PORT, { port: s.port }).catch(() => {});
+      if (wasUp || owned) updateServer(project.id, s.id, { paused: true });   // the restore marker
     }
   }
 
   // Resume a project's paused servers (restart + clear flag) — used by the manual
   // Resume button and automatically when you switch into a project.
   async function resumeProjectServers(project) {
-    for (const s of ((project && project.servers) || [])) {
-      if (!s.paused) continue;
+    if (!project) return;
+    const servers = ((getProject(project.id) || project).servers) || [];
+    // Restore what was running when you left; on a cold start (nothing paused —
+    // fresh launch, or servers never started) fall back to the autostart flags.
+    const paused = servers.filter(s => s.paused);
+    const start  = paused.length ? paused : servers.filter(s => s.autostart);
+    for (const s of start) {
+      if (!s.cmd) continue;
       const r = await ipcRenderer.invoke(IPC.SERVER_START, { id: s.id, projectId: project.id, name: s.name, cmd: s.cmd, cwd: project.rootDir, port: s.port, runIn: s.runIn }).catch(() => null);
       if (r && r.ok && r.port && r.port !== s.port) updateServer(project.id, s.id, { port: r.port });
       updateServer(project.id, s.id, { paused: false });

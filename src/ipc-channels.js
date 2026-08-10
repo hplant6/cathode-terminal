@@ -19,6 +19,7 @@ const IPC = Object.freeze({
   PORTS_LIST: 'ports-list',
   PORTS_KILL: 'ports-kill',
   SERVER_START: 'server-start',       // start a project dev server (agent env)
+  SERVER_KILL_PORT: 'server-kill-port',   // free a port we may not own (foreign/agent-started server)
   SERVER_STOP: 'server-stop',         // stop a running project server
   SERVER_RESTART: 'server-restart',   // stop + start
   SERVER_STATUS: 'server-status',     // probe a set of ports → running map

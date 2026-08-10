@@ -1567,12 +1567,34 @@ async function startProjectServer({ id, projectId, name, cmd, cwd, port, runIn }
 
 function stopProjectServer(id) {
   const inst = projectServers.get(id);
-  if (!inst) return { ok: true };
+  if (!inst) return { ok: true, stopped: false };   // we never started it → nothing of ours to stop
+  const wasRunning = !!inst.proc;
   inst.status = 'stopped';
   killServerProc(inst);
   inst.proc = null;
+  return { ok: true, stopped: wasRunning };
+}
+
+// Free a port we don't own (a server the agent started outside the app). Windows
+// sees a WSL-hosted server through a relay process, so kill it inside WSL first and
+// never taskkill the relay itself — that would break WSL networking.
+const WSL_RELAY_RE = /^(wslrelay|wslhost|svchost|system|vmmem|vmmemwsl)$/i;
+async function killPort(port) {
+  const p = safePort(port);
+  if (!p) return { ok: false, error: 'invalid-port' };
+  if (IS_WIN_HOST) {
+    try { platform.nixSpawn(['bash', '-lic', `fuser -k ${p}/tcp`], { stdio: 'ignore', windowsHide: true }); } catch (_) {}
+    await new Promise(r => setTimeout(r, 400));
+    if (!(await probePort(p, 400))) return { ok: true };   // the WSL-side kill was enough
+  }
+  try {
+    const r = await platform.listPorts();
+    const hit = r && r.ok ? (r.ports || []).find(x => x.port === p) : null;
+    if (hit && hit.pid && !WSL_RELAY_RE.test(String(hit.name || ''))) await platform.killPid(hit.pid);
+  } catch (_) {}
   return { ok: true };
 }
+ipcMain.handle(IPC.SERVER_KILL_PORT, (_, { port } = {}) => killPort(port));
 
 // Read a project's package.json → server-ish scripts, with a guessed port.
 function detectServers(dir) {
