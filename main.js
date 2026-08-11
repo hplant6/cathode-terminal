@@ -1785,8 +1785,18 @@ ipcMain.handle(IPC.SERVER_RAM, async (_, { ports } = {}) => {
 // ── Project preview screenshots ───────────────────────────────────
 function previewDir() { const d = path.join(app.getPath('userData'), 'project-previews'); try { fs.mkdirSync(d, { recursive: true }); } catch (_) {} return d; }
 function previewPath(projectId) { return path.join(previewDir(), String(projectId).replace(/[^a-z0-9_-]/gi, '_') + '.png'); }
+// Smallest pane worth saving — well under a mobile-emulation viewport, well
+// over the 1×1 park below.
+const PREVIEW_MIN_PX = 200;
 ipcMain.handle(IPC.PROJECT_CAPTURE, async (_, { projectId } = {}) => {
   if (!projectId || !browserView || browserView.webContents.isDestroyed()) return { ok: false };
+  // The view sits at OFFSCREEN_BOUNDS (1×1) whenever a modal is open, the right
+  // panel isn't the browser, or the page is blank. capturePage() returns that
+  // 1×1 frame quite happily — it isn't isEmpty(), so it would sail through the
+  // check below and get upscaled into a solid 640px block that then gets marked
+  // as a valid preview. Refuse while the pane is parked.
+  const b = browserView.getBounds();
+  if (!b || b.width < PREVIEW_MIN_PX || b.height < PREVIEW_MIN_PX) return { ok: false, error: 'view hidden' };
   try {
     const img = await browserView.webContents.capturePage();
     if (img.isEmpty()) return { ok: false };

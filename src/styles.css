@@ -506,10 +506,13 @@ html, body {
 
 /* Footer (both cards) */
 .mc-foot { display: flex; align-items: stretch; gap: 10px; margin-top: auto; }
-.mc-foot-x { width: 52px; height: 45px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); }
-.mc-foot-x svg { width: 20px; height: 20px; }
-.mc-card-active .mc-foot-x { background: #1A191C; }
-.mc-card-idle .mc-foot-x { background: var(--spec-structural); }
+/* Card overflow (kabob) button — square seat, same footprint the remove button
+   used to occupy; holds Export / Remove. */
+.mc-foot-menu { width: 52px; height: 45px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); }
+.mc-foot-menu svg { width: 20px; height: 20px; }
+.mc-card-active .mc-foot-menu { background: #1A191C; }
+.mc-card-idle .mc-foot-menu { background: var(--spec-structural); }
+.mc-foot-menu:hover, .mc-foot-menu.open { filter: none; color: var(--accent); }
 .mc-btn { flex: 1; display: flex; align-items: center; justify-content: center; height: 45px; border: none; border-radius: 3px; cursor: pointer; font-family: var(--font-title); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
 .mc-btn-pause { background: var(--spec-structural); }
 .mc-btn-pause:hover { background: var(--spec-text-faint); }
@@ -536,11 +539,12 @@ html, body {
 /* Secondary FABs: Import / Create (outlined) */
 .mc-import-fab { background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); color: var(--spec-text); }
 .mc-import-fab:hover { filter: none; background: var(--spec-structural); }
-/* Export icon button in a card footer — mirrors the remove (X) button's per-state fill */
-.mc-foot-export { color: var(--spec-text-dim); }
-.mc-card-active .mc-foot-export { background: #1A191C; }
-.mc-card-idle .mc-foot-export { background: var(--spec-structural); }
-.mc-foot-export:hover { color: var(--accent); }
+/* Overflow menu popped by the card's kabob button. Fixed-position and appended
+   to .mc-screen, so the card's rounding and the grid's scroll box can't clip it. */
+.mc-menu { position: fixed; z-index: 20; min-width: 180px; padding: 6px; display: flex; flex-direction: column; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); }
+.mc-menu-item { display: block; width: 100%; height: auto; padding: 9px 12px; background: transparent; border: none; border-radius: 6px; cursor: pointer; text-align: left; font-family: var(--font-mono); font-size: 12px; color: var(--spec-text); }
+.mc-menu-item:hover { background: var(--spec-structural); color: #fff; }
+.mc-menu-item-danger:hover { background: var(--danger-dim); color: var(--danger); }
 
 /* Running-but-untracked localhost servers */
 /* Untracked-servers panel — rendered as a card in the grid's first slot; the

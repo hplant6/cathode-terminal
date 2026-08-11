@@ -9385,6 +9385,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       const leavingPorts = from ? new Set((from.servers || []).map(x => +x.port).filter(Boolean)) : new Set();
       const showing = browserLocalPort();
       if (from && !sharedRoot) {
+        await captureProjectPreview(from.id);   // last look at this project while its server is still up
         await pauseProjectServers(from);
         if (showing && leavingPorts.has(showing)) ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'about:blank');
       }
@@ -9458,6 +9459,27 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function updateProject(id, mut) {
     const list = loadProjects(); const p = list.find(x => x.id === id);
     if (!p) return; mut(p); saveProjects(list); syncManifest(p);
+  }
+
+  // Snapshot the Browser pane for a project's Mission Control card.
+  //
+  // Attribution is the whole problem here: previews used to be whatever the
+  // Browser happened to be showing, so every project ended up with a picture of
+  // YouTube. The rule is that the pane must currently be serving one of *this
+  // project's own ports* — anything else the user browsed to simply doesn't
+  // qualify, and no preview is written. Main refuses outright while the view is
+  // parked offscreen, so callers can fire this whenever without checking.
+  // hasPreview is only set after a capture actually lands, which is also what
+  // stops an idle card from displaying a stale file from a previous session.
+  async function captureProjectPreview(projectId) {
+    const p = projectId ? getProject(projectId) : null;
+    if (!p) return false;
+    const port = browserLocalPort();
+    if (!port || !(p.servers || []).some(s => +s.port === port)) return false;
+    const r = await ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId }).catch(() => null);
+    if (!r || !r.ok) return false;
+    updateProject(projectId, x => { x.hasPreview = true; });
+    return true;
   }
   function updateServer(projectId, sid, patch) {
     updateProject(projectId, p => { const s = (p.servers || []).find(x => x.id === sid); if (s) Object.assign(s, patch); });
@@ -9630,7 +9652,16 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const DEV_NAME_RE = /^(node|nodejs|deno|bun|python|py|ruby|php|java|dotnet|caddy|nginx|vite|esbuild|next|webpack)/i;
     let statusTimer = null, ramTimer = null;
     let addFormProject = null;   // project id whose active card is showing the Add-server form
-    const mc = wireModal(mcModal, { onClose: () => { clearInterval(statusTimer); clearInterval(ramTimer); statusTimer = ramTimer = null; addFormProject = null; } });
+    const mc = wireModal(mcModal, { onClose: () => {
+      clearInterval(statusTimer); clearInterval(ramTimer); statusTimer = ramTimer = null; addFormProject = null;
+      closeFootMenu();
+      // Closing is the moment the Browser pane comes back, so it's the reliable
+      // place to refresh the active project's preview. The native view is only
+      // restored after the modal-overlay round-trip through main, so give it a
+      // few frames to repaint — capturing too early just gets refused.
+      const pid = getActiveId();
+      setTimeout(() => captureProjectPreview(pid), 700);
+    } });
 
     // Icons (from final icons/) — currentColor so CSS controls color per state.
     const ICON_CLOSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg>';
@@ -9638,6 +9669,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const ICON_RELOAD = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15.4852 9C15.4852 5.3826 12.5528 2.4502 8.93539 2.4502C6.19818 2.45021 3.85186 4.12921 2.87289 6.51562C2.72615 6.87329 2.31747 7.04419 1.9598 6.89746C1.60214 6.75073 1.43124 6.34204 1.57796 5.98438C2.76499 3.09083 5.61063 1.04982 8.93539 1.0498C13.326 1.0498 16.8856 4.6094 16.8856 9C16.8856 13.3906 13.326 16.9502 8.93539 16.9502C6.19906 16.9502 3.78513 15.5674 2.35629 13.4648C2.13904 13.1451 2.22223 12.7095 2.54183 12.4922C2.86159 12.2749 3.2972 12.358 3.51449 12.6777C4.69366 14.4129 6.6819 15.5498 8.93539 15.5498C12.5528 15.5498 15.4852 12.6174 15.4852 9Z" fill="currentColor"/><path d="M1.71954 2.61163C2.10235 2.55879 2.45557 2.82646 2.50861 3.20929L2.82013 5.46027L5.07111 5.14972C5.45406 5.09678 5.80723 5.36442 5.86017 5.74738C5.91299 6.13014 5.64619 6.48333 5.26349 6.53644L2.31915 6.94367C1.93627 6.9966 1.58313 6.72887 1.53009 6.34601L1.12189 3.4007C1.06905 3.01789 1.33672 2.66467 1.71954 2.61163Z" fill="currentColor"/></svg>';
 
     const ICON_PAUSE  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.7 1.92223C6.70081 1.53564 6.38808 1.2212 6.00148 1.21992C5.61488 1.21865 5.30082 1.53101 5.3 1.91761L6 1.91992L6.7 1.92223ZM5.27004 16.0774C5.26922 16.464 5.58196 16.7784 5.96855 16.7797C6.35515 16.781 6.66921 16.4686 6.67003 16.082L5.97003 16.0797L5.27004 16.0774ZM6 1.91992L5.3 1.91761L5.27004 16.0774L5.97003 16.0797L6.67003 16.082L6.7 1.92223L6 1.91992Z" fill="currentColor"/><path d="M12.7293 1.92223C12.7301 1.53564 12.4174 1.2212 12.0308 1.21992C11.6442 1.21865 11.3301 1.53101 11.3293 1.91761L12.0293 1.91992L12.7293 1.92223ZM11.2993 16.0774C11.2985 16.464 11.6113 16.7784 11.9978 16.7797C12.3844 16.781 12.6985 16.4686 12.6993 16.082L11.9993 16.0797L11.2993 16.0774ZM12.0293 1.91992L11.3293 1.91761L11.2993 16.0774L11.9993 16.0797L12.6993 16.082L12.7293 1.92223L12.0293 1.91992Z" fill="currentColor"/></svg>';
+    const ICON_KABOB  = '<svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.75 9C7.75 9.69036 8.30964 10.25 9 10.25C9.69036 10.25 10.25 9.69036 10.25 9C10.25 8.30964 9.69036 7.75 9 7.75C8.30964 7.75 7.75 8.30964 7.75 9Z" fill="currentColor"/><path d="M7.75 14.25C7.75 14.9404 8.30964 15.5 9 15.5C9.69036 15.5 10.25 14.9404 10.25 14.25C10.25 13.5596 9.69036 13 9 13C8.30964 13 7.75 13.5596 7.75 14.25Z" fill="currentColor"/><path d="M7.75 3.75C7.75 4.44036 8.30964 5 9 5C9.69036 5 10.25 4.44036 10.25 3.75C10.25 3.05964 9.69036 2.5 9 2.5C8.30964 2.5 7.75 3.05964 7.75 3.75Z" fill="currentColor"/></svg>';
 
     function fmtLastActive(ts) {
       if (!ts) return '—';
@@ -9686,12 +9718,13 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         el.classList.toggle('paused', paused);
         const st = el.querySelector('.mc-row-state');
         if (st) st.textContent = up ? 'ACTIVE' : (starting ? 'STARTING' : (paused ? 'PAUSED' : 'INACTIVE'));
-        // A server the user just started/resumed came up → load it in the browser (leave Mission Control open) + snapshot THAT project's server for its preview (the only time we capture).
+        // A server the user just started/resumed came up → load it in the browser
+        // (leaving Mission Control open). No capture here: the pane is parked
+        // behind this modal, so there'd be nothing to photograph. The preview is
+        // taken when Mission Control closes and the pane is actually on screen.
         if (up && el.dataset.openWhenUp && el.dataset.port) {
           el.dataset.openWhenUp = '';
           ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://localhost:' + el.dataset.port);
-          const pid = getActiveId();
-          setTimeout(() => ipcRenderer.invoke(IPC.PROJECT_CAPTURE, { projectId: pid }).then(r => { if (r && r.ok) updateProject(pid, x => { x.hasPreview = true; }); }).catch(() => {}), 4000);
         }
       });
       mcGrid.querySelectorAll('.mc-card-active').forEach(card => {
@@ -10058,10 +10091,70 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
 
     // ── Export / import a portable .cathode bundle (Phase 4) ─────
-    const ICON_EXPORT = '<svg viewBox="0 0 18 18" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11.5V3"/><path d="M6 6l3-3 3 3"/><path d="M3.5 11v2.5A1.5 1.5 0 0 0 5 15h8a1.5 1.5 0 0 0 1.5-1.5V11"/></svg>';
-    function exportBtn(p) {
-      const b = document.createElement('button'); b.className = 'mc-icn mc-foot-export'; b.innerHTML = ICON_EXPORT; b.title = 'Export project (.cathode)';
-      b.addEventListener('click', (e) => { e.stopPropagation(); exportProject(p); });
+    // Card overflow menu — the per-card actions that aren't the primary one
+    // (Switch / Add server). Rendered as a fixed-position list anchored to the
+    // button rather than a child of the card, so the card's rounded clipping and
+    // the grid's scroll container can't crop it. Mission Control parks every
+    // native WebContentsView while it's open, so plain HTML sits on top here and
+    // there's no need for the native Menu.popup() used elsewhere.
+    // Teardown for the open menu's document/window listeners. Held here so that
+    // closeFootMenu() is a complete dismiss no matter who calls it — renderMC()
+    // and the modal's onClose drop the menu without going through a dismiss
+    // handler, and without this those listeners would outlive the element.
+    let _footMenuOff = null;
+    function closeFootMenu() {
+      if (_footMenuOff) { const off = _footMenuOff; _footMenuOff = null; off(); }
+      document.getElementById('mc-footmenu')?.remove();
+      document.querySelectorAll('.mc-foot-menu.open').forEach(b => b.classList.remove('open'));
+    }
+    function openFootMenu(btn, p) {
+      closeFootMenu();
+      btn.classList.add('open');
+      const menu = document.createElement('div');
+      menu.id = 'mc-footmenu'; menu.className = 'mc-menu'; menu.setAttribute('role', 'menu');
+      const item = (label, cls, onPick) => {
+        const b = document.createElement('button');
+        b.className = 'mc-menu-item' + (cls ? ' ' + cls : ''); b.textContent = label; b.setAttribute('role', 'menuitem');
+        b.addEventListener('click', (e) => { e.stopPropagation(); closeFootMenu(); onPick(); });
+        menu.appendChild(b);
+      };
+      item('Export project', '', () => exportProject(p));
+      item('Remove project', 'mc-menu-item-danger', () => { removeProject(p.id); renderMC(); });
+
+      (document.querySelector('.mc-screen') || document.body).appendChild(menu);
+      // Anchor above the button (the footer is at the card's bottom edge), flipping
+      // below only if there genuinely isn't room, and clamped to the viewport.
+      const r = btn.getBoundingClientRect(), m = menu.getBoundingClientRect(), GAP = 8;
+      const top = (r.top - m.height - GAP >= 8) ? r.top - m.height - GAP : Math.min(r.bottom + GAP, window.innerHeight - m.height - 8);
+      menu.style.top  = Math.max(8, top) + 'px';
+      menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.width - 8)) + 'px';
+
+      // Dismiss: outside click, Escape, or anything that moves the anchor. The
+      // outside test has to use contains() — a click lands on the <path> inside
+      // the button, so an identity check would read as "outside", dismiss here,
+      // and let the button's own handler immediately reopen instead of toggling.
+      const onDoc = (e) => { if (!menu.contains(e.target) && !btn.contains(e.target)) closeFootMenu(); };
+      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeFootMenu(); btn.focus(); } };   // capture-phase + stopPropagation so Escape doesn't also close Mission Control
+      const onMove = () => closeFootMenu();
+      document.addEventListener('mousedown', onDoc, true);
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('resize', onMove);
+      mcGrid.addEventListener('scroll', onMove, true);
+      _footMenuOff = () => {
+        document.removeEventListener('mousedown', onDoc, true);
+        document.removeEventListener('keydown', onKey, true);
+        window.removeEventListener('resize', onMove);
+        mcGrid.removeEventListener('scroll', onMove, true);
+      };
+    }
+    function footMenuBtn(p) {
+      const b = document.createElement('button');
+      b.className = 'mc-icn mc-foot-menu'; b.innerHTML = ICON_KABOB;
+      b.title = 'More actions'; b.setAttribute('aria-haspopup', 'menu');
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (b.classList.contains('open')) closeFootMenu(); else openFootMenu(b, p);
+      });
       return b;
     }
     async function exportProject(p) {
@@ -10131,8 +10224,6 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       card.appendChild(table);
 
       const foot = document.createElement('div'); foot.className = 'mc-foot';
-      const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
-      x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
       const pause = document.createElement('button'); pause.className = 'mc-btn mc-btn-pause'; pause.textContent = 'Pause'; pause.hidden = true;   // refreshStatus reveals it when there's something to pause/resume
       pause.addEventListener('click', async () => {
         const mode = pause.dataset.mode === 'resume' ? 'resume' : 'pause';
@@ -10141,7 +10232,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       });
       const add = document.createElement('button'); add.className = 'mc-btn mc-btn-add'; add.textContent = 'Add server';
       add.addEventListener('click', () => { addFormProject = p.id; renderMC(); });
-      foot.append(x, exportBtn(p), pause, add);
+      foot.append(footMenuBtn(p), pause, add);
       card.appendChild(foot);
       return card;
     }
@@ -10181,7 +10272,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       card.appendChild(headerEl(p, false));
       const prev = document.createElement('div'); prev.className = 'mc-preview';
       const img = document.createElement('img'); img.src = emptyStateFor(p.id); img.alt = '';   // branded fallback…
-      if (p.hasPreview) ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the screenshot only if a server was actually started for this project
+      if (p.hasPreview) ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the screenshot once one has actually been captured for this project
       prev.appendChild(img);
       card.appendChild(prev);
       const meta = document.createElement('div'); meta.className = 'mc-meta';
@@ -10192,16 +10283,15 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       meta.append(cnt, sb);
       card.appendChild(meta);
       const foot = document.createElement('div'); foot.className = 'mc-foot';
-      const x = document.createElement('button'); x.className = 'mc-icn mc-foot-x'; x.innerHTML = ICON_CLOSE; x.title = 'Remove project';
-      x.addEventListener('click', () => { removeProject(p.id); renderMC(); });
       const sw = document.createElement('button'); sw.className = 'mc-btn mc-btn-switch'; sw.textContent = 'Switch to project';
       sw.addEventListener('click', () => { activateProject(p.rootDir); renderMC(); });
-      foot.append(x, exportBtn(p), sw);
+      foot.append(footMenuBtn(p), sw);
       card.appendChild(foot);
       return card;
     }
 
     function renderMC() {
+      closeFootMenu();   // the cards it was anchored to are about to be rebuilt
       const activeId = getActiveId();
       const list = loadProjects().slice().sort((a, b) => {
         if (a.id === activeId) return -1;
