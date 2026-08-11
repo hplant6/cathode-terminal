@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-08-11
+
+### Fixed
+- **Project previews showed the wrong page.** A card's screenshot was whatever the Browser happened to be displaying, so projects ended up picturing an unrelated site. A capture now only counts if the pane is serving one of that project's own ports, and is taken while its server is still up. A card also can't show a stale image from a previous session — the preview flag is only set once a capture actually lands.
+- **Blank previews recorded as valid.** The browser view parks at 1×1 offscreen whenever a modal is open or the pane is hidden; `capturePage()` returns that frame quite happily (it isn't empty), so it was upscaled into a solid colour block and saved. Capture is now refused while the pane is parked.
+- **Mission Control cards no longer squash their server table.** The grid packed in as many 440px columns as fit, so a tall window gave four cramped cards with the Autostart header colliding with Start All. Columns are capped at three and fall back to two before a card drops under the width its table needs.
+
+### Changed
+- **Card actions moved into an overflow menu.** Export and Remove now live behind a **⋮** button on each Mission Control card instead of a bare ✕, and the menu escapes the card's rounding and the grid's scroll box.
+
 ## [1.7.0] - 2026-08-10
 
 ### Added
