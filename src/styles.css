@@ -415,7 +415,11 @@ html, body {
 .mc-topbar-close:hover { opacity: 1; }
 .mc-topbar-close svg { width: 22px; height: 22px; }
 
-.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 24px; align-content: start; overflow-y: auto; flex: 1; min-height: 0; padding-bottom: 90px; }
+/* Cap the grid at 3 columns and drop to 2 before a card gets too narrow for its
+   server table (~540px: status+server+port+autostart+actions, gaps and padding).
+   The lower bound is "a third of the row, but never under 540px", so wide windows
+   stop at 3 and squeezing past the threshold falls back to 2 — no media queries. */
+.mc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, max(540px, (100% - 48px) / 3)), 1fr)); gap: 24px; align-content: start; overflow-y: auto; flex: 1; min-height: 0; padding-bottom: 90px; }
 .mc-empty { grid-column: 1 / -1; padding: 40px; text-align: center; opacity: 0.5; font-size: 13px; font-family: var(--font-mono); }
 
 /* Card shell */
