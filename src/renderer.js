@@ -1520,7 +1520,11 @@ function hideFigmaTip() {
     // so a tip drifting over it gets hidden). Shift left of the view when it would overlap.
     const rp = document.getElementById('right-panel');
     const tb = document.getElementById('tab-bar');
-    if (rp && !rp.contains(el)) {   // elements inside the right panel are HTML overlays — no native view to dodge
+    // A full-screen modal (Mission Control, Settings…) parks every native view, so
+    // there's nothing to dodge — without this the tip gets shoved to the far left of
+    // the window, nowhere near the button it belongs to.
+    const modalOpen = !!document.querySelector('.modal-backdrop.open');
+    if (rp && !rp.contains(el) && !modalOpen) {   // elements inside the right panel are HTML overlays — no native view to dodge
       const rpr = rp.getBoundingClientRect();
       const nativeTop = tb ? tb.getBoundingClientRect().bottom : rpr.top;
       if (top + tr.height > nativeTop && left + tr.width > rpr.left - 4) {
