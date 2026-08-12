@@ -1925,6 +1925,18 @@ html, body {
 :root[data-theme-light] .ua-gauge-label,
 :root[data-theme-light] .ua-threshold,
 :root[data-theme-light] .ua-cd-text { color: var(--spec-text); }
+
+/* Light themes: the toggle tracks use shade 8, which stays near-black in tan/sky and
+   reads as a heavy dark blob on a pale panel. Lift both toggle families two shades
+   (8 → 6) so they sit on the light surface instead of punching through it. */
+:root[data-theme-light] .vt-switch,                 /* LED switch */
+:root[data-theme-light] .sb-switch,
+:root[data-theme-light] #usage-view-toggle,         /* sliding-thumb segmented track */
+:root[data-theme-light] #sysperf-view-toggle,
+:root[data-theme-light] .anim-fw-toggle,
+:root[data-theme-light] .onb-seg,
+:root[data-theme-light] .ext-seg,
+:root[data-theme-light] #console-filters { background: var(--spec-header-bg); }
 /* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
    of the chat. Switches as you scroll between turns / post a new message. */
 .acp-sticky-user {
