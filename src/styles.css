@@ -1970,7 +1970,7 @@ html, body {
 :root[data-theme-light] .anim-fw-toggle,
 :root[data-theme-light] .onb-seg,
 :root[data-theme-light] .ext-seg,
-:root[data-theme-light] #console-filters { background: var(--spec-header-bg); }
+:root[data-theme-light] #console-filters { background: var(--spec-toolbar-bg); }
 /* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
    of the chat. Switches as you scroll between turns / post a new message. */
 .acp-sticky-user {
