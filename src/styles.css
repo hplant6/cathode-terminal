@@ -1904,6 +1904,8 @@ html, body {
    anything on a fixed-dark fill (the green project header, accent buttons, the
    black empty-state hero, the assistant bubble) keeps its white. */
 :root[data-theme-light] .es-build-label,                                    /* build rows are shade 6, not the black hero */
+:root[data-theme-light] .es-run-opt,                                       /* running-server picker sits on shade 4 */
+:root[data-theme-light] .es-run-folder,                                    /* folder chooser: 65% shade-7 fill, not the black hero */
 :root[data-theme-light] .acp-tool-name,                                    /* transparent card, shade-3 border */
 :root[data-theme-light] .mc-hd-idle .mc-hd-title,                          /* idle header is shade 3 */
 :root[data-theme-light] .mc-hd-title-edit,
