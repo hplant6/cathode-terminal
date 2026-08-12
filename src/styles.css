@@ -1925,7 +1925,6 @@ html, body {
 :root[data-theme-light] .ua-gauge-label,
 :root[data-theme-light] .ua-threshold,
 :root[data-theme-light] .ua-cd-text { color: var(--spec-text); }
-}
 /* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
    of the chat. Switches as you scroll between turns / post a new message. */
 .acp-sticky-user {
