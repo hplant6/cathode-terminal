@@ -1935,7 +1935,8 @@ function projectBlock(dir) {
   lines.push(
     '',
     '### When the work changes',
-    'Watch for work that does **not** belong to this project. For example: cloning or pulling a different repo, checking out a PR, switching to **another folder already on this machine**, or any task unrelated to what is described above.',
+    'Watch for work that does **not** belong to this project. For example: **starting a brand-new app or project from scratch**, cloning or pulling a different repo, switching to **another folder already on this machine**, or any task unrelated to what is described above.',
+    'Also signal when the user moves onto **a different branch or PR of this same repo** — add `"branch": "<name>"` to the file and leave `dir` as this project\'s root. Cathode then tracks that branch as its own project.',
     'When you notice that, do **not** ask in chat and do not start the work yet. Write the file below instead — Cathode shows the user a prompt with the choice, and tells you which way they answered. Wait for that reply before continuing.',
     'The file (Cathode consumes it immediately):',
     '',
@@ -2081,6 +2082,7 @@ function readAgentSignal(dir) {
   if (!fs.existsSync(target)) return;
   uiSend(IPC.PROJECT_TRIGGER, {
     dir: target, reason: 'agent',
+    branch: String(sig.branch || '').slice(0, 120),   // set → a branch/PR of this same repo
     suggestedName: String(sig.name || '').slice(0, 80),
     note: String(sig.reason || '').slice(0, 200),
     ...dirInfo(target),
@@ -2155,9 +2157,16 @@ ipcMain.handle(IPC.DIR_INFO, (_, { dir } = {}) => dirInfo(dir));
 let _watchTimer = null, _lastBranch = '', _knownChildren = new Set();
 function startProjectWatchers(dir) {
   clearInterval(_watchTimer); _watchTimer = null;
-  _lastBranch = ''; _knownChildren = new Set();
+  _lastBranch = ''; _knownChildren = new Set(); _knownSiblings = new Set();
   if (!dir) return;
   _lastBranch = gitBranchOf(dir);
+  // `git clone` is far more often run *next to* a project than inside it, so watch the
+  // parent too. Seeded up front, so only folders appearing after launch can fire.
+  const parent = path.dirname(dir);
+  const watchParent = parent && parent !== dir;
+  if (watchParent) {
+    try { for (const e of fs.readdirSync(parent, { withFileTypes: true })) if (e.isDirectory()) _knownSiblings.add(e.name); } catch (_) {}
+  }
   // Seed with all existing children so only folders that appear *after* launch (a fresh
   // clone) can fire — and steady-state ticks do zero .git probes.
   try { for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) _knownChildren.add(e.name); } catch (_) {}
@@ -2172,6 +2181,15 @@ function startProjectWatchers(dir) {
         _knownChildren.add(e.name);   // probe each new child once
         const child = path.join(dir, e.name);
         if (fs.existsSync(path.join(child, '.git'))) uiSend(IPC.PROJECT_TRIGGER, { dir: child, reason: 'repo', ...dirInfo(child) });
+      }
+    } catch (_) {}
+    if (!watchParent) return;
+    try {
+      for (const e of fs.readdirSync(parent, { withFileTypes: true })) {
+        if (!e.isDirectory() || e.name.startsWith('.') || _knownSiblings.has(e.name)) continue;
+        _knownSiblings.add(e.name);   // probe each new sibling once
+        const sib = path.join(parent, e.name);
+        if (fs.existsSync(path.join(sib, '.git'))) uiSend(IPC.PROJECT_TRIGGER, { dir: sib, reason: 'repo', ...dirInfo(sib) });
       }
     } catch (_) {}
   }, 5000);
