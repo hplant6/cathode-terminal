@@ -1899,6 +1899,33 @@ html, body {
 }
 /* Light themes: the bubble is transparent, so white text lands on a cream/pale panel. */
 :root[data-theme-light] .acp-msg.user { color: var(--spec-text); }
+
+/* ── Light themes (tan/sky): white text sitting on a THEMED fill ──
+   These hardcode #fff, which is right on the dark presets but invisible once the
+   panel behind them turns cream. Only theme-following surfaces are corrected —
+   anything on a fixed-dark fill (the green project header, accent buttons, the
+   black empty-state hero, the assistant bubble) keeps its white. */
+:root[data-theme-light] .acp-tool-name,                                    /* transparent card, shade-3 border */
+:root[data-theme-light] .mc-hd-idle .mc-hd-title,                          /* idle header is shade 3 */
+:root[data-theme-light] .mc-hd-title-edit,
+:root[data-theme-light] .mc-row.up .mc-row-name,
+:root[data-theme-light] .mc-row.up .mc-row-port,
+:root[data-theme-light] .mc-row.paused .mc-row-name,
+:root[data-theme-light] .mc-row.paused .mc-row-port,
+:root[data-theme-light] .mc-row.paused .mc-row-pause,
+:root[data-theme-light] .mc-meta-servers,
+:root[data-theme-light] .mc-addform-title,
+:root[data-theme-light] .mc-untracked-port,
+:root[data-theme-light] .mc-logpop-head > span,
+:root[data-theme-light] .mc-btn-pause,
+:root[data-theme-light] .mc-btn-add,
+:root[data-theme-light] .ua-title,                                         /* Usage panels are shade 4 / shade 3 */
+:root[data-theme-light] .ua-panel-title,
+:root[data-theme-light] .ua-limit-title,
+:root[data-theme-light] .ua-gauge-label,
+:root[data-theme-light] .ua-threshold,
+:root[data-theme-light] .ua-cd-text { color: var(--spec-text); }
+}
 /* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
    of the chat. Switches as you scroll between turns / post a new message. */
 .acp-sticky-user {
