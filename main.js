@@ -944,10 +944,6 @@ function destroyStorybookView() {
   repositionRightPanelView();
 }
 
-ipcMain.on(IPC.STORYBOOK_LOAD_URL, (_, url) => {
-  createStorybookView(url);
-});
-
 ipcMain.on(IPC.STORYBOOK_DISCONNECT, () => {
   destroyStorybookView();
 });
@@ -1296,7 +1292,6 @@ function sbFindStorybook(root, maxDepth = 4) {
   }
   return null;
 }
-function sbHasStorybook(dir) { return !!sbFindStorybook(dir); }
 
 // App-owned preview styling — written into the project's OWN .storybook/preview-head.html,
 // the only place that can style the (cross-origin) preview iframe. Idempotent managed block.

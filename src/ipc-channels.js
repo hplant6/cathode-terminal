@@ -208,7 +208,6 @@ const IPC = Object.freeze({
   STORYBOOK_DISCONNECT: 'storybook-disconnect',
   STORYBOOK_INSTANCES: 'storybook-instances',
   STORYBOOK_LIST: 'storybook-list',
-  STORYBOOK_LOAD_URL: 'storybook-load-url',
   STORYBOOK_OPEN_EXTERNAL: 'storybook-open-external',
   STORYBOOK_OPEN_SWITCHER: 'storybook-open-switcher',
   STORYBOOK_RELOAD: 'storybook-reload',
