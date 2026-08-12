@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-12
+
+### Added
+- **Your agent can flag new project work.** The block Cathode writes into `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` used to point one way — it told the agent which project it was in and nothing came back. Now the agent watches for work that doesn't belong to the current project (building something new from scratch, a different repo, a PR checkout, another folder on your machine, or simply a request unrelated to the project) and signals Cathode, which asks you: **Create project ① / Continue here ②**, as a numbered card in the same approval stack as permission prompts. Whichever you pick is echoed back to the agent, so it knows where to work. Signalling is a plain file, so every agent can use it with no extra setup.
+- **Projects show what they're working on.** A label — the branch, or the PR title when `gh` can supply one — appears in the project switcher, on the Mission Control card and in the chip tooltip. It's stored beside the project rather than as its name, so a project keeps its repo identity while the label tracks the work.
+- **Cathode notices repos cloned beside a project**, not only inside it. `git clone` almost always lands next to a project, which is how new work could end up filed under an old project.
+- **Deep Ocean theme** — teal-tinted slate darks with a `#1DBFA1` accent.
+- **A new-project button** in the views bar, so a project can be created without opening Mission Control first.
+- **The Storybook tab detects a Storybook you started yourself.** It scans on opening the offline state, and a link under the folder chooser re-runs it on demand; connecting adopts it and writes `STORYBOOK_URL` for agent sessions.
+
+### Changed
+- **Light themes are properly legible.** Chat text, tool actions, Mission Control and Usage Assistance all hardcoded white on surfaces that turn cream in tan/sky. Modals also scrimmed the page with black, hiding dark-on-light chrome — the close button was effectively invisible. Themes are now classified by the measured luminance of their panel fill, so custom light themes are corrected too, and the running/paused indicators, toggle tracks and empty-state build rows all follow suit.
+- **The running/active greens are theme tokens** ("Running" / "Running Field"), with a pair in all ten presets.
+- **Mission Control tidying** — `Start all servers` moved onto the RAM line, and the kabob button is one colour on both card types instead of a hardcoded grey on one.
+
+### Fixed
+- **The update banner appeared with no update available and couldn't be dismissed** (#6). An author `display: flex` on the id overrode the browser's `[hidden]` rule, so the `hidden` attribute never did anything — it rendered from launch on every platform and the ✕ did nothing.
+- **The Storybook folder chooser did nothing when clicked** (#7). A class rename rewrote the element's id as well, so the renderer's lookup returned null and no click handler was ever attached.
+- **Tooltips drifted far from their button inside modals.** A guard that keeps tips clear of the native browser view fired inside Mission Control, where every native view is already parked.
+
+### Removed
+- Dead CSS orphaned by the empty-state rewrites (67 rules), a function with no callers, and an IPC channel with a handler but no sender.
+
 ## [1.7.1] - 2026-08-11
 
 ### Fixed
