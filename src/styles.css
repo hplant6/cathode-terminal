@@ -1940,7 +1940,7 @@ html, body {
    A dark scrim under dark-on-light chrome hid the close button entirely. Only the
    backdrop changes — --shadow-modal still draws real drop shadows elsewhere. */
 :root[data-theme-light] .modal-backdrop,
-:root[data-theme-light] #mission-control { background: color-mix(in srgb, var(--spec-input-bg) 72%, transparent); }
+:root[data-theme-light] #mission-control { background: color-mix(in srgb, var(--spec-input-bg) 52%, transparent); }   /* lighter tint: the blurred page shows through, so cards read against variation rather than a flat wash */
 
 /* On a dark scrim the card fill alone separated the card from the page. Against a
    light scrim it no longer does — shade 6 sits a hair off the backdrop — so define
