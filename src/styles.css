@@ -1932,6 +1932,19 @@ html, body {
 :root[data-theme-light] .ua-threshold,
 :root[data-theme-light] .ua-cd-text { color: var(--spec-text); }
 
+/* Paused/starting amber is only ever drawn on a card, never on a dark field, so a
+   single darker value in light mode covers every use of it. */
+:root[data-theme-light] { --mc-amber: #8A5A00; }
+
+/* --mc-green is the bright foreground for the dark-green field (project header,
+   switch banner). These uses put it straight on the card instead, where a pale
+   green vanishes in tan/sky — so they take the deep green of the pair. */
+:root[data-theme-light] .mc-row.up .mc-row-state,
+:root[data-theme-light] .mc-row-start,
+:root[data-theme-light] .mc-meta-sb.has { color: var(--mc-green-dark); }
+:root[data-theme-light] .mc-row.up .mc-row-dot,
+:root[data-theme-light] .mc-untracked-dot { background: var(--mc-green-dark); }
+
 /* Light themes: the toggle tracks use shade 8, which stays near-black in tan/sky and
    reads as a heavy dark blob on a pale panel. Lift both toggle families two shades
    (8 → 6) so they sit on the light surface instead of punching through it. */
