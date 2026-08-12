@@ -508,10 +508,8 @@ html, body {
 .mc-foot { display: flex; align-items: stretch; gap: 10px; margin-top: auto; }
 /* Card overflow (kabob) button — square seat, same footprint the remove button
    used to occupy; holds Export / Remove. */
-.mc-foot-menu { width: 52px; height: 45px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); }
+.mc-foot-menu { width: 52px; height: 45px; flex-shrink: 0; border-radius: 3px; color: var(--spec-text); background: var(--spec-structural); }
 .mc-foot-menu svg { width: 20px; height: 20px; }
-.mc-card-active .mc-foot-menu { background: #1A191C; }
-.mc-card-idle .mc-foot-menu { background: var(--spec-structural); }
 .mc-foot-menu:hover, .mc-foot-menu.open { filter: none; color: var(--accent); }
 .mc-btn { flex: 1; display: flex; align-items: center; justify-content: center; height: 45px; border: none; border-radius: 3px; cursor: pointer; font-family: var(--font-title); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
 .mc-btn-pause { background: var(--spec-structural); }
