@@ -156,11 +156,17 @@ const THEME_PRESETS = {
     '--spec-dropdown-bg':'#3C3F51','--spec-toolbar-bg':'#343746','--spec-header-bg':'#282A36','--spec-input-bg':'#21222C','--spec-black':'#191A21',
     '--spec-accent':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
   },
+  deepocean: {   // deep-ocean slate — teal-tinted darks with a #1DBFA1 accent
+    '--spec-text':'#C9D9D7','--spec-text-dim':'#8AA5A3','--spec-text-faint':'#4F6A6D','--spec-structural':'#2A3E42',
+    '--spec-dropdown-bg':'#243235','--spec-toolbar-bg':'#202B2E','--spec-header-bg':'#1C2427','--spec-input-bg':'#191E1F','--spec-black':'#12181A',
+    '--spec-accent':'#1DBFA1','--spec-accent-dark':'#0F4C40','--spec-accent-3':'#17332F','--danger':'#F0645F','--success':'#4EC9B0','--warning':'#D9A93C','--spec-graph-2':'#7FE3FF','--mc-green':'#6FE8C4','--mc-green-dark':'#12403A',
+  },
 };
 const BUILTIN_THEMES = [
   ['default','Default'], ['tan','Tan'], ['sky','Sky'],
   ['green','Green CRT'], ['amber','Amber CRT'], ['bluecrt','Blue CRT'],
   ['midnight','Midnight'], ['nord','Nord'], ['dracula','Dracula'],
+  ['deepocean','Deep Ocean'],
 ];
 
 // Modal display layout — three columns. (--spec-accent appears twice: as Accent 1 and Graph 1.)
