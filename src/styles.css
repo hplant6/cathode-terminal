@@ -1936,6 +1936,12 @@ html, body {
    single darker value in light mode covers every use of it. */
 :root[data-theme-light] { --mc-amber: #8A5A00; }
 
+/* Light themes: scrim the page with the theme's own lightest panel rather than black.
+   A dark scrim under dark-on-light chrome hid the close button entirely. Only the
+   backdrop changes — --shadow-modal still draws real drop shadows elsewhere. */
+:root[data-theme-light] .modal-backdrop,
+:root[data-theme-light] #mission-control { background: color-mix(in srgb, var(--spec-input-bg) 72%, transparent); }
+
 /* --mc-green is the bright foreground for the dark-green field (project header,
    switch banner). These uses put it straight on the card instead, where a pale
    green vanishes in tan/sky — so they take the deep green of the pair. */
