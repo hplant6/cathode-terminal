@@ -462,7 +462,7 @@ html, body {
 .mc-thead, .mc-row { display: grid; grid-template-columns: 100px 80px 72px 1fr auto; column-gap: 14px; align-items: center; padding: 11px 0; }
 .mc-thead { border-bottom: 1px solid #212026; }
 .mc-thead > span { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--spec-text-faint); }
-.mc-startall { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--accent); background: transparent; border: none; cursor: pointer; padding: 0; white-space: nowrap; justify-self: end; }
+.mc-startall { margin-left: auto; font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; color: var(--accent); background: transparent; border: none; cursor: pointer; padding: 0; white-space: nowrap; }   /* sits on the RAM line, pushed right */
 .mc-startall:hover { background: transparent; color: var(--accent); text-decoration: underline; }
 .mc-rows { display: flex; flex-direction: column; overflow-y: auto; flex: 1; min-height: 0; }
 .mc-rows-empty { font-family: var(--font-mono); font-size: 11px; opacity: 0.4; padding: 12px 0; }

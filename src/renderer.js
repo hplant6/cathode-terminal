@@ -10318,15 +10318,17 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       // Project-level memory — the number you actually act on ("what's eating my machine?").
       const ramTotal = document.createElement('div'); ramTotal.className = 'mc-ramtotal';
       ramTotal.innerHTML = '<span class="mc-ramtotal-k">ram</span><span class="mc-ramtotal-v">—</span>';
+      const startAllBtn = document.createElement('button'); startAllBtn.className = 'mc-startall'; startAllBtn.textContent = 'Start all servers';
+      startAllBtn.addEventListener('click', () => startAll(p));
+      ramTotal.appendChild(startAllBtn);
       card.appendChild(ramTotal);
       if (addFormProject === p.id) { card.appendChild(addServerForm(p)); return card; }
 
       const table = document.createElement('div'); table.className = 'mc-table';
       const head = document.createElement('div'); head.className = 'mc-thead';
-      head.innerHTML = '<span>Status</span><span>Server</span><span>Port</span><span>Autostart</span>';
-      const startAllBtn = document.createElement('button'); startAllBtn.className = 'mc-startall'; startAllBtn.textContent = 'Start all';
-      startAllBtn.addEventListener('click', () => startAll(p));
-      head.appendChild(startAllBtn);
+      // trailing empty cell keeps the header's 5-column grid matching the rows', so the
+      // labels stay over their columns now that Start all has moved out of the header
+      head.innerHTML = '<span>Status</span><span>Server</span><span>Port</span><span>Autostart</span><span></span>';
       const rows = document.createElement('div'); rows.className = 'mc-rows';
       const servers = p.servers || [];
       if (servers.length) servers.forEach(s => rows.appendChild(serverRow(p, s)));
