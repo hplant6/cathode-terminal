@@ -3567,6 +3567,50 @@ ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlwa
   if (!s._replaying) Notif.play('permission');   // distinct cue: the agent is paused waiting on you
 });
 
+// Project prompt — the agent has spotted work that doesn't belong to the current
+// project and is waiting on an answer, so it gets the same treatment as a permission
+// request: a numbered card in the approval stack with 1/2 shortcuts. Whichever way
+// the user answers is echoed back to the agent, since it can't see this UI.
+function showProjectPrompt({ name, dir, note, onCreate, onStay }) {
+  const s = acpSession(activeId);
+  if (!s || !s.permStackEl) {   // no agent session (or a PTY tab) → fall back to a toast
+    showToast(`New project suggested: ${name}`, { duration: 6000 });
+    return;
+  }
+  const here = (() => {   // the switcher's own helpers live in a closure — read the registry directly
+    try {
+      const id = currentProjectId();
+      const p = JSON.parse(localStorage.getItem(LS.projects) || '[]').find(x => x.id === id);
+      return (p && p.name) || 'this project';
+    } catch (_) { return 'this project'; }
+  })();
+  const cap = n => `<span class="perm-key">${n}</span>`;
+  const card = document.createElement('div');
+  card.className = 'acp-permission';
+  card.innerHTML =
+    `<div class="acp-perm-head">Start a new project for <b></b>?</div>` +
+    `<div class="acp-perm-title"></div>` +
+    `<div class="acp-perm-btns">` +
+      `<button class="acp-perm-deny" type="button">Continue here${cap('2')}</button>` +
+      `<button class="acp-perm-allow" type="button">Create project${cap('1')}</button>` +
+    `</div>`;
+  card.querySelector('.acp-perm-head b').textContent = name;             // textContent → no markup from the agent
+  card.querySelector('.acp-perm-title').textContent = note ? `${note} · ${dir}` : dir;
+  const close = () => { card.remove(); showTopPerm(s); };
+  const decide = (create) => {
+    close();
+    if (create) { onCreate && onCreate(); routeToActiveSession(`Cathode: I created a new project for "${name}" at ${dir}. Work there from now on.`); }
+    else        { onStay   && onStay();   routeToActiveSession(`Cathode: staying in ${here} — treat this as part of the current project.`); }
+  };
+  card.querySelector('.acp-perm-allow').addEventListener('click', () => decide(true));
+  card.querySelector('.acp-perm-deny').addEventListener('click', () => decide(false));
+  card._permKeys = { '1': () => decide(true), '2': () => decide(false) };
+  s.permStackEl.appendChild(card);
+  showTopPerm(s);
+  if (document.activeElement === uiTextarea) uiTextarea.blur();   // so 1/2 drive the prompt
+  Notif.play('permission');
+}
+
 // A parallel decider (the Watch Approval app) already answered this prompt — remove
 // its card without re-sending a decision (main.js has already resolved it).
 ipcRenderer.on(IPC.ACP_PERMISSION_RESOLVED, (_, { id, reqId }) => {
@@ -9920,18 +9964,16 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           ],
         });
       } else if (t.reason === 'agent') {
-        // The agent has already asked the user before signalling, so this is a
-        // confirmation rather than a cold question — and it carries a suggested name.
         const key = decisionKey(t.dir);
         if (promptedThisSession.has(key) || isKnownProject(t.dir)) return;
         promptedThisSession.add(key);
         const nm = (t.suggestedName || '').trim() || nameFor(t.dir);
-        askClassify({
-          question: `Your agent flagged separate work: “${nm}”${t.note ? ` — ${t.note}` : ''}. Set it up as a project?`,
-          buttons: [
-            { label: 'Create project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); adoptDirAsProject(t.dir, { ...t, name: nm }); } },
-            { label: 'Not now', onPick: () => promptedThisSession.add(key) },
-          ],
+        // Numbered prompt in the approval stack — the agent is waiting on the answer,
+        // so it gets the same weight (and 1/2 shortcuts) as a permission request.
+        showProjectPrompt({
+          name: nm, dir: t.dir, note: t.note || '',
+          onCreate: () => { saveDecision(key, 'project'); adoptDirAsProject(t.dir, { ...t, name: nm }); },
+          onStay:   () => { saveDecision(key, 'keep'); },
         });
       } else if (t.reason === 'repo') {
         const key = decisionKey(t.dir);

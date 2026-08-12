@@ -1936,15 +1936,15 @@ function projectBlock(dir) {
     '',
     '### When the work changes',
     'Watch for work that does **not** belong to this project — the user asks you to clone or pull a different repo, check out a PR, start a fix in another codebase, or describes a task unrelated to what is above.',
-    'When you notice that, **ask first**: say it looks like separate work and offer to set it up as its own project in Cathode. Do not assume, and do not do it silently.',
-    'If they say yes, write this file (Cathode consumes it and prompts the user):',
+    'When you notice that, do **not** ask in chat and do not start the work yet. Write the file below instead — Cathode shows the user a prompt with the choice, and tells you which way they answered. Wait for that reply before continuing.',
+    'The file (Cathode consumes it immediately):',
     '',
     '```json',
     '// <project root>/.cathode/signal.json',
     '{ "action": "new-project", "name": "<short title for the work>", "dir": "<absolute path of the folder>", "reason": "<one line: why it is separate>" }',
     '```',
     '',
-    'Use the folder the new work actually lives in. If it is not cloned yet, clone it first, then write the file with that path. Writing this file is the only way to tell Cathode; it cannot see your conversation.',
+    'Point `dir` at the folder the new work lives in, and make sure it exists first — clone the repo, then write the file with that path (Cathode ignores a signal for a folder that is not there). Writing this file is the only way to reach Cathode; it cannot see your conversation.',
     PJ_END);
   return lines.join('\n');
 }
