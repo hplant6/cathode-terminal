@@ -1897,6 +1897,8 @@ html, body {
   padding: 8px 12px;
   color: #FFFFFF;
 }
+/* Light themes: the bubble is transparent, so white text lands on a cream/pale panel. */
+:root[data-theme-light] .acp-msg.user { color: var(--spec-text); }
 /* Sticky-header overlay: mirrors the current turn's user message, pinned to the top
    of the chat. Switches as you scroll between turns / post a new message. */
 .acp-sticky-user {
@@ -2885,7 +2887,7 @@ html, body {
   margin: 4px 8px 8px;
   padding: 8px 12px;
   background: var(--spec-accent-dark);   /* accent 2 */
-  color: var(--text);
+  color: var(--text-on-accent);   /* fixed white — --text is dark in light themes and vanishes on this fill */
   border: 1px solid var(--spec-accent-dark);
   border-radius: 8px;
   font-size: 11.5px;

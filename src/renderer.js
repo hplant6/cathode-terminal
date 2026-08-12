@@ -220,9 +220,25 @@ function themeColors(name) {
 }
 
 // Write a colour map onto :root.
+// Flag light themes (tan/sky and any custom one) so CSS can correct elements that
+// assume a dark backdrop — text hardcoded to white on a transparent background is
+// invisible on a cream panel. Measured from the panel fill rather than the theme
+// name, so saved custom themes are classified too.
+function isLightFill(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => {
+    const x = c / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  });
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.4;   // WCAG relative luminance
+}
 function applyThemeColors(colors) {
   const root = document.documentElement;
   for (const [v] of THEME_TOKENS) if (colors[v]) root.style.setProperty(v, colors[v]);
+  if (isLightFill(colors['--spec-input-bg'])) root.dataset.themeLight = '1';
+  else delete root.dataset.themeLight;
 }
 
 // Native (Electron) menus can't take CSS, so drive their light/dark appearance
