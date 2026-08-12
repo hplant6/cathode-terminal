@@ -2875,7 +2875,10 @@ html, body {
 /* Persistent update notification — a full-width band above the composer input, in the
    Accent 2 color. Click to update; the X dismisses it. No auto-dismiss. */
 #update-band {
-  display: flex;
+  /* display:none base + :not([hidden]) — an author `display:flex` here would beat
+     the UA's [hidden]{display:none}, leaving the band permanently on screen and
+     making the dismiss X do nothing (issue #6). */
+  display: none;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
@@ -2891,6 +2894,7 @@ html, body {
   cursor: pointer;
   transition: background 0.12s ease;
 }
+#update-band:not([hidden]) { display: flex; }
 #update-band:hover { background: color-mix(in srgb, var(--spec-accent-dark), #fff 12%); }
 #update-band-text { flex: 1; }
 #update-band-x {
