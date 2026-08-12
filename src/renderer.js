@@ -9316,7 +9316,7 @@ function renderSbBar() {
 window.__renderSbTab = renderSbTab;
 
 function renderSbConnected() { sbSetupOpen = false; renderSbTab(); }
-function renderSbSetup()     { sbSetupOpen = true;  renderSbTab(); detectStorybook(); }
+function renderSbSetup()     { sbSetupOpen = true;  renderSbTab(); detectStorybook(); scanForRunningStorybook({ auto: true }); }
 
 // Step 5: detect whether the chosen folder (or the bundled demo) already has a
 // Storybook, and guide the user toward Start vs Build.
@@ -10422,6 +10422,44 @@ async function pickSbFolder() {
 }
 document.getElementById('sb-folder-pick')?.addEventListener('click', pickSbFolder);   // hidden picker behind the build-row input
 document.getElementById('sb-run-folder')?.addEventListener('click', pickSbFolder);    // hero chooser under the Run button
+
+// ── Detect a Storybook we didn't start ──
+// Scans the usual localhost ports for something serving /iframe.html. Runs whenever
+// the offline state appears (an externally-started Storybook should not read as
+// "offline"), and the link re-runs it on demand.
+// Resolved per call, not captured: renderSbSetup() can run before this module
+// finishes evaluating, and a const here would still be in its dead zone.
+async function scanForRunningStorybook({ auto = false } = {}) {
+  const link = document.getElementById('sb-detect-running');
+  if (!link) return;
+  link.disabled = true;
+  link.textContent = 'Scanning…';
+  let found = [];
+  try { ({ found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN)); } catch (_) {}
+  link.disabled = false;
+  const hit = (found || [])[0];
+  if (hit) {
+    link.dataset.found = String(hit.port);
+    link.textContent = `Storybook running on :${hit.port} — connect`;
+  } else {
+    delete link.dataset.found;
+    link.textContent = auto ? 'Detect running storybook' : 'No running Storybook found — scan again';
+  }
+}
+const sbDetectLink = document.getElementById('sb-detect-running');
+sbDetectLink?.addEventListener('click', async () => {
+  const port = +(sbDetectLink.dataset.found || 0);
+  if (!port) { scanForRunningStorybook(); return; }        // no hit yet → rescan
+  const dir = document.getElementById('sb-folder').value.trim();
+  const url = 'http://localhost:' + port;
+  try { await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port, dir }); } catch (_) { return; }
+  sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: false };
+  try { localStorage.setItem(LS.storybook, JSON.stringify(sbConfig)); } catch (_) {}
+  if (dir) ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
+  ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url }).catch(() => {});   // agents resolve STORYBOOK_URL from this
+  renderSbConnected();
+  updateComponentPickerBtn?.();
+});
 
 document.getElementById('sb-connect')?.addEventListener('click', async () => {
   const url  = document.getElementById('sb-url').value.trim();
