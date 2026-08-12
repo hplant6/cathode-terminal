@@ -10436,6 +10436,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     document.getElementById('mc-close')?.addEventListener('click', () => mc.close());
     document.getElementById('mc-import')?.addEventListener('click', importProject);
     document.getElementById('mc-create')?.addEventListener('click', createNewProject);
+    document.getElementById('btn-new-project')?.addEventListener('click', createNewProject);   // same flow from the views bar
     ipcRenderer.on(IPC.OPEN_BUNDLE_FILE, (_, { path: p } = {}) => { if (p) importProjectFromPath(p); });   // .cathode double-clicked in the OS
     document.getElementById('mc-open')?.addEventListener('click', async () => {
       const dir = await ipcRenderer.invoke(IPC.SHOW_FOLDER_DIALOG);

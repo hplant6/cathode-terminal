@@ -367,15 +367,18 @@ html, body {
 #btn-project-label { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
 /* Mission Control button — round, pairs with the project pill */
-#btn-mission {
+#btn-mission,
+#btn-new-project {
   -webkit-app-region: no-drag; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px;
   background: var(--spec-dropdown-bg); border: none; border-radius: 999px;   /* shade 4 fill, circle */
   color: var(--text); cursor: pointer; transition: background 0.1s;
 }
-#btn-mission:hover { background: var(--spec-structural); }   /* shade 3 on hover */
-#btn-mission svg { opacity: 0.85; }
+#btn-mission:hover,
+#btn-new-project:hover { background: var(--spec-structural); }   /* shade 3 on hover */
+#btn-mission svg,
+#btn-new-project svg { opacity: 0.85; }
 #btn-project .ps-chev { display: inline-flex; opacity: 0.5; transition: transform 0.15s; }
 #project-switch.open #btn-project .ps-chev { transform: rotate(180deg); }
 
@@ -1935,6 +1938,11 @@ html, body {
 /* Paused/starting amber is only ever drawn on a card, never on a dark field, so a
    single darker value in light mode covers every use of it. */
 :root[data-theme-light] { --mc-amber: #8A5A00; }
+
+/* The usage panel's gradient starts on the same fill the views bar uses, so in the
+   light presets the two sections meet with no edge at all (the dark presets get away
+   with it because the gradient's far end is much darker). Draw the boundary. */
+:root[data-theme-light] #views-bar { border-bottom: 1px solid var(--spec-structural); }
 
 /* Light themes: scrim the page with the theme's own lightest panel rather than black.
    A dark scrim under dark-on-light chrome hid the close button entirely. Only the
