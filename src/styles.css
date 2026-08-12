@@ -438,6 +438,11 @@ html, body {
 .mc-hd-path { font-family: var(--font-mono); font-weight: 700; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mc-hd-active .mc-hd-path { color: var(--mc-green); }
 .mc-hd-idle .mc-hd-path { color: var(--spec-text-dim); }
+/* What this project is currently working on — branch, or the PR title. */
+.mc-hd-work { font-family: var(--font-mono); font-size: 11px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-hd-active .mc-hd-work { color: var(--mc-green); }
+.mc-hd-idle .mc-hd-work { color: var(--spec-text-dim); }
+.ps-item-path.is-work { color: var(--accent); }
 .mc-hd-edit { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
 .mc-hd-edit-k { font-weight: 900; text-transform: uppercase; }
 .mc-hd-edit-v { font-weight: 700; }

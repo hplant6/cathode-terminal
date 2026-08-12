@@ -9617,7 +9617,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
   function updateChip() {
     const p = activeProject();
     label.textContent = p ? p.name : 'No project';
-    btn.title = p ? ('Project: ' + p.rootDir + ' — click to switch') : 'Pick a project folder';
+    btn.title = p ? ('Project: ' + p.rootDir + (p.work ? '\nWorking on: ' + p.work : '') + ' — click to switch') : 'Pick a project folder';
   }
 
   const CHECK = '<svg class="ps-check" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4,9.5 7.5,13 14,5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -9638,7 +9638,9 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         '<span class="ps-item-body"><span class="ps-item-name"></span><span class="ps-item-path"></span></span>' +
         '<span class="ps-item-remove" title="Remove from list">×</span>';
       item.querySelector('.ps-item-name').textContent = p.name;
-      item.querySelector('.ps-item-path').textContent = p.rootDir;
+      item.querySelector('.ps-item-path').textContent = p.work ? p.work : p.rootDir;   // what it's working on beats the path for scanning
+      if (p.work) item.querySelector('.ps-item-path').classList.add('is-work');
+      item.title = p.rootDir;
       item.addEventListener('click', (ev) => {
         if (ev.target.closest('.ps-item-remove')) return;
         activateProject(p.rootDir); closeMenu();
@@ -9890,6 +9892,19 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
 
     // Triggers from main: a new branch, or a repo cloned into a subfolder.
+    // What the active project is currently working on (branch, or its PR title).
+    // Held separately from the project's name so switching branches never rewrites
+    // the manifest — the project keeps its repo identity, this tracks the work.
+    ipcRenderer.on(IPC.PROJECT_WORK, (_, w) => {
+      if (!w) return;
+      const p = loadProjects().find(x => normDir(x.rootDir) === normDir(w.dir));
+      if (!p) return;
+      if ((p.work || '') === (w.label || '')) return;
+      updateProject(p.id, x => { x.work = w.label || ''; });
+      updateChip();
+      if (typeof renderMC === 'function' && document.getElementById('mission-control')?.classList.contains('open')) renderMC();
+    });
+
     ipcRenderer.on(IPC.PROJECT_TRIGGER, (_, t) => {
       if (!t || !t.dir) return;
       if (t.reason === 'branch') {
@@ -9902,6 +9917,20 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           buttons: [
             { label: 'New project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); createBranchProject(t); } },
             { label: 'Keep under ' + aName, onPick: () => saveDecision(key, 'keep') },
+          ],
+        });
+      } else if (t.reason === 'agent') {
+        // The agent has already asked the user before signalling, so this is a
+        // confirmation rather than a cold question — and it carries a suggested name.
+        const key = decisionKey(t.dir);
+        if (promptedThisSession.has(key) || isKnownProject(t.dir)) return;
+        promptedThisSession.add(key);
+        const nm = (t.suggestedName || '').trim() || nameFor(t.dir);
+        askClassify({
+          question: `Your agent flagged separate work: “${nm}”${t.note ? ` — ${t.note}` : ''}. Set it up as a project?`,
+          buttons: [
+            { label: 'Create project', kind: 'primary', onPick: () => { saveDecision(key, 'project'); adoptDirAsProject(t.dir, { ...t, name: nm }); } },
+            { label: 'Not now', onPick: () => promptedThisSession.add(key) },
           ],
         });
       } else if (t.reason === 'repo') {
@@ -10066,6 +10095,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       });
       const path  = document.createElement('div'); path.className  = 'mc-hd-path';  path.textContent  = p.rootDir;
       l.append(title, path);
+      if (p.work) { const w = document.createElement('div'); w.className = 'mc-hd-work'; w.textContent = p.work; l.appendChild(w); }
       const r = document.createElement('div'); r.className = 'mc-hd-col mc-hd-r';
       const badge = document.createElement('span'); badge.className = 'mc-badge ' + (isActive ? 'mc-badge-active' : 'mc-badge-idle'); badge.textContent = isActive ? 'Active' : 'Idle';
       const edit = document.createElement('div'); edit.className = 'mc-hd-edit';
