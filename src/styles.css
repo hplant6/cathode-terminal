@@ -1903,6 +1903,7 @@ html, body {
    panel behind them turns cream. Only theme-following surfaces are corrected —
    anything on a fixed-dark fill (the green project header, accent buttons, the
    black empty-state hero, the assistant bubble) keeps its white. */
+:root[data-theme-light] .es-build-label,                                    /* build rows are shade 6, not the black hero */
 :root[data-theme-light] .acp-tool-name,                                    /* transparent card, shade-3 border */
 :root[data-theme-light] .mc-hd-idle .mc-hd-title,                          /* idle header is shade 3 */
 :root[data-theme-light] .mc-hd-title-edit,
@@ -4737,7 +4738,7 @@ button:active { background: var(--btn-active); }
 .es-run-folder:hover { border-color: var(--accent); }
 #sb-setup .es-hero #sb-status { margin-top: 16px; }
 
-.es-build-rows { display: flex; flex-direction: column; flex-shrink: 0; }
+.es-build-rows { display: flex; flex-direction: column; flex-shrink: 0; background: var(--spec-header-bg); }   /* themed: the hero above stays #000 for the shader blend */
 .es-build-row { display: grid; grid-template-columns: 220px 1fr 130px; gap: 20px; align-items: center; padding: 18px max(40px, calc((100% - 780px) / 2)); border-top: 1px solid var(--spec-structural); }
 .es-build-label { font-family: var(--font-title); font-weight: 700; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; }
 .es-build-input { height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; outline: none; box-sizing: border-box; }
