@@ -1942,6 +1942,15 @@ html, body {
 :root[data-theme-light] .modal-backdrop,
 :root[data-theme-light] #mission-control { background: color-mix(in srgb, var(--spec-input-bg) 72%, transparent); }
 
+/* On a dark scrim the card fill alone separated the card from the page. Against a
+   light scrim it no longer does — shade 6 sits a hair off the backdrop — so define
+   the surface with an edge and a little elevation instead. box-sizing is border-box,
+   so the border costs no layout. */
+:root[data-theme-light] .mc-card-idle {
+  border: 1px solid var(--spec-structural);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
 /* --mc-green is the bright foreground for the dark-green field (project header,
    switch banner). These uses put it straight on the card instead, where a pale
    green vanishes in tan/sky — so they take the deep green of the pair. */
