@@ -1935,16 +1935,17 @@ function projectBlock(dir) {
   lines.push(
     '',
     '### When the work changes',
-    'Watch for work that does **not** belong to this project — the user asks you to clone or pull a different repo, check out a PR, start a fix in another codebase, or describes a task unrelated to what is above.',
+    'Watch for work that does **not** belong to this project. For example: cloning or pulling a different repo, checking out a PR, switching to **another folder already on this machine**, or any task unrelated to what is described above.',
     'When you notice that, do **not** ask in chat and do not start the work yet. Write the file below instead — Cathode shows the user a prompt with the choice, and tells you which way they answered. Wait for that reply before continuing.',
     'The file (Cathode consumes it immediately):',
     '',
     '```json',
-    '// <project root>/.cathode/signal.json',
+    `// write it HERE, always — ${path.join(dir, '.cathode', 'signal.json')}`,
     '{ "action": "new-project", "name": "<short title for the work>", "dir": "<absolute path of the folder>", "reason": "<one line: why it is separate>" }',
     '```',
     '',
-    'Point `dir` at the folder the new work lives in, and make sure it exists first — clone the repo, then write the file with that path (Cathode ignores a signal for a folder that is not there). Writing this file is the only way to reach Cathode; it cannot see your conversation.',
+    'Write the file at that exact path — inside **this** project, not the new one. Cathode only watches here, so a signal left anywhere else is never seen.',
+    'Set `dir` to the folder the new work lives in (an existing folder on this machine, or where you just cloned it). That folder has to exist when you write the file — Cathode drops a signal pointing at one that does not. Writing this file is the only way to reach Cathode; it cannot see your conversation.',
     PJ_END);
   return lines.join('\n');
 }
