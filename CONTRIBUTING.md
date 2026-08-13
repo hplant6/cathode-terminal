@@ -28,7 +28,7 @@ npm start          # launch the app (electron .)
 | `src/platform/index.js` | OS adapter — WSL (Windows) vs native shell (macOS/Linux) |
 | `src/*-inject.js` | Scripts injected into the **browsed page** (picker, resize, draw, eyedropper, screenshot, a11y, combined) |
 | `src/tools.js` | Toolbar / page-tool definitions |
-| `storybook-demo/` | The design system (Storybook) — reference for UI work |
+| `design-system/` | The design system (Storybook) — reference for UI work |
 | `assets/` | Build resources (Windows `.ico`, mac entitlements) |
 | `scripts/notarize.js` | macOS notarization hook (electron-builder `afterSign`) |
 
@@ -57,7 +57,7 @@ grep -o '{' src/styles.css | wc -l ; grep -o '}' src/styles.css | wc -l
 ### Storybook (design system)
 
 ```bash
-cd storybook-demo && npm install && npm run storybook   # http://localhost:6006
+cd design-system && npm install && npm run storybook   # http://localhost:6006
 ```
 
 > Reference the Storybook's tokens/components before UI changes to keep things consistent. New story *files* need a Storybook restart to be indexed.

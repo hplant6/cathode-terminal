@@ -958,7 +958,7 @@ ipcMain.on(IPC.STORYBOOK_DISCONNECT, () => {
 const sbServers = new Map();   // id → { id, proc, port, url, dir, label, status, log, managed }
 let activeSbId = null, sbSeq = 0, sbSetupOpen = false;
 
-function sbLabel(dir) { return !dir ? '' : (dir === SB_DEMO_DIR ? 'Demo' : (path.basename(dir.replace(/[\\/]+$/, '')) || 'Storybook')); }
+function sbLabel(dir) { return !dir ? '' : (dir === SB_DEMO_DIR ? 'Design System' : (path.basename(dir.replace(/[\\/]+$/, '')) || 'Storybook')); }
 // Is `child` the same as, or nested inside, `parent`? (case-insensitive, separator-agnostic —
 // a Storybook's config dir can be a subfolder of the project root, e.g. in a monorepo.)
 function sbDirInside(parent, child) {
@@ -985,7 +985,7 @@ function pickActiveOrHide() {
 }
 
 const nodeNet = require('net');   // Node's net (Electron's `net` above is the Chromium client)
-const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'storybook-demo') : path.join(__dirname, 'storybook-demo');
+const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'design-system') : path.join(__dirname, 'design-system');
 function sbStateFile() { return path.join(app.getPath('userData'), 'storybook-server.json'); }
 
 // ── Project manifest (<project>/.cathode/storybook.json) ─────────
@@ -1243,7 +1243,7 @@ function stopAllStorybook() {
 function sbResolveDir(dir) { return (dir && fs.existsSync(dir)) ? dir : SB_DEMO_DIR; }
 function sbBin(dir) {
   // Prefer the Windows launcher (.cmd), but tolerate a Unix-only bin (e.g. a
-  // storybook-demo whose node_modules were installed from WSL, so only the
+  // design-system whose node_modules were installed from WSL, so only the
   // extensionless script exists) so detection/spawn resolve to whichever is there.
   const base = path.join(dir, 'node_modules', '.bin', 'storybook');
   if (process.platform === 'win32') {

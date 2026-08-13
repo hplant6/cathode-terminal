@@ -5,5 +5,5 @@ out/
 *.log
 .DS_Store
 Thumbs.db
-storybook-demo/storybook-static/
+design-system/storybook-static/
 .cathode/
