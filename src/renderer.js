@@ -10779,19 +10779,24 @@ function initCombo(root, { options, onPick, freeText = false } = {}) {
   const input = root.querySelector('.ui-combo-input');
   const menu  = root.querySelector('.ui-combo-menu');
   if (!input || !menu) return null;
-  const close = () => menu.classList.remove('open');
+  const close = () => { menu.classList.remove('open'); typed = false; };
+  let typed = false;   // only filter once the user actually types — opening with a value
+                       // already chosen must still show every option, not just that one
+  const match = (o, q) => !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q);
   function render() {
-    const q = input.value.trim().toLowerCase();
+    const q = typed ? input.value.trim().toLowerCase() : '';
     const all = (typeof options === 'function' ? options() : options) || [];
-    const hits = all.filter(o => !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q));
+    const hits = all.filter(o => match(o, q));
     menu.innerHTML = '';
     if (!hits.length) {
       const e = document.createElement('div'); e.className = 'ui-combo-empty'; e.textContent = 'no match';
       menu.appendChild(e); menu.classList.add('open'); return;
     }
+    const cur = input.value.trim().toLowerCase();
+    const sel = hits.findIndex(o => o.label.toLowerCase() === cur || String(o.value).toLowerCase() === cur);
     hits.slice(0, 60).forEach((o, i) => {
       const it = document.createElement('div');
-      it.className = 'ui-combo-item' + (i === 0 ? ' active' : '');
+      it.className = 'ui-combo-item' + (i === (sel >= 0 ? sel : 0) ? ' active' : '');
       it.textContent = o.label;
       if (o.sub) { const d = document.createElement('span'); d.className = 'ui-combo-sub'; d.textContent = o.sub; it.appendChild(d); }
       it.addEventListener('mousedown', (e) => { e.preventDefault(); take(o); });
@@ -10801,7 +10806,7 @@ function initCombo(root, { options, onPick, freeText = false } = {}) {
   }
   function take(o) { input.value = o.label; close(); onPick && onPick(o); }
   input.addEventListener('focus', render);
-  input.addEventListener('input', render);
+  input.addEventListener('input', () => { typed = true; render(); });
   input.addEventListener('blur', () => setTimeout(close, 150));
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
@@ -10812,7 +10817,7 @@ function initCombo(root, { options, onPick, freeText = false } = {}) {
       e.preventDefault();
       const idx = list.indexOf(active);
       const all = (typeof options === 'function' ? options() : options) || [];
-      const hits = all.filter(o => { const q = input.value.trim().toLowerCase(); return !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q); });
+      const hits = all.filter(o => match(o, typed ? input.value.trim().toLowerCase() : ''));
       if (idx >= 0 && hits[idx]) take(hits[idx]);
       else if (freeText) close();     // free-text combos keep whatever was typed
       return;

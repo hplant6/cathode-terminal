@@ -3186,9 +3186,13 @@ html, body {
    pick. That one's menu is inline because its drawer can grow; this one is absolute
    so it also works inside grid rows, which cannot. */
 .ui-combo { position: relative; }
-.ui-combo-input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font: 12px var(--font-mono); outline: none; }
+.ui-combo-input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 34px 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font: 12px var(--font-mono); outline: none; }
 .ui-combo-input::placeholder { color: var(--spec-text-dim); }
 .ui-combo-input:focus { border-color: var(--accent); }
+/* Chevron marks it as a picker rather than a text field. Non-interactive: focusing
+   the input is what opens the menu, and a click on the arrow lands on the input. */
+.ui-combo-chev { position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -6px; border-right: 1.5px solid var(--spec-text-dim); border-bottom: 1.5px solid var(--spec-text-dim); transform: rotate(45deg); pointer-events: none; transition: transform 0.12s; }
+.ui-combo:has(.ui-combo-menu.open) .ui-combo-chev { transform: rotate(-135deg); margin-top: -2px; }
 .ui-combo-menu { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: 240px; overflow-y: auto; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.55); }
 .ui-combo-menu.open { display: block; }
 .ui-combo-item { padding: 7px 12px; font: 12px var(--font-mono); color: var(--spec-text-dim); cursor: pointer; }
