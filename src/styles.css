@@ -4228,7 +4228,7 @@ button:active { background: var(--btn-active); }
 .es-hero-btn:disabled,
 .es-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
 /* Run + detect share one row; the wrapper owns the width the button used to. */
-.es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 28px; min-width: 440px; max-width: 90%; }
+.es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 40px; min-width: 440px; max-width: 90%; }
 /* Square by construction: stretched to the row's height, width follows. */
 .es-hero-icon-btn { flex: 0 0 auto; align-self: stretch; aspect-ratio: 1; width: auto; height: auto; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--spec-accent); border: none; border-radius: 3px; color: #fff; cursor: pointer; transition: background 0.12s, color 0.12s, box-shadow 0.12s; }
 .es-hero-icon-btn:hover:not(:disabled) { background: var(--spec-accent-dark); color: #fff; }   /* same rest → hover direction as the Run button beside it */
