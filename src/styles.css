@@ -4230,11 +4230,11 @@ button:active { background: var(--btn-active); }
 /* Run + detect share one row; the wrapper owns the width the button used to. */
 .es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 28px; min-width: 440px; max-width: 90%; }
 /* Square by construction: stretched to the row's height, width follows. */
-.es-hero-icon-btn { flex: 0 0 auto; align-self: stretch; aspect-ratio: 1; width: auto; height: auto; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--spec-accent-dark); border: none; border-radius: 3px; color: #fff; cursor: pointer; transition: background 0.12s, color 0.12s; }
-.es-hero-icon-btn:hover:not(:disabled) { background: var(--spec-accent); color: #fff; }
+.es-hero-icon-btn { flex: 0 0 auto; align-self: stretch; aspect-ratio: 1; width: auto; height: auto; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--spec-accent); border: none; border-radius: 3px; color: #fff; cursor: pointer; transition: background 0.12s, color 0.12s, box-shadow 0.12s; }
+.es-hero-icon-btn:hover:not(:disabled) { background: var(--spec-accent-dark); color: #fff; }   /* same rest → hover direction as the Run button beside it */
 .es-hero-icon-btn:disabled { cursor: default; opacity: 0.6; }
-/* A hit turns it accent so the find is visible without a label. */
-.es-hero-icon-btn[data-found] { background: var(--spec-accent); }
+/* A hit rings the button, since the accent fill is now its resting state. */
+.es-hero-icon-btn[data-found] { box-shadow: 0 0 0 2px var(--spec-accent-dark), 0 0 10px color-mix(in srgb, var(--spec-accent) 60%, transparent); }
 /* Three states in one button: radar at rest, the browser's spinner while scanning
    (in white, on the accent fill), and the error glyph for a beat when a manual scan
    comes up empty. */
