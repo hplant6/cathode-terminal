@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-08-13
+
+### Changed
+- **One dropdown everywhere.** The Storybook framework picker and the Browser project picker were each their own control; every dropdown in the app now routes through the canonical one — the same component the Box Select tool uses — including the eyedropper, MCP service and tab-type pickers, which had been left as raw browser selects. Its Storybook entry was redrawn to match what actually ships.
+- **The Browser empty state leads with what's running.** Instead of one button that hid what it knew behind a click, the hero states it: **Running servers**, a dropdown of each one, and **Open** — laid out on the build rows' own grid so the columns line up down the page. With nothing running the row is removed and a line says so. Retitled *Boot up a Server*.
+- **Detect-running is a radar button** beside Run in the Storybook hero: it spins while scanning, rings itself when it finds something, and shows an error glyph for a beat when a scan you asked for comes up empty.
+- **Themes are grouped into Dark and Light**, each collapsible and remembered, split by the measured luminance of the theme's own panel fill — so the grouping can't disagree with how a theme actually renders. Custom themes get a group too.
+- **Naming a new project happens in a modal** rather than a card anchored to the corner of the window.
+- **`storybook-demo` is now `design-system`** — it holds `cathode-design-system`, the reference for the app's UI, and the old name read as throwaway sample content.
+
+### Removed
+- The **Green CRT, Blue CRT, Midnight and Nord** themes. An install already set to one falls back to Default rather than asking for a preset that no longer exists.
+- The remaining **dead CSS** (122 rules, ~22 KB) — mostly the component picker's original standalone window, which became a panel and left its layout behind.
+
+### Fixed
+- **The design system no longer pretends to be available in installed builds.** It is deliberately not shipped (111 MB of dependencies), but the fallback still pointed at it, so a run with no folder chosen failed against a path that was never there. It now stands in only when running from source, and a packaged build says to choose a folder.
+- The hero button's type was half again the size of everything around it, and the framework picker rendered its default as an unset placeholder — both read as a different design language rather than the same one.
+
 ## [1.8.0] - 2026-08-12
 
 ### Added
