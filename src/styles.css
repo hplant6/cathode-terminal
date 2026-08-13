@@ -4222,7 +4222,7 @@ button:active { background: var(--btn-active); }
 .es-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
 .es-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; }
 .es-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
-.es-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-weight: 700; font-size: 18px; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }
+.es-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }   /* type matches .es-build-btn — the size and accent fill carry the emphasis, not the point size */
 .es-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
 /* Inactive (starting / running): accent at 50% alpha, solid white text, no hover change. */
 .es-hero-btn:disabled,
