@@ -4244,9 +4244,9 @@ button:active { background: var(--btn-active); }
 .es-build-input { height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; outline: none; box-sizing: border-box; }
 .es-build-input::placeholder { color: var(--spec-text-dim); }
 .es-build-input:focus { border-color: var(--accent); }
-/* Canonical dropdown sized for a build row (its default is the app's compact 32px). */
-.es-build-row .ct-select-btn { min-height: 42px; border-radius: 6px; background: var(--spec-input-bg); box-shadow: inset 0 0 0 1px var(--spec-structural); font-size: 12px; }
-.es-build-row .ct-select-btn:hover, .es-build-row .ct-select.open .ct-select-btn { background: var(--spec-dropdown-bg); }
+/* Canonical dropdown, only taller so it lines up with the 42px inputs beside it.
+   Fill, blob corner and Zalando label are inherited — this row is not a restyle. */
+.es-build-row .ct-select-btn { min-height: 42px; }
 #sb-folder.es-build-input { cursor: pointer; }
 #sb-folder-pick { display: none; }   /* kept only for its picker handler — never a grid cell (id beats any button display rule) */
 #wf-folder-pick { display: none; }   /* same: never a grid cell */
