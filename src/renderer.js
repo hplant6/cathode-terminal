@@ -10605,7 +10605,9 @@ ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {
   // The Run button IS the status surface now — its label reflects the run state.
   if (sbStartBtn) {
     // "No storybook here" is the common error — show a clean retry prompt instead of the raw path.
-    const errLabel = /no storybook found/i.test(message || '') ? 'No Storybook found, try again?' : (message || 'Couldn’t start — click to retry');
+    const errLabel = /choose a project folder/i.test(message || '') ? 'Choose a storybook folder below'
+      : /no storybook found/i.test(message || '') ? 'No Storybook found, try again?'
+      : (message || 'Couldn’t start — click to retry');
     const labels = { starting: 'Starting Storybook…', ready: 'Storybook is running', error: errLabel, stopped: SB_RUN_LABEL };
     sbStartBtn.textContent = labels[state] || SB_RUN_LABEL;
     // Inactive while starting and once running; on error it stays active so it

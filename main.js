@@ -985,7 +985,11 @@ function pickActiveOrHide() {
 }
 
 const nodeNet = require('net');   // Node's net (Electron's `net` above is the Chromium client)
-const SB_DEMO_DIR = app.isPackaged ? path.join(process.resourcesPath, 'design-system') : path.join(__dirname, 'design-system');
+// The bundled design system is a contributor reference and is deliberately not
+// shipped (111 MB of node_modules would roughly double the installer), so it can
+// only stand in for a missing folder when running from source. Packaged builds have
+// no fallback and say so, rather than resolving to a path that isn't there.
+const SB_DEMO_DIR = app.isPackaged ? '' : path.join(__dirname, 'design-system');
 function sbStateFile() { return path.join(app.getPath('userData'), 'storybook-server.json'); }
 
 // ── Project manifest (<project>/.cathode/storybook.json) ─────────
@@ -1326,7 +1330,7 @@ function ensurePreviewHead(projectDir) {
 ipcMain.handle(IPC.STORYBOOK_DETECT, (_, { dir } = {}) => {
   const projectDir = sbResolveDir(dir);
   const found = sbFindStorybook(projectDir);
-  return { dir: projectDir, installed: !!found, isDemo: projectDir === SB_DEMO_DIR, found: found ? found.dir : null };
+  return { dir: projectDir, installed: !!found, isDemo: !!SB_DEMO_DIR && projectDir === SB_DEMO_DIR, found: found ? found.dir : null };
 });
 
 const sbStartingDirs = new Set();   // dirs with a start in flight (pre-registry await window)
@@ -1334,6 +1338,10 @@ const sbStartingDirs = new Set();   // dirs with a start in flight (pre-registry
 // Shared by the Run button and the auto-start-on-project-switch path.
 async function startStorybookForDir(dir, port) {
   const rootDir = sbResolveDir(dir);
+  if (!rootDir) {   // packaged build, nothing picked yet — there's no design system to fall back on
+    sbStatus('error', { message: 'Choose a project folder first.' });
+    return { ok: false, error: 'no-folder' };
+  }
   // Search the picked folder (and its subfolders) for the Storybook — the user
   // may point at a repo/monorepo root while the config lives in a package.
   const found = sbFindStorybook(rootDir);
