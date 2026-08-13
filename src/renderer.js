@@ -5089,7 +5089,6 @@ function startDevServer(dir) {
 
 const wfFigmaIn    = document.getElementById('wf-figma-in');
 const wfLoadBtn    = document.getElementById('wf-load-running');
-const wfRunMenu    = document.getElementById('wf-running-menu');
 const wfProjectIn  = document.getElementById('wf-project');
 const wfFolderIn   = document.getElementById('wf-folder');
 
@@ -5098,34 +5097,40 @@ function wfOpenPort(port) { ipcRenderer.send(IPC.BROWSER_NAVIGATE, 'http://local
 // ── Hero: load a server that's already running ──
 // Scans localhost. One → load it. Several → pick from a list. None → inactive.
 let wfRunning = [];
+const wfRunRow    = document.getElementById('wf-run-row');
+const wfRunSelect = document.getElementById('wf-running');
+const wfNoServers = document.getElementById('wf-no-servers');
+
+// Nothing running is a state of its own: the whole row goes away and a line says so,
+// rather than leaving an empty picker and a dead button on screen.
+function wfShowRunRow(show) {
+  if (wfRunRow) wfRunRow.hidden = !show;
+  if (wfNoServers) wfNoServers.hidden = show;
+}
 async function refreshRunningServers() {
-  if (!wfLoadBtn) return;
-  if (wfRunMenu) { wfRunMenu.hidden = true; wfRunMenu.innerHTML = ''; }
-  wfLoadBtn.disabled = true;
-  wfLoadBtn.textContent = 'Scanning for servers…';
+  if (!wfRunSelect) return;
+  if (wfLoadBtn) { wfLoadBtn.disabled = true; wfLoadBtn.textContent = 'Scanning…'; }
+  wfShowRunRow(true);
   let servers = [];
   try { ({ servers } = await ipcRenderer.invoke(IPC.LOCALHOST_SERVERS)); } catch (_) {}
   wfRunning = servers || [];
-  if (!wfRunning.length) { wfLoadBtn.textContent = 'No running server found'; return; }
-  wfLoadBtn.disabled = false;
-  wfLoadBtn.textContent = wfRunning.length === 1
-    ? `Load running server · :${wfRunning[0].port}`
-    : `Load running server (${wfRunning.length})`;
+  if (!wfRunning.length) { wfShowRunRow(false); return; }
+  wfRunSelect.innerHTML = '';
+  for (const sv of wfRunning) {
+    const o = document.createElement('option');
+    o.value = String(sv.port);
+    o.textContent = `localhost:${sv.port}` + (sv.name ? ` · ${sv.name}` : '');
+    wfRunSelect.appendChild(o);
+  }
+  enhanceSelect(wfRunSelect);   // no-op once enhanced; the menu is rebuilt from the options on open
+  wfRunSelect.dispatchEvent(new Event('change', { bubbles: true }));   // refresh the button label
+  if (wfLoadBtn) { wfLoadBtn.disabled = false; wfLoadBtn.textContent = 'Open'; }
+  wfShowRunRow(true);
 }
 wfLoadBtn?.addEventListener('click', () => {
   if (wfLoadBtn.disabled) return;
-  if (wfRunning.length === 1) { wfOpenPort(wfRunning[0].port); return; }
-  if (!wfRunMenu) return;
-  if (!wfRunMenu.hidden) { wfRunMenu.hidden = true; return; }
-  wfRunMenu.innerHTML = '';
-  wfRunning.forEach(sv => {
-    const o = document.createElement('div');
-    o.className = 'es-run-opt';
-    o.textContent = `localhost:${sv.port}` + (sv.name ? ` · ${sv.name}` : '');
-    o.addEventListener('click', () => { wfRunMenu.hidden = true; wfOpenPort(sv.port); });
-    wfRunMenu.appendChild(o);
-  });
-  wfRunMenu.hidden = false;
+  const port = +(wfRunSelect && wfRunSelect.value) || (wfRunning[0] && wfRunning[0].port);
+  if (port) wfOpenPort(port);
 });
 
 // ── Row 1: run a saved project's dev server (its manifest recipe — no agent) ──

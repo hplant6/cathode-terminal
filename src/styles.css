@@ -1592,7 +1592,6 @@ html, body {
    anything on a fixed-dark fill (the green project header, accent buttons, the
    black empty-state hero, the assistant bubble) keeps its white. */
 :root[data-theme-light] .es-build-label,                                    /* build rows are shade 6, not the black hero */
-:root[data-theme-light] .es-run-opt,                                       /* running-server picker sits on shade 4 */
 :root[data-theme-light] .es-run-folder,                                    /* folder chooser: 65% shade-7 fill, not the black hero */
 :root[data-theme-light] .acp-tool-name,                                    /* transparent card, shade-3 border */
 :root[data-theme-light] .mc-hd-idle .mc-hd-title,                          /* idle header is shade 3 */
@@ -4229,6 +4228,16 @@ button:active { background: var(--btn-active); }
 .es-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
 /* Run + detect share one row; the wrapper owns the width the button used to. */
 .es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 40px; min-width: 440px; max-width: 90%; }
+/* Browser hero: label · picker · action on one line. Hero-scale rather than the
+   build rows' left-aligned label column, so the hero keeps one obvious action. */
+#wf-run-row { align-items: center; }
+.es-hero-rowlabel { flex: 0 0 auto; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
+#wf-run-row .ct-select { flex: 1; min-width: 0; }
+#wf-run-row .ct-select-btn { min-height: 46px; }
+.es-hero-btn-compact { flex: 0 0 auto; padding: 0 32px; min-height: 46px; }
+/* Nothing running: the row is hidden entirely and this says why. */
+.es-hero-none { margin-top: 40px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
+.es-hero-none[hidden] { display: none; }
 /* Square by construction: stretched to the row's height, width follows. */
 .es-hero-icon-btn { flex: 0 0 auto; align-self: stretch; aspect-ratio: 1; width: auto; height: auto; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--spec-accent); border: none; border-radius: 3px; color: #fff; cursor: pointer; transition: background 0.12s, color 0.12s, box-shadow 0.12s; }
 .es-hero-icon-btn:hover:not(:disabled) { background: var(--spec-accent-dark); color: #fff; }   /* same rest → hover direction as the Run button beside it */
@@ -4275,9 +4284,6 @@ button:active { background: var(--btn-active); }
 #wf-folder.es-build-input, #wf-project { cursor: pointer; }
 .es-build-btn { height: 42px; background: var(--accent); border: none; border-radius: 3px; color: #fff; font-family: var(--font-title); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s; }
 .es-build-btn:hover { filter: brightness(1.08); }
-.es-run-menu { margin-top: 12px; min-width: 440px; max-width: 90%; text-align: left; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 3px; overflow: hidden; }
-.es-run-opt { padding: 10px 16px; font-family: var(--font-mono); font-size: 12px; color: #fff; cursor: pointer; }
-.es-run-opt:hover { background: var(--btn-hover); }
 
 .sb-offline-foot { display: flex; align-items: center; justify-content: center; padding: 18px; border-top: 1px solid var(--spec-structural); background: var(--spec-header-bg); }
 .sb-offline-foot .sb-check-row { font-family: var(--font-mono); }

@@ -820,8 +820,12 @@
               <div class="es-hero-content">
                 <h2 class="es-hero-title">Boot up<br/>a Server</h2>
                 <p class="es-hero-sub">point the browser at a live site or a local dev server.</p>
-                <button id="wf-load-running" class="es-hero-btn">Load running server</button>
-                <div id="wf-running-menu" class="es-run-menu" hidden></div>
+                <div id="wf-run-row" class="es-hero-actions">
+                  <span class="es-hero-rowlabel">Running servers</span>
+                  <select id="wf-running" class="es-build-select"></select>
+                  <button id="wf-load-running" class="es-hero-btn es-hero-btn-compact">Open</button>
+                </div>
+                <div id="wf-no-servers" class="es-hero-none" hidden>No servers running</div>
               </div>
             </div>
 
