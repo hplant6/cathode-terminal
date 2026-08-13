@@ -10520,20 +10520,26 @@ async function scanForRunningStorybook({ auto = false } = {}) {
   // Icon button — the state it used to spell out lives in the tooltip, plus a spin
   // while scanning and an accent fill once something is found.
   link.disabled = true;
-  link.dataset.scanning = '1';
+  link.dataset.state = 'scanning';
   link.title = 'Scanning for a running Storybook…';
-  let found = [];
-  try { ({ found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN)); } catch (_) {}
+  let found = [], failed = false;
+  try { ({ found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN)); } catch (_) { failed = true; }
   link.disabled = false;
-  delete link.dataset.scanning;
   const hit = (found || [])[0];
   if (hit) {
+    delete link.dataset.state;
     link.dataset.found = String(hit.port);
     link.title = `Storybook running on :${hit.port} — click to connect`;
-  } else {
-    delete link.dataset.found;
-    link.title = auto ? 'Detect running storybook' : 'No running Storybook found — click to scan again';
+    return;
   }
+  delete link.dataset.found;
+  link.title = auto ? 'Detect running storybook' : 'No running Storybook found — click to scan again';
+  // Flash the error glyph only when the user asked for the scan — the automatic one
+  // runs every time the offline state opens, and nothing running is normal there.
+  if (auto && !failed) { delete link.dataset.state; return; }
+  link.dataset.state = 'error';
+  clearTimeout(link._errTimer);
+  link._errTimer = setTimeout(() => { if (link.dataset.state === 'error') delete link.dataset.state; }, 1000);
 }
 const sbDetectLink = document.getElementById('sb-detect-running');
 sbDetectLink?.addEventListener('click', async () => {
