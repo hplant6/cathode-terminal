@@ -4222,20 +4222,25 @@ button:active { background: var(--btn-active); }
 .es-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
 .es-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; }
 .es-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
-.es-hero-btn { margin-top: 28px; padding: 20px 40px; min-width: 440px; max-width: 90%; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }   /* type matches .es-build-btn — the size and accent fill carry the emphasis, not the point size */
+.es-hero-btn { flex: 1; min-width: 0; padding: 20px 40px; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }   /* type matches .es-build-btn — the size and accent fill carry the emphasis, not the point size */
 .es-hero-btn:hover:not(:disabled) { background: var(--spec-accent-dark); }
 /* Inactive (starting / running): accent at 50% alpha, solid white text, no hover change. */
 .es-hero-btn:disabled,
 .es-hero-btn:disabled:hover { background: color-mix(in srgb, var(--spec-accent) 50%, transparent); color: #fff; cursor: default; }
+/* Run + detect share one row; the wrapper owns the width the button used to. */
+.es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 28px; min-width: 440px; max-width: 90%; }
+/* Square by construction: stretched to the row's height, width follows. */
+.es-hero-icon-btn { flex: 0 0 auto; align-self: stretch; aspect-ratio: 1; width: auto; height: auto; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--spec-accent-dark); border: none; border-radius: 3px; color: #fff; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.es-hero-icon-btn:hover:not(:disabled) { background: var(--spec-accent); color: #fff; }
+.es-hero-icon-btn:disabled { cursor: default; opacity: 0.6; }
+/* A hit turns it accent so the find is visible without a label. */
+.es-hero-icon-btn[data-found] { background: var(--spec-accent); }
+.es-hero-icon-btn[data-scanning] svg { animation: es-radar-spin 1.1s linear infinite; }
+@keyframes es-radar-spin { to { transform: rotate(360deg); } }
 /* Folder chooser under the Run button — pick which project's Storybook to run. */
 .es-run-folder { margin-top: 12px; min-width: 440px; max-width: 90%; height: 40px; padding: 0 16px; text-align: center; text-overflow: ellipsis; background: color-mix(in srgb, var(--spec-input-bg) 65%, transparent); border: 1px solid var(--spec-structural); border-radius: 3px; color: #fff; font-family: var(--font-mono); font-size: 12px; cursor: pointer; outline: none; box-sizing: border-box; transition: border-color 0.12s; }
 .es-run-folder::placeholder { color: var(--spec-text-dim); }
 .es-run-folder:hover { border-color: var(--accent); }
-/* Text link under the folder chooser — scans localhost for a Storybook we didn't start. */
-.es-detect-link { width: auto; height: auto; margin-top: 10px; padding: 4px 6px; background: transparent; border: none; color: var(--spec-text-dim); font-family: var(--font-mono); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.es-detect-link:hover:not(:disabled) { background: transparent; color: var(--accent); }
-.es-detect-link:disabled { cursor: default; opacity: 0.7; }
-.es-detect-link[data-found] { color: var(--accent); font-weight: 700; }
 #sb-setup .es-hero #sb-status { margin-top: 16px; }
 
 .es-build-rows { display: flex; flex-direction: column; flex-shrink: 0; background: var(--spec-header-bg); }   /* themed: the hero above stays #000 for the shader blend */

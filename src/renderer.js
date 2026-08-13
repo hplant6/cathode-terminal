@@ -10517,18 +10517,22 @@ document.getElementById('sb-run-folder')?.addEventListener('click', pickSbFolder
 async function scanForRunningStorybook({ auto = false } = {}) {
   const link = document.getElementById('sb-detect-running');
   if (!link) return;
+  // Icon button — the state it used to spell out lives in the tooltip, plus a spin
+  // while scanning and an accent fill once something is found.
   link.disabled = true;
-  link.textContent = 'Scanning…';
+  link.dataset.scanning = '1';
+  link.title = 'Scanning for a running Storybook…';
   let found = [];
   try { ({ found } = await ipcRenderer.invoke(IPC.STORYBOOK_SCAN)); } catch (_) {}
   link.disabled = false;
+  delete link.dataset.scanning;
   const hit = (found || [])[0];
   if (hit) {
     link.dataset.found = String(hit.port);
-    link.textContent = `Storybook running on :${hit.port} — connect`;
+    link.title = `Storybook running on :${hit.port} — click to connect`;
   } else {
     delete link.dataset.found;
-    link.textContent = auto ? 'Detect running storybook' : 'No running Storybook found — scan again';
+    link.title = auto ? 'Detect running storybook' : 'No running Storybook found — click to scan again';
   }
 }
 const sbDetectLink = document.getElementById('sb-detect-running');
