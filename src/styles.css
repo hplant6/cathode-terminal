@@ -5463,12 +5463,23 @@ select.tabs-add-select-field { display: none; }
 #theme-modal-body { display: flex; gap: 0; max-height: 72vh; margin-top: 14px; }
 /* Left: theme selector */
 #theme-sidebar { flex: 0 0 176px; padding-right: 22px; border-right: 1px solid var(--spec-structural); }
+/* Group header — a button now, so it has to undo the bare-button icon defaults
+   (28x28, centred) before it can be a full-width row. */
 .theme-sidebar-section {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: auto; padding: 0; background: none; border: none; cursor: pointer;
   font-family: var(--font-title); font-stretch: 112.5%; font-size: 12px; font-weight: 600;
   color: var(--spec-text-dim);
   text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;
+  text-align: left;
 }
-.theme-sidebar-section:not(:first-child) { margin-top: 24px; }
+.theme-sidebar-section:hover { background: none; color: var(--spec-text); }
+.theme-sidebar-section .ui-chev { color: var(--spec-text-faint); }
+.theme-sidebar-section:hover .ui-chev { color: var(--spec-text-dim); }
+.theme-group + .theme-group { margin-top: 24px; }
+.theme-group.collapsed .theme-group-body { display: none; }
+.theme-group.collapsed .theme-sidebar-section { margin-bottom: 0; }
+.theme-group.collapsed .ui-chev { transform: rotate(-90deg); }
 .theme-preset {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   width: 100%; padding: 8px 0; border: none; border-radius: 0; border-bottom: 1px solid transparent;

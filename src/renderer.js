@@ -317,11 +317,51 @@ function renderThemeSidebar() {
     btn.addEventListener('click', () => applyTheme(name));
     return btn;
   };
-  el.appendChild(mkTitle('Cathode Themes'));
-  BUILTIN_THEMES.forEach(([name, label]) => el.appendChild(mkBtn(name, label)));
-  el.appendChild(mkTitle('Custom Themes'));
-  el.appendChild(mkBtn('add', 'Add Custom'));
-  savedThemes.forEach((t, i) => el.appendChild(mkBtn(`saved:${i}`, t.name)));
+  // Collapsible group; returns the body to fill. Open/closed is remembered so the
+  // list comes back the way it was left.
+  const mkGroup = (title, key) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'theme-group' + (themeGroupClosed(key) ? ' collapsed' : '');
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'theme-sidebar-section';
+    head.innerHTML = '<span></span><span class="ui-chev"></span>';
+    head.querySelector('span').textContent = title;
+    head.addEventListener('click', () => {
+      const closed = !wrap.classList.contains('collapsed');
+      wrap.classList.toggle('collapsed', closed);
+      themeGroupClosed(key, closed);
+    });
+    const body = document.createElement('div');
+    body.className = 'theme-group-body';
+    wrap.append(head, body);
+    el.appendChild(wrap);
+    return body;
+  };
+
+  // Split by the measured luminance of each preset's panel fill — the same test that
+  // decides data-theme-light, so a theme can't be filed under Dark and then render
+  // with the light-mode corrections.
+  const dark = mkGroup('Dark Themes', 'dark');
+  const light = mkGroup('Light Themes', 'light');
+  BUILTIN_THEMES.forEach(([name, label]) => {
+    const fill = (THEME_PRESETS[name] || {})['--spec-input-bg'];
+    (isLightFill(fill) ? light : dark).appendChild(mkBtn(name, label));
+  });
+  const custom = mkGroup('Custom Themes', 'custom');
+  custom.appendChild(mkBtn('add', 'Add Custom'));
+  savedThemes.forEach((t, i) => custom.appendChild(mkBtn(`saved:${i}`, t.name)));
+}
+
+// Collapsed state per group, persisted. Call with one argument to read, two to set.
+function themeGroupClosed(key, set) {
+  const K = 'cathode-theme-groups';
+  let m = {};
+  try { m = JSON.parse(localStorage.getItem(K) || '{}'); } catch (_) {}
+  if (set === undefined) return !!m[key];
+  m[key] = !!set;
+  try { localStorage.setItem(K, JSON.stringify(m)); } catch (_) {}
+  return !!set;
 }
 
 // Colour panel — read-only swatches for the presets; pickers when Custom is active.
