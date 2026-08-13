@@ -4262,13 +4262,13 @@ button:active { background: var(--btn-active); }
 /* Canonical dropdown, only taller so it lines up with the 42px inputs beside it.
    Fill, blob corner and Zalando label are inherited — this row is not a restyle. */
 .es-build-row .ct-select-btn { min-height: 42px; }
-/* "Auto-detect (recommended)" carries an empty value, which enhanceSelect treats as
-   a placeholder and dims to shade 2 — but it is a real default, not an unmade
-   choice, so it reads at shade 1 like any other selection. Scoped to this picker:
-   the project one really is empty until you choose, and should stay dim. */
-.ct-select:has(> #sb-framework) .ct-select-label.placeholder { color: var(--spec-text-dim); }
-.ct-select:has(> #sb-framework) .ct-select-btn:hover .ct-select-label.placeholder,
-.ct-select:has(> #sb-framework).open .ct-select-label.placeholder { color: var(--spec-text); }
+/* Build-row pickers read at shade 1 even with nothing chosen. enhanceSelect dims an
+   empty value to shade 2 as a placeholder, which made them look disabled on these
+   wide rows — and "Auto-detect (recommended)" is a real default, not an unmade
+   choice. Both rows are treated the same so they match. */
+.es-build-row .ct-select-label.placeholder { color: var(--spec-text-dim); }
+.es-build-row .ct-select-btn:hover .ct-select-label.placeholder,
+.es-build-row .ct-select.open .ct-select-label.placeholder { color: var(--spec-text); }
 #sb-folder.es-build-input { cursor: pointer; }
 #sb-folder-pick { display: none; }   /* kept only for its picker handler — never a grid cell (id beats any button display rule) */
 #wf-folder-pick { display: none; }   /* same: never a grid cell */
