@@ -4230,11 +4230,20 @@ button:active { background: var(--btn-active); }
 .es-hero-actions { display: flex; align-items: stretch; gap: 8px; margin-top: 40px; min-width: 440px; max-width: 90%; }
 /* Browser hero: label · picker · action on one line. Hero-scale rather than the
    build rows' left-aligned label column, so the hero keeps one obvious action. */
-#wf-run-row { align-items: center; }
-.es-hero-rowlabel { flex: 0 0 auto; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; }
-#wf-run-row .ct-select { flex: 1; min-width: 0; }
-#wf-run-row .ct-select-btn { min-height: 46px; }
-.es-hero-btn-compact { flex: 0 0 auto; padding: 0 32px; min-height: 46px; }
+/* Same grid as a build row — 220px label, fluid control, 130px action on a 20px gap,
+   at the rows' 780px content width — so the hero reads as part of the same table
+   rather than a differently-proportioned one-off. */
+#wf-run-row {
+  display: grid; grid-template-columns: 220px 1fr 130px; gap: 20px; align-items: center;
+  width: min(780px, 90%); min-width: 0; max-width: none;
+  padding: 18px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+.es-hero-rowlabel { font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-align: left; }
+#wf-run-row .ct-select { min-width: 0; }
+#wf-run-row .ct-select-btn { min-height: 42px; }
+.es-hero-btn-compact { width: 100%; min-width: 0; padding: 0; min-height: 42px; }
 /* Nothing running: the row is hidden entirely and this says why. */
 .es-hero-none { margin-top: 40px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
 .es-hero-none[hidden] { display: none; }
