@@ -751,11 +751,20 @@
               </div>
               <div class="es-build-row">
                 <span class="es-build-label">Build from framework</span>
-                <div class="ui-combo">
-                  <input id="sb-framework" class="ui-combo-input" type="text" placeholder="Choose framework" spellcheck="false" autocomplete="off"/>
-                  <span class="ui-combo-chev" aria-hidden="true"></span>
-                  <div class="ui-combo-menu"></div>
-                </div>
+                <select id="sb-framework" class="es-build-select">
+                  <option value="">Auto-detect (recommended)</option>
+                  <option value="HTML / static site">HTML / static site</option>
+                  <option value="React">React</option>
+                  <option value="Vue">Vue</option>
+                  <option value="Angular">Angular</option>
+                  <option value="Svelte">Svelte</option>
+                  <option value="SolidJS">SolidJS</option>
+                  <option value="Preact">Preact</option>
+                  <option value="Web Components">Web Components</option>
+                  <option value="Next.js">Next.js</option>
+                  <option value="Nuxt">Nuxt</option>
+                  <option value="SvelteKit">SvelteKit</option>
+                </select>
                 <button id="sb-build-fw" class="es-build-btn">Build</button>
               </div>
             </div>
@@ -817,11 +826,7 @@
             <div class="es-build-rows">
               <div class="es-build-row">
                 <span class="es-build-label">Run server from project</span>
-                <div class="ui-combo" id="wf-project-combo">
-                  <input id="wf-project" class="ui-combo-input" type="text" placeholder="Choose a project" spellcheck="false" autocomplete="off"/>
-                  <span class="ui-combo-chev" aria-hidden="true"></span>
-                  <div class="ui-combo-menu"></div>
-                </div>
+                <select id="wf-project" class="es-build-select"></select>
                 <button id="wf-project-run" class="es-build-btn">Run</button>
               </div>
               <div class="es-build-row">

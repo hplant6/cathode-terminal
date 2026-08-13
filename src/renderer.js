@@ -5131,11 +5131,30 @@ wfLoadBtn?.addEventListener('click', () => {
 // ── Row 1: run a saved project's dev server (its manifest recipe — no agent) ──
 function wfProjects() { try { return JSON.parse(localStorage.getItem(LS.projects) || '[]'); } catch (_) { return []; } }
 let wfProject = null;
-initCombo(document.getElementById('wf-project-combo'), {
-  options: () => wfProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))
-    .map(pr => ({ value: pr.rootDir, label: pr.name || pr.rootDir, sub: pr.rootDir, project: pr })),
-  onPick: (o) => { wfProject = o.project; wfProjectIn.value = o.project.rootDir; },
-});
+// The project list changes as projects come and go, so repopulate the <select>
+// before the dropdown opens — enhanceSelect rebuilds its menu from the options each time.
+function syncWfProjectOptions() {
+  if (!wfProjectIn) return;
+  const cur = wfProjectIn.value;
+  const list = wfProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+  wfProjectIn.innerHTML = '';
+  const ph = document.createElement('option'); ph.value = ''; ph.textContent = 'Choose a project';
+  wfProjectIn.appendChild(ph);
+  for (const pr of list) {
+    const o = document.createElement('option');
+    o.value = pr.rootDir; o.textContent = pr.name || pr.rootDir;
+    wfProjectIn.appendChild(o);
+  }
+  wfProjectIn.value = cur;
+}
+if (wfProjectIn) {
+  syncWfProjectOptions();
+  enhanceSelect(wfProjectIn);
+  wfProjectIn.closest('.ct-select')?.addEventListener('mousedown', syncWfProjectOptions, true);
+  wfProjectIn.addEventListener('change', () => {
+    wfProject = wfProjects().find(pr => pr.rootDir === wfProjectIn.value) || null;
+  });
+}
 
 // Poll until the port answers, so we navigate only once the server is actually up.
 async function wfWaitForPort(port, tries = 20) {
@@ -5150,7 +5169,7 @@ async function wfWaitForPort(port, tries = 20) {
 }
 document.getElementById('wf-project-run')?.addEventListener('click', async () => {
   const btn = document.getElementById('wf-project-run');
-  if (!wfProject) { wfProjectIn?.focus(); return; }   // focus opens the combo's menu
+  if (!wfProject) { wfProjectIn?.closest('.ct-select')?.querySelector('.ct-select-btn')?.click(); return; }
   const srv = (wfProject.servers || [])[0];
   if (!srv || !srv.cmd) { startDevServer(wfProject.rootDir); return; }   // no recipe yet → let the agent work it out
   const label = btn.textContent;
@@ -6938,6 +6957,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const titleEl   = document.getElementById('ed-panel-title');
   const linkEl    = document.getElementById('ed-el-link');
   const propSel   = document.getElementById('ed-prop');
+  enhanceSelect(propSel);   // canonical dropdown
+  enhanceSelect(document.getElementById('ed-format'));
   const oldSw     = document.getElementById('ed-old-sw');
   const oldHex    = document.getElementById('ed-old-hex');
   const newSw     = document.getElementById('ed-new-sw');
@@ -8358,6 +8379,7 @@ function buildAuditMenu() {
   const modal      = document.getElementById('tabs-modal');
   const listEl     = document.getElementById('tabs-modal-list');
   const addSel     = document.getElementById('tabs-add-select');
+  enhanceSelect(addSel);   // canonical dropdown
   const addBtn     = document.getElementById('tabs-add-btn');
   const urlFields  = document.getElementById('tabs-add-url-fields');
   const addLabelIn = document.getElementById('tabs-add-label');
@@ -8525,6 +8547,7 @@ function buildAuditMenu() {
   const modal        = document.getElementById('mcp-modal');
   const listEl       = document.getElementById('mcp-modal-list');
   const svcSel       = document.getElementById('mcp-service-select');
+  enhanceSelect(svcSel);   // canonical dropdown
   const customFields = document.getElementById('mcp-custom-fields');
   const tokenField   = document.getElementById('mcp-token-field');
   const nameIn       = document.getElementById('mcp-add-name');
@@ -10762,78 +10785,7 @@ sbTabs.forEach(t => t.addEventListener('click', () => setSbTab(t.dataset.sbtab))
 document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stopPropagation());
 document.getElementById('sb-framework')?.addEventListener('keydown', e => e.stopPropagation());
 // Framework combobox — popular frameworks in a styled dropdown, but free text still works
-const SB_FRAMEWORKS = ['', 'HTML / static site', 'React', 'Vue', 'Angular', 'Svelte', 'SolidJS', 'Preact', 'Web Components', 'Next.js', 'Nuxt', 'SvelteKit'];
-initCombo(document.querySelector('#sb-setup .ui-combo'), {
-  freeText: true,   // an unlisted framework can still be typed in
-  options: () => SB_FRAMEWORKS.map(v => ({ value: v, label: v || 'Auto-detect (recommended)' })),
-  onPick: (o) => { document.getElementById('sb-framework').value = o.value; },
-});
-
-// ── Combo: filter-as-you-type dropdown ───────────────────────────
-// Generalises the Box Select "add a property" typeahead (.pp-ua-combo): type to
-// filter, ↑/↓ to move, Enter to take the highlighted row, Escape to close. Options
-// are supplied by a callback so a combo can be static (frameworks) or live
-// (projects). Picking uses mousedown, which beats the input's blur.
-function initCombo(root, { options, onPick, freeText = false } = {}) {
-  if (!root) return null;
-  const input = root.querySelector('.ui-combo-input');
-  const menu  = root.querySelector('.ui-combo-menu');
-  if (!input || !menu) return null;
-  const close = () => { menu.classList.remove('open'); typed = false; };
-  let typed = false;   // only filter once the user actually types — opening with a value
-                       // already chosen must still show every option, not just that one
-  const match = (o, q) => !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q);
-  function render() {
-    const q = typed ? input.value.trim().toLowerCase() : '';
-    const all = (typeof options === 'function' ? options() : options) || [];
-    const hits = all.filter(o => match(o, q));
-    menu.innerHTML = '';
-    if (!hits.length) {
-      const e = document.createElement('div'); e.className = 'ui-combo-empty'; e.textContent = 'no match';
-      menu.appendChild(e); menu.classList.add('open'); return;
-    }
-    const cur = input.value.trim().toLowerCase();
-    const sel = hits.findIndex(o => o.label.toLowerCase() === cur || String(o.value).toLowerCase() === cur);
-    hits.slice(0, 60).forEach((o, i) => {
-      const it = document.createElement('div');
-      it.className = 'ui-combo-item' + (i === (sel >= 0 ? sel : 0) ? ' active' : '');
-      it.textContent = o.label;
-      if (o.sub) { const d = document.createElement('span'); d.className = 'ui-combo-sub'; d.textContent = o.sub; it.appendChild(d); }
-      it.addEventListener('mousedown', (e) => { e.preventDefault(); take(o); });
-      menu.appendChild(it);
-    });
-    menu.classList.add('open');
-  }
-  function take(o) { input.value = o.label; close(); onPick && onPick(o); }
-  input.addEventListener('focus', render);
-  input.addEventListener('input', () => { typed = true; render(); });
-  input.addEventListener('blur', () => setTimeout(close, 150));
-  input.addEventListener('keydown', (e) => {
-    e.stopPropagation();
-    const list = [...menu.querySelectorAll('.ui-combo-item')];
-    const active = menu.querySelector('.ui-combo-item.active');
-    if (e.key === 'Escape') { close(); return; }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const idx = list.indexOf(active);
-      const all = (typeof options === 'function' ? options() : options) || [];
-      const hits = all.filter(o => match(o, typed ? input.value.trim().toLowerCase() : ''));
-      if (idx >= 0 && hits[idx]) take(hits[idx]);
-      else if (freeText) close();     // free-text combos keep whatever was typed
-      return;
-    }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (!list.length) return;
-      let i = list.indexOf(active);
-      i = e.key === 'ArrowDown' ? Math.min(list.length - 1, i + 1) : Math.max(0, i - 1);
-      list.forEach(x => x.classList.remove('active'));
-      list[i].classList.add('active'); list[i].scrollIntoView({ block: 'nearest' });
-    }
-  });
-  document.addEventListener('mousedown', (e) => { if (!root.contains(e.target)) close(); });
-  return { render, close, input };
-}
+enhanceSelect(document.getElementById('sb-framework'));   // canonical dropdown (options live in the markup)
 
 // ── Storybook instance bar ──
 document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_OPEN_SWITCHER));

@@ -3181,24 +3181,7 @@ html, body {
 .pp-ua-item:hover, .pp-ua-item.active { background: var(--spec-header-bg); color: var(--spec-text); }
 .pp-ua-empty { padding: 6px 10px; font: 11px var(--font-ui); color: var(--spec-text-faint); }
 
-/* ── Combo (filter-as-you-type dropdown) ──
-   The .pp-ua-combo pattern generalised: type to filter, arrows to move, Enter to
-   pick. That one's menu is inline because its drawer can grow; this one is absolute
-   so it also works inside grid rows, which cannot. */
-.ui-combo { position: relative; }
-.ui-combo-input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 34px 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font: 12px var(--font-mono); outline: none; }
-.ui-combo-input::placeholder { color: var(--spec-text-dim); }
-.ui-combo-input:focus { border-color: var(--accent); }
-/* Chevron marks it as a picker rather than a text field. Non-interactive: focusing
-   the input is what opens the menu, and a click on the arrow lands on the input. */
-.ui-combo-chev { position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -6px; border-right: 1.5px solid var(--spec-text-dim); border-bottom: 1.5px solid var(--spec-text-dim); transform: rotate(45deg); pointer-events: none; transition: transform 0.12s; }
-.ui-combo:has(.ui-combo-menu.open) .ui-combo-chev { transform: rotate(-135deg); margin-top: -2px; }
-.ui-combo-menu { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; max-height: 240px; overflow-y: auto; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.55); }
-.ui-combo-menu.open { display: block; }
-.ui-combo-item { padding: 7px 12px; font: 12px var(--font-mono); color: var(--spec-text-dim); cursor: pointer; }
-.ui-combo-item:hover, .ui-combo-item.active { background: var(--spec-header-bg); color: var(--spec-text); }
-.ui-combo-sub { display: block; color: var(--spec-text-faint); font-size: 10.5px; margin-top: 2px; }
-.ui-combo-empty { padding: 7px 12px; font: 11px var(--font-ui); color: var(--spec-text-faint); }
+
 .pp-field {
   display: flex; align-items: center; gap: 10px;
   margin: 0; padding: 0 12px; height: 56px;
@@ -4261,6 +4244,9 @@ button:active { background: var(--btn-active); }
 .es-build-input { height: 42px; padding: 0 14px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 6px; color: var(--spec-text); font-family: var(--font-mono); font-size: 12px; outline: none; box-sizing: border-box; }
 .es-build-input::placeholder { color: var(--spec-text-dim); }
 .es-build-input:focus { border-color: var(--accent); }
+/* Canonical dropdown sized for a build row (its default is the app's compact 32px). */
+.es-build-row .ct-select-btn { min-height: 42px; border-radius: 6px; background: var(--spec-input-bg); box-shadow: inset 0 0 0 1px var(--spec-structural); font-size: 12px; }
+.es-build-row .ct-select-btn:hover, .es-build-row .ct-select.open .ct-select-btn { background: var(--spec-dropdown-bg); }
 #sb-folder.es-build-input { cursor: pointer; }
 #sb-folder-pick { display: none; }   /* kept only for its picker handler — never a grid cell (id beats any button display rule) */
 #wf-folder-pick { display: none; }   /* same: never a grid cell */
