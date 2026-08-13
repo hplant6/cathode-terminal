@@ -1008,6 +1008,20 @@
     </div>
   </div>
 
+  <!-- Name a new project (the + in the views bar, and Mission Control's Create) -->
+  <div id="new-project-modal" class="modal-backdrop">
+    <div class="modal-box">
+      <button class="mcp-modal-close" id="new-project-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Name your new project</div>
+      <p class="modal-desc">Cathode creates the folder, runs <code>git init</code> and writes its manifest. You'll pick where it lives next.</p>
+      <input id="new-project-input" class="modal-input" placeholder="e.g. my-app" spellcheck="false" autocomplete="off" />
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="new-project-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="new-project-confirm">Create</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Chat font size modal -->
   <div id="chat-font-modal" class="modal-backdrop">
     <div class="modal-box">

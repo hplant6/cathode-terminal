@@ -10187,23 +10187,42 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     // The active (selected) project — expanded server table (or Add-server form).
     // Small inline text prompt (Electron blocks window.prompt). Resolves to the
     // trimmed value or null. Styled like the classify card.
+    // Name prompt for a new project. A real modal (.modal-backdrop) rather than an
+    // anchored card, so it dims the app and parks the native views like every other
+    // modal — the folder picker opens straight after it.
     function promptText(question, placeholder, okLabel) {
       return new Promise((resolve) => {
-        const card = document.createElement('div'); card.className = 'pc-prompt';
-        const text = document.createElement('div'); text.className = 'pc-text'; text.textContent = question;
-        const input = document.createElement('input'); input.className = 'pc-input'; input.placeholder = placeholder || ''; input.spellcheck = false;
-        const acts = document.createElement('div'); acts.className = 'pc-acts';
-        const cancel = document.createElement('button'); cancel.className = 'pc-btn'; cancel.textContent = 'Cancel';
-        const ok = document.createElement('button'); ok.className = 'pc-btn primary'; ok.textContent = okLabel || 'OK';
+        const modal = document.getElementById('new-project-modal');
+        const input = document.getElementById('new-project-input');
+        if (!modal || !input) { resolve(null); return; }
+        modal.querySelector('.modal-title').textContent = question;
+        document.getElementById('new-project-confirm').textContent = okLabel || 'OK';
+        input.placeholder = placeholder || '';
+        input.value = '';
+        // Every listener is torn down together, whichever way the prompt closes —
+        // otherwise cancelling with Escape would leave the button handlers attached
+        // and they'd stack up across opens.
+        const bound = [];
+        const on = (el, ev, fn) => { if (!el) return; el.addEventListener(ev, fn); bound.push([el, ev, fn]); };
         let done = false;
-        const finish = (v) => { if (done) return; done = true; card.remove(); resolve(v); };
-        cancel.addEventListener('click', () => finish(null));
-        ok.addEventListener('click', () => finish(input.value.trim() || null));
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); finish(input.value.trim() || null); } else if (e.key === 'Escape') { e.preventDefault(); finish(null); } });
-        acts.append(cancel, ok);
-        card.append(text, input, acts);
-        document.body.appendChild(card);
-        input.focus();
+        const finish = (v) => {
+          if (done) return; done = true;
+          modal.classList.remove('open');
+          for (const [el, ev, fn] of bound) el.removeEventListener(ev, fn);
+          resolve(v);
+        };
+        const take = () => finish(input.value.trim() || null);
+        on(modal, 'mousedown', (e) => { if (e.target === modal) finish(null); });   // click-away cancels
+        on(input, 'keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') { e.preventDefault(); take(); }
+          else if (e.key === 'Escape') { e.preventDefault(); finish(null); }
+        });
+        on(document.getElementById('new-project-confirm'), 'click', take);
+        on(document.getElementById('new-project-cancel'), 'click', () => finish(null));
+        on(document.getElementById('new-project-close'), 'click', () => finish(null));
+        modal.classList.add('open');
+        setTimeout(() => input.focus(), 0);
       });
     }
 
