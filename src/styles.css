@@ -4218,7 +4218,7 @@ button:active { background: var(--btn-active); }
 /* ── Storybook offline empty state ── */
 .es-hero { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 48px 24px; overflow: hidden; }
 .es-fx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: block; }
-.es-hero-content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+.es-hero-content { position: relative; z-index: 1; width: 100%; display: flex; flex-direction: column; align-items: center; }   /* full width so a child sized in % measures against the hero, not the title */
 .es-hero-title { font-family: var(--font-title); font-weight: 700; font-size: 60px; line-height: 1.02; letter-spacing: 0.01em; text-transform: uppercase; color: #fff; margin: 0; }
 .es-hero-sub { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #fff; margin: 20px 0 0; }
 .es-hero-btn { flex: 1; min-width: 0; padding: 20px 40px; background: var(--spec-accent); color: #fff; border: none; border-radius: 3px; font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: filter 0.12s, background 0.12s; }   /* type matches .es-build-btn — the size and accent fill carry the emphasis, not the point size */
@@ -4237,8 +4237,8 @@ button:active { background: var(--btn-active); }
   display: grid; grid-template-columns: 220px 1fr 130px; gap: 20px; align-items: center;
   width: min(780px, 90%); min-width: 0; max-width: none;
   padding: 18px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.5);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 .es-hero-rowlabel { font-family: var(--font-title); font-stretch: 112.5%; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-align: left; }
 #wf-run-row .ct-select { min-width: 0; }
