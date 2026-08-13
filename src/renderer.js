@@ -5131,37 +5131,11 @@ wfLoadBtn?.addEventListener('click', () => {
 // ── Row 1: run a saved project's dev server (its manifest recipe — no agent) ──
 function wfProjects() { try { return JSON.parse(localStorage.getItem(LS.projects) || '[]'); } catch (_) { return []; } }
 let wfProject = null;
-(function initWfProjectCombo() {
-  const combo = document.getElementById('wf-project-combo');
-  if (!combo) return;
-  const menu = combo.querySelector('.es-combo-menu');
-  const setOpen = (v) => { menu.hidden = !v; };
-  function render() {
-    menu.innerHTML = '';
-    const list = wfProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
-    if (!list.length) {
-      const e = document.createElement('div');
-      e.className = 'es-combo-empty';
-      e.textContent = 'No saved projects yet — open one from the project switcher.';
-      menu.appendChild(e);
-      return;
-    }
-    list.forEach(pr => {
-      const o = document.createElement('div');
-      o.className = 'es-combo-opt';
-      const n = document.createElement('span'); n.textContent = pr.name || pr.rootDir;
-      const d = document.createElement('span'); d.className = 'es-combo-dir'; d.textContent = pr.rootDir;
-      o.append(n, d);
-      o.addEventListener('click', () => { wfProject = pr; wfProjectIn.value = pr.rootDir; setOpen(false); });
-      menu.appendChild(o);
-    });
-  }
-  combo.addEventListener('click', (e) => {
-    if (e.target.closest('.es-combo-menu')) return;
-    if (menu.hidden) { render(); setOpen(true); } else setOpen(false);
-  });
-  document.addEventListener('mousedown', (e) => { if (!combo.contains(e.target)) setOpen(false); });
-})();
+initCombo(document.getElementById('wf-project-combo'), {
+  options: () => wfProjects().slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))
+    .map(pr => ({ value: pr.rootDir, label: pr.name || pr.rootDir, sub: pr.rootDir, project: pr })),
+  onPick: (o) => { wfProject = o.project; wfProjectIn.value = o.project.rootDir; },
+});
 
 // Poll until the port answers, so we navigate only once the server is actually up.
 async function wfWaitForPort(port, tries = 20) {
@@ -5176,7 +5150,7 @@ async function wfWaitForPort(port, tries = 20) {
 }
 document.getElementById('wf-project-run')?.addEventListener('click', async () => {
   const btn = document.getElementById('wf-project-run');
-  if (!wfProject) { document.getElementById('wf-project-combo')?.click(); return; }
+  if (!wfProject) { wfProjectIn?.focus(); return; }   // focus opens the combo's menu
   const srv = (wfProject.servers || [])[0];
   if (!srv || !srv.cmd) { startDevServer(wfProject.rootDir); return; }   // no recipe yet → let the agent work it out
   const label = btn.textContent;
@@ -10788,25 +10762,73 @@ sbTabs.forEach(t => t.addEventListener('click', () => setSbTab(t.dataset.sbtab))
 document.getElementById('sb-figma-url')?.addEventListener('keydown', e => e.stopPropagation());
 document.getElementById('sb-framework')?.addEventListener('keydown', e => e.stopPropagation());
 // Framework combobox — popular frameworks in a styled dropdown, but free text still works
-(function initFrameworkCombo() {
-  const combo = document.querySelector('.sb-fw-combo');
-  if (!combo) return;
-  const input  = document.getElementById('sb-framework');
-  const toggle = combo.querySelector('.sb-fw-toggle');
-  const menu   = combo.querySelector('.sb-fw-menu');
-  const opts   = Array.from(menu.querySelectorAll('.sb-fw-opt'));
-  const setOpen = (v) => { combo.classList.toggle('open', v); menu.hidden = !v; };
-  const showAll = () => opts.forEach(o => o.hidden = false);
-  const filter = () => {
+const SB_FRAMEWORKS = ['', 'HTML / static site', 'React', 'Vue', 'Angular', 'Svelte', 'SolidJS', 'Preact', 'Web Components', 'Next.js', 'Nuxt', 'SvelteKit'];
+initCombo(document.querySelector('#sb-setup .ui-combo'), {
+  freeText: true,   // an unlisted framework can still be typed in
+  options: () => SB_FRAMEWORKS.map(v => ({ value: v, label: v || 'Auto-detect (recommended)' })),
+  onPick: (o) => { document.getElementById('sb-framework').value = o.value; },
+});
+
+// ── Combo: filter-as-you-type dropdown ───────────────────────────
+// Generalises the Box Select "add a property" typeahead (.pp-ua-combo): type to
+// filter, ↑/↓ to move, Enter to take the highlighted row, Escape to close. Options
+// are supplied by a callback so a combo can be static (frameworks) or live
+// (projects). Picking uses mousedown, which beats the input's blur.
+function initCombo(root, { options, onPick, freeText = false } = {}) {
+  if (!root) return null;
+  const input = root.querySelector('.ui-combo-input');
+  const menu  = root.querySelector('.ui-combo-menu');
+  if (!input || !menu) return null;
+  const close = () => menu.classList.remove('open');
+  function render() {
     const q = input.value.trim().toLowerCase();
-    opts.forEach(o => { o.hidden = !!q && !o.textContent.toLowerCase().includes(q) && !o.dataset.val.toLowerCase().includes(q); });
-  };
-  toggle.addEventListener('click', (e) => { e.preventDefault(); if (combo.classList.contains('open')) setOpen(false); else { showAll(); setOpen(true); } });
-  input.addEventListener('focus', () => { showAll(); setOpen(true); });
-  input.addEventListener('input', () => { setOpen(true); filter(); });
-  opts.forEach(o => o.addEventListener('click', () => { input.value = o.dataset.val; setOpen(false); }));
-  document.addEventListener('mousedown', (e) => { if (!combo.contains(e.target)) setOpen(false); });
-})();
+    const all = (typeof options === 'function' ? options() : options) || [];
+    const hits = all.filter(o => !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q));
+    menu.innerHTML = '';
+    if (!hits.length) {
+      const e = document.createElement('div'); e.className = 'ui-combo-empty'; e.textContent = 'no match';
+      menu.appendChild(e); menu.classList.add('open'); return;
+    }
+    hits.slice(0, 60).forEach((o, i) => {
+      const it = document.createElement('div');
+      it.className = 'ui-combo-item' + (i === 0 ? ' active' : '');
+      it.textContent = o.label;
+      if (o.sub) { const d = document.createElement('span'); d.className = 'ui-combo-sub'; d.textContent = o.sub; it.appendChild(d); }
+      it.addEventListener('mousedown', (e) => { e.preventDefault(); take(o); });
+      menu.appendChild(it);
+    });
+    menu.classList.add('open');
+  }
+  function take(o) { input.value = o.label; close(); onPick && onPick(o); }
+  input.addEventListener('focus', render);
+  input.addEventListener('input', render);
+  input.addEventListener('blur', () => setTimeout(close, 150));
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    const list = [...menu.querySelectorAll('.ui-combo-item')];
+    const active = menu.querySelector('.ui-combo-item.active');
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = list.indexOf(active);
+      const all = (typeof options === 'function' ? options() : options) || [];
+      const hits = all.filter(o => { const q = input.value.trim().toLowerCase(); return !q || (o.label + ' ' + (o.sub || '') + ' ' + o.value).toLowerCase().includes(q); });
+      if (idx >= 0 && hits[idx]) take(hits[idx]);
+      else if (freeText) close();     // free-text combos keep whatever was typed
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!list.length) return;
+      let i = list.indexOf(active);
+      i = e.key === 'ArrowDown' ? Math.min(list.length - 1, i + 1) : Math.max(0, i - 1);
+      list.forEach(x => x.classList.remove('active'));
+      list[i].classList.add('active'); list[i].scrollIntoView({ block: 'nearest' });
+    }
+  });
+  document.addEventListener('mousedown', (e) => { if (!root.contains(e.target)) close(); });
+  return { render, close, input };
+}
 
 // ── Storybook instance bar ──
 document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_OPEN_SWITCHER));

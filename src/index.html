@@ -751,23 +751,9 @@
               </div>
               <div class="es-build-row">
                 <span class="es-build-label">Build from framework</span>
-                <div class="sb-fw-combo">
-                  <input id="sb-framework" type="text" placeholder="Choose framework" spellcheck="false" autocomplete="off"/>
-                  <button class="sb-fw-toggle" type="button" tabindex="-1" aria-label="Choose framework"><span class="ui-chev"></span></button>
-                  <div class="sb-fw-menu" hidden>
-                    <div class="sb-fw-opt" data-val="">Auto-detect (recommended)</div>
-                    <div class="sb-fw-opt" data-val="HTML / static site">HTML / static site</div>
-                    <div class="sb-fw-opt" data-val="React">React</div>
-                    <div class="sb-fw-opt" data-val="Vue">Vue</div>
-                    <div class="sb-fw-opt" data-val="Angular">Angular</div>
-                    <div class="sb-fw-opt" data-val="Svelte">Svelte</div>
-                    <div class="sb-fw-opt" data-val="SolidJS">SolidJS</div>
-                    <div class="sb-fw-opt" data-val="Preact">Preact</div>
-                    <div class="sb-fw-opt" data-val="Web Components">Web Components</div>
-                    <div class="sb-fw-opt" data-val="Next.js">Next.js</div>
-                    <div class="sb-fw-opt" data-val="Nuxt">Nuxt</div>
-                    <div class="sb-fw-opt" data-val="SvelteKit">SvelteKit</div>
-                  </div>
+                <div class="ui-combo">
+                  <input id="sb-framework" class="ui-combo-input" type="text" placeholder="Choose framework" spellcheck="false" autocomplete="off"/>
+                  <div class="ui-combo-menu"></div>
                 </div>
                 <button id="sb-build-fw" class="es-build-btn">Build</button>
               </div>
@@ -830,10 +816,9 @@
             <div class="es-build-rows">
               <div class="es-build-row">
                 <span class="es-build-label">Run server from project</span>
-                <div class="es-combo" id="wf-project-combo">
-                  <input id="wf-project" type="text" placeholder="Choose a project" spellcheck="false" autocomplete="off" readonly/>
-                  <button class="es-combo-toggle" type="button" tabindex="-1" aria-label="Choose project"><span class="ui-chev"></span></button>
-                  <div class="es-combo-menu" hidden></div>
+                <div class="ui-combo" id="wf-project-combo">
+                  <input id="wf-project" class="ui-combo-input" type="text" placeholder="Choose a project" spellcheck="false" autocomplete="off"/>
+                  <div class="ui-combo-menu"></div>
                 </div>
                 <button id="wf-project-run" class="es-build-btn">Run</button>
               </div>
