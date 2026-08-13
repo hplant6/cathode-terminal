@@ -126,30 +126,10 @@ const THEME_PRESETS = {
     '--spec-dropdown-bg':'#C7D8E8','--spec-toolbar-bg':'#D6E4F0','--spec-header-bg':'#E6EFF7','--spec-input-bg':'#F5F9FD','--spec-black':'#16202B',
     '--spec-accent':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#2E7DD6','--mc-green':'#D6F2E2','--mc-green-dark':'#2F6B52',
   },
-  green: {   // P1 phosphor — green CRT
-    '--spec-text':'#76F58A','--spec-text-dim':'#4CA85C','--spec-text-faint':'#2C6336','--spec-structural':'#1A3A22',
-    '--spec-dropdown-bg':'#132E19','--spec-toolbar-bg':'#0D2412','--spec-header-bg':'#08180C','--spec-input-bg':'#040E07','--spec-black':'#000000',
-    '--spec-accent':'#3DFB5A','--spec-accent-dark':'#123A1D','--spec-accent-3':'#9CFF7A','--danger':'#FF6B6B','--success':'#5FE85F','--warning':'#C6E84A','--spec-graph-2':'#B6FF7A','--mc-green':'#B6FFC4','--mc-green-dark':'#123A1D',
-  },
   amber: {   // P3 phosphor — amber CRT
     '--spec-text':'#FFB454','--spec-text-dim':'#C98A3A','--spec-text-faint':'#7A5526','--spec-structural':'#4A3419',
     '--spec-dropdown-bg':'#3B2914','--spec-toolbar-bg':'#2E200F','--spec-header-bg':'#1F150A','--spec-input-bg':'#120C05','--spec-black':'#000000',
     '--spec-accent':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-2':'#FFE16B','--mc-green':'#C8F5A8','--mc-green-dark':'#2E4A18',
-  },
-  bluecrt: {   // blue/white CRT
-    '--spec-text':'#BCD8FF','--spec-text-dim':'#7F9BC9','--spec-text-faint':'#455A7E','--spec-structural':'#28374F',
-    '--spec-dropdown-bg':'#1E2A40','--spec-toolbar-bg':'#161F30','--spec-header-bg':'#0E1422','--spec-input-bg':'#070B14','--spec-black':'#000000',
-    '--spec-accent':'#58A6FF','--spec-accent-dark':'#123459','--spec-accent-3':'#7AD0FF','--danger':'#FF6B6B','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#8CC8FF','--mc-green':'#A8FFD0','--mc-green-dark':'#12402E',
-  },
-  midnight: {   // deep blue
-    '--spec-text':'#C5CDD9','--spec-text-dim':'#8A94A6','--spec-text-faint':'#4E5666','--spec-structural':'#2A3242',
-    '--spec-dropdown-bg':'#222A38','--spec-toolbar-bg':'#1A2230','--spec-header-bg':'#121826','--spec-input-bg':'#0A0F1A','--spec-black':'#04070D',
-    '--spec-accent':'#5B9DFF','--spec-accent-dark':'#14305C','--spec-accent-3':'#7C5CFF','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B','--mc-green':'#7CE8A8','--mc-green-dark':'#17372A',
-  },
-  nord: {
-    '--spec-text':'#ECEFF4','--spec-text-dim':'#9BA6BA','--spec-text-faint':'#4C566A','--spec-structural':'#3B4252',
-    '--spec-dropdown-bg':'#353B49','--spec-toolbar-bg':'#2E3440','--spec-header-bg':'#272C36','--spec-input-bg':'#1E232B','--spec-black':'#15181E',
-    '--spec-accent':'#88C0D0','--spec-accent-dark':'#2E4A52','--spec-accent-3':'#B48EAD','--danger':'#BF616A','--success':'#A3BE8C','--warning':'#EBCB8B','--spec-graph-2':'#EBCB8B','--mc-green':'#A3BE8C','--mc-green-dark':'#3B4A38',
   },
   dracula: {
     '--spec-text':'#F8F8F2','--spec-text-dim':'#BDBECC','--spec-text-faint':'#6272A4','--spec-structural':'#44475A',
@@ -164,8 +144,7 @@ const THEME_PRESETS = {
 };
 const BUILTIN_THEMES = [
   ['default','Default'], ['tan','Tan'], ['sky','Sky'],
-  ['green','Green CRT'], ['amber','Amber CRT'], ['bluecrt','Blue CRT'],
-  ['midnight','Midnight'], ['nord','Nord'], ['dracula','Dracula'],
+  ['amber','Amber CRT'], ['dracula','Dracula'],
   ['deepocean','Deep Ocean'],
 ];
 
@@ -273,6 +252,8 @@ let _graphRaf = null;   // rAF handle for the redrawGraphs() throttle — declar
 function applyTheme(name) {
   const prev = activeThemeName;
   if (/^saved:/.test(name) && !savedThemes[+name.split(':')[1]]) name = 'default';
+  // a removed preset may still be stored from a previous version
+  if (name !== 'add' && !/^saved:/.test(name) && !THEME_PRESETS[name]) name = 'default';
   activeThemeName = name;
   localStorage.setItem(LS.theme, name);
   if (name === 'add') {
