@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-16
+
+### Added
+- **Run a model on your own GPU.** *Local (Ollama)* joins the agent list — private, offline, no API key. The models it offers are read from the running daemon rather than hard-coded, so anything you have pulled shows up, and one pulled since launch appears the next time you open the menu.
+- **Switch models without losing the conversation.** Agents can advertise a model selector when a session starts; Cathode was reading the permission modes that arrive alongside it and throwing the model list away. It now builds the Model submenu from that list and switches in place — no restart, no reconnect, the chat stays where it was. This is protocol-level, so any agent that advertises models gets a picker, not only the one it was tested against.
+- **Digger handoff**, in a new kebab beside the bell in the session status bar. It writes a block into the project's `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` telling agents to hand bulk text work — log triage, summarising, extraction — to a local model instead of reading the file themselves, so a large log never enters the agent's context and never costs API tokens. Off by default: it spends prompt budget in every project and only earns that back where an agent actually meets large files. The switch reads its state back from the file rather than remembering it separately, so it cannot tell you one thing while agents are told another, and it stays hidden unless a local model is genuinely installed and running.
+- **The status bar names the lenses that are on** — *Digger active*, *Caveman active* — after a hairline divider, and reads exactly as before when neither is.
+
+### Changed
+- **A provider's model list is no longer taken at face value.** One with a live models endpoint can advertise several hundred entries, most of which cannot hold a conversation. The submenu groups them by vendor once there are more than a dozen, and hides embeddings, rerankers, speech, image generation and `:batch` endpoints. That filter reads names, so it can be wrong: the model you are on is never hidden, and *Show all models* is always one click away.
+- **Caveman mode moved** out of the composer toolbar into the status-bar kebab, alongside Digger handoff.
+
+### Fixed
+- **An agent that dies mid-handshake now says why.** It usually prints the reason and exits — but the stdio bridge runs it inside a pipeline, so the shell outlives it and the exit is never noticed. A one-line fatal like `Profile 'x' does not exist` was swallowed for the full two-minute connect timeout and then reported as *did not respond — is its ACP mode available?*, which sent you looking in entirely the wrong place. The error is surfaced the moment it arrives.
+- **A local session no longer routes to the chat front end.** Codex speaks the agent protocol only against its cloud backend, so a local run was reaching a dead path; it now opens as a terminal, and is offered local models rather than the cloud lineup.
+
 ## [1.9.0] - 2026-08-13
 
 ### Changed
