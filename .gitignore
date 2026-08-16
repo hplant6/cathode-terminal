@@ -7,3 +7,10 @@ out/
 Thumbs.db
 design-system/storybook-static/
 .cathode/
+
+# Agent memory files. Cathode writes its own managed blocks into these at runtime
+# (project identity, Storybook URL, Digger handoff) and clears them on quit, so the
+# working copy is per-machine session state rather than source.
+CLAUDE.md
+AGENTS.md
+GEMINI.md
