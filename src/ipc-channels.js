@@ -37,6 +37,11 @@ const IPC = Object.freeze({
   ACP_INSTALLING: 'acp-installing',
   ACP_KILL: 'acp-kill',
   ACP_MODE_CHANGED: 'acp-mode-changed',
+  ACP_MODEL_CHANGED: 'acp-model-changed',
+  ACP_SET_MODEL: 'acp-set-model',
+  DIGGER_AVAILABLE: 'digger-available',
+  DIGGER_HANDOFF_GET: 'digger-handoff-get',
+  DIGGER_HANDOFF_SET: 'digger-handoff-set',
   ACP_PERMISSION_REQUEST: 'acp-permission-request',
   ACP_PERMISSION_RESPONSE: 'acp-permission-response',
   ACP_PERMISSION_RESOLVED: 'acp-permission-resolved',
@@ -121,6 +126,7 @@ const IPC = Object.freeze({
   CHECK_PROJECT_FILE: 'check-project-file',   // does <active project cwd>/<name> exist? (handoff brief wait)
   GET_RATE_LIMITS: 'get-rate-limits',
   GET_USAGE: 'get-usage',
+  LOCAL_MODELS: 'local-models',               // model tags pulled locally (Ollama)
   MARKER_CANCEL: 'marker-cancel',
   MARKER_CLEAR: 'marker-clear',
   MARKER_SEND: 'marker-send',

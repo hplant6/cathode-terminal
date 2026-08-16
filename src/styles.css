@@ -1984,7 +1984,19 @@ html, body {
 .acp-status.working { cursor: pointer; }
 .acp-status .acp-status-stop { display: none; align-items: center; gap: 5px; color: var(--spec-accent); }
 .acp-status .acp-status-stop svg { flex-shrink: 0; }
+/* Lens indicator — hairline divider then "DIGGER ACTIVE, CAVEMAN ACTIVE".
+   Inherits the title font from `.acp-status > span`, so it matches "READY". */
+.acp-status-div {
+  width: 1px; align-self: stretch; flex-shrink: 0;
+  margin: 8px 2px;                     /* inset from the bar's top/bottom edges */
+  padding: 0;
+  background: var(--spec-structural);  /* shade 3 */
+}
+.acp-status-flags { color: var(--spec-text-faint); }   /* shade 2 — present, not shouting */
+.acp-status-div[hidden], .acp-status-flags[hidden] { display: none; }
 .acp-status.working:hover .acp-status-text,
+.acp-status.working:hover .acp-status-div,
+.acp-status.working:hover .acp-status-flags,
 .acp-status.working:hover .acp-status-spec { display: none; }
 .acp-status.working:hover .acp-status-stop { display: inline-flex; }
 /* Working → the whole bar goes green (success-badge palette: green text + dark-green fill) */
@@ -2008,6 +2020,24 @@ html, body {
 .notif-toggle:hover    { background: transparent; color: var(--spec-text-dim); }
 .notif-toggle.on       { color: var(--spec-text); }      /* on → bright */
 .notif-toggle.on:hover { color: #FFFFFF; }
+/* Status-bar kebab — session switches that don't earn permanent chrome. Takes the
+   margin-left:auto so the pair travels to the bar's right edge together; the bell
+   then drops its own auto (which would otherwise split the free space between them). */
+.status-kebab {
+  margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0;
+  border: none; background: transparent;
+  color: var(--spec-text-faint);     /* shade 2, matching the bell's resting state */
+  cursor: pointer; border-radius: 4px;
+  transition: color 0.15s;
+}
+.status-kebab:hover { background: transparent; color: var(--spec-text-dim); }
+.status-kebab + .notif-toggle { margin-left: 2px; }
+#status-kebab-menu .status-kebab-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+}
+#status-kebab-menu .vt-switch { flex-shrink: 0; }
 @keyframes acp-pulse { 0%,100% { opacity:1; } 50% { opacity:0.25; } }
 /* Domino loader (replaces the equalizer) — pure CSS; animates while working */
 .acp-status-spec {
@@ -2502,7 +2532,8 @@ html, body {
 .mode-item.warn .mode-item-label::after { content: " · approvals off"; font-weight: 400; color: var(--spec-text-dim); }
 
 /* ── Session-tab kebab dropdown (HTML, design-system styled) ── */
-#tab-settings-menu {
+#tab-settings-menu,
+#status-kebab-menu {
   position: fixed; z-index: 300; min-width: 184px; max-height: 380px; overflow-y: auto;
   background: var(--spec-input-bg); border: none; border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0,0,0,0.45); padding: 4px;
@@ -2520,6 +2551,13 @@ html, body {
 .tab-settings-submenu { display: flex; flex-direction: column; }
 .tab-settings-submenu[hidden] { display: none; }
 .tab-settings-sub { padding-left: 26px; font-size: 11.5px; }      /* indented model rows */
+.tab-settings-sub2 { padding-left: 40px; font-size: 11.5px; }     /* model rows inside a vendor group */
+.tab-settings-count {                                             /* count badge on a vendor row */
+  margin-left: 8px; font-size: 10px; color: var(--spec-text-faint);
+}
+.tab-settings-more {                                              /* show-all / show-less toggle */
+  font-size: 10.5px; color: var(--spec-text-dim); font-style: italic;
+}
 .tab-settings-sep { height: 1px; margin: 4px 6px; background: var(--spec-structural); }   /* shade 3 divider */
 
 

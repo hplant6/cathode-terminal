@@ -502,7 +502,12 @@ function getDefaultProfile() {
 // Agents that speak ACP (and thus get the chat front-end).
 const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex', 'hermes']);
 function acpAgentFor(command) {
-  const base = (command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
+  const cmd = (command || '').trim();
+  // A local run (`codex --oss …`) has no ACP mode — Codex only speaks the
+  // protocol against its cloud backend. Treat it as terminal-only so it never
+  // gets routed to the chat front-end.
+  if (/(^|\s)--(oss|local-provider)(\s|$)/.test(cmd)) return null;
+  const base = cmd.split(/\s+/)[0].replace(/.*\//, '');
   return ACP_AGENT_KEYS.has(base) ? base : null;
 }
 // The agent key for any session (used for per-agent memory file, etc.)
@@ -647,6 +652,14 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   const statusTextEl = document.createElement('span');
   statusTextEl.className = 'acp-status-text';
   statusTextEl.textContent = 'Connecting…';
+  // Divider + lens indicator: which of the kebab's switches are on. Both are
+  // hidden together when none are, so the bar reads exactly as before by default.
+  const statusDivEl = document.createElement('span');
+  statusDivEl.className = 'acp-status-div';
+  statusDivEl.hidden = true;
+  const statusFlagsEl = document.createElement('span');
+  statusFlagsEl.className = 'acp-status-flags';
+  statusFlagsEl.hidden = true;
   // Shown (in place of the loader/status) on hover while the agent is working;
   // clicking anywhere on the bar then stops it. See .acp-status.working in styles.css.
   const stopEl = document.createElement('span');
@@ -655,7 +668,10 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
 
   statusEl.appendChild(specEl);
   statusEl.appendChild(statusTextEl);
+  statusEl.appendChild(statusDivEl);
+  statusEl.appendChild(statusFlagsEl);
   statusEl.appendChild(stopEl);
+  statusEl.appendChild(createStatusKebab());   // sits left of the bell
   statusEl.appendChild(createNotifToggle());
   statusEl.addEventListener('click', () => interruptActiveSession());
   chatEl.appendChild(statusEl);
@@ -768,7 +784,7 @@ function syncSvt(s) {
 function ensureSessionModel() {
   const s = sessions.get(activeId);
   const key = sessionToolKey(s);
-  if (s && key && s.model === undefined) s.model = MODEL_CATALOG[key].models[0]?.id ?? '';
+  if (s && key && s.model === undefined) s.model = modelsFor(key)[0]?.id ?? '';
 }
 
 // ── Toasts ────────────────────────────────────────────────────────
@@ -814,13 +830,23 @@ function hideSwitchBanner() {
 function selectModel(modelId) {
   const s = sessions.get(activeId);
   const key = sessionToolKey(s);
-  if (!s || !key) return;
-  s.model = modelId;
-  const label = (MODEL_CATALOG[key].models.find(m => m.id === modelId) || {}).label || modelId || 'Default';
+  const advertised = isAdvertisedModel(s, modelId);
+  if (!s || (!key && !advertised)) return;
+  // Only catalogue picks touch s.model — it is replayed as a launch argument on
+  // respawn. Advertised picks are tracked in acpModels.currentModelId.
+  if (!advertised) s.model = modelId;
+  const label = (sessionModels(s).find(m => m.id === modelId) || {}).label || modelId || 'Default';
 
   if (s._modelToast) s._modelToast.dismiss();
   s._modelToast = showToast(`Switching to ${label}…`, { spinner: true });
   s._pendingModelLabel = label;
+
+  // Agent-advertised models switch in place over ACP — no kill/respawn, so the
+  // conversation is preserved. ACP_MODEL_CHANGED dismisses the toast.
+  if (advertised) {
+    ipcRenderer.send(IPC.ACP_SET_MODEL, { id: activeId, modelId });
+    return;
+  }
 
   if (s.type === 'acp') {
     // Restart the Claude ACP adapter with the chosen model.
@@ -1343,20 +1369,9 @@ if (btnMode) {
   document.addEventListener('click', e => { if (modeWrap && !modeWrap.contains(e.target)) closeModeMenu(); });
 }
 
-// ── Caveman mode toggle (composer toolbar) ────────────────────────
-const btnCaveman = document.getElementById('btn-caveman');
-function syncCaveman() {
-  if (!btnCaveman) return;
-  btnCaveman.classList.toggle('on', caveMode);
-  btnCaveman.setAttribute('aria-checked', caveMode ? 'true' : 'false');
-}
-btnCaveman?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  caveMode = !caveMode;
-  localStorage.setItem('cathode-caveman', caveMode ? '1' : '0');
-  syncCaveman();
-});
-syncCaveman();
+// Caveman mode lives in the status-bar kebab (see openStatusKebabMenu). `caveMode`
+// is read by the prompt lens above; the menu is rebuilt on each open, so it always
+// reflects the current value and needs no separate sync.
 
 // ── Figma quick actions (composer) ────────────────────────────────
 // Shown only when a `figma` MCP server is connected. Selecting an action
@@ -1870,6 +1885,7 @@ function switchSession(id) {
   refreshUsage();
   renderPtyTabs();
   updateModePill();   // the mode pill reflects the active session
+  refreshStatusFlags();   // Digger handoff is per-project — re-read for the new cwd
   saveOpenSessions();   // remember the active tab across launches
 }
 
@@ -1986,6 +2002,10 @@ const AVAILABLE_MODELS = [
   { id: 'codex',  name: 'OpenAI Codex CLI', desc: "OpenAI's AI coding agent for the terminal",       install: 'npm install -g @openai/codex',                                                              command: 'codex',  acp: true  },
   { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
   { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic CLI",                     install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes',  acp: true },
+  // Local models, served by Ollama and driven through Codex's open-source
+  // provider. Terminal-only on purpose: Codex dropped its `acp` subcommand, so
+  // the chat front-end has nothing to talk to — its TUI is still a full agent.
+  { id: 'ollama', name: 'Local (Ollama)',    desc: 'Run a model on your own GPU — private, offline, no API key',      install: 'npm install -g @openai/codex   # and Ollama from https://ollama.com',                                    command: 'codex --oss --local-provider ollama' },
 ];
 
 // ── Per-tool model catalog ────────────────────────────────────────
@@ -2012,15 +2032,103 @@ const MODEL_CATALOG = {
     { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro' },
     { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   ]},
+  // Hermes bundles provider + base_url + model into a *profile*, so `id` is a
+  // profile name (passed as `-p`), not a model name. 'Default' uses whichever
+  // profile Hermes has marked sticky.
+  hermes: { flag: '-p', models: [
+    { id: '',       label: 'Default' },
+    { id: 'digger', label: 'Digger (local)' },
+  ]},
+  // Local models. `id` is the Ollama tag, passed straight through to Codex's
+  // --model. Anything pulled locally works — these are just common starting
+  // points, and 'Default' inherits whatever Codex/Ollama already selected.
+  local: { flag: '--model', models: [
+    { id: '',              label: 'Default' },
+    { id: 'gpt-oss:20b',   label: 'gpt-oss 20B' },
+    { id: 'gpt-oss:120b',  label: 'gpt-oss 120B' },
+    { id: 'qwen3:14b',     label: 'Qwen3 14B' },
+    { id: 'qwen3:30b-a3b', label: 'Qwen3 30B-A3B' },
+  ]},
 };
+
+// Model tags actually pulled on this machine, filled in from the Ollama daemon.
+// Empty until the first refresh resolves (and stays empty if Ollama isn't
+// running), in which case the static catalog above is used instead.
+let localModels = [];
+function refreshLocalModels() {
+  return ipcRenderer.invoke(IPC.LOCAL_MODELS)
+    .then(list => { if (Array.isArray(list)) localModels = list; })
+    .catch(() => {});
+}
+refreshLocalModels();
+
+// Models to offer for a tool key. Local is dynamic — whatever `ollama pull`
+// has put on the box shows up here with no code change.
+function modelsFor(key) {
+  const cat = MODEL_CATALOG[key];
+  if (!cat) return [];
+  if (key === 'local' && localModels.length) {
+    return [{ id: '', label: 'Default' }, ...localModels.map(t => ({ id: t, label: t }))];
+  }
+  return cat.models;
+}
+
+// The models offered for a session, from two different sources that do two
+// different jobs:
+//   • advertised (session/new → `models`) — the agent's live list for the CURRENT
+//     provider. Switches in place via session/set_model; conversation survives.
+//   • catalogue (MODEL_CATALOG) — for Hermes these are *profiles*, which swap the
+//     whole provider+base_url+model stack, so they need a respawn.
+// Offer both when both exist: advertised first, then profiles. 'Default' (id '')
+// is dropped from the catalogue half — it is meaningless next to a concrete list.
+function sessionModels(s) {
+  const adv = (s && s.acpModels && s.acpModels.models) || [];
+  const cat = modelsFor(sessionToolKey(s));
+  if (!adv.length) return cat;
+  const extra = cat.filter(c => c.id && !adv.some(a => a.id === c.id));
+  return adv.concat(extra);
+}
+
+// Does this id switch in place, or does it need the adapter restarted?
+function isAdvertisedModel(s, modelId) {
+  return !!(s && s.acpModels && s.acpModels.models.some(m => m.id === modelId));
+}
+
+// Providers that expose a live /v1/models list return EVERY deployed model, not
+// just the chat ones — Hermes passes OpenRouter through a curated fetch but hands
+// Nous/Codex/etc. straight through (see curated_models_for_provider). Embeddings,
+// rerankers, speech and image models can't hold a conversation, so drop them.
+//
+// This is a name heuristic — the ACP payload carries no modality field — so it can
+// be wrong in both directions. Never hide anything permanently: the menu offers a
+// "Show all" escape, and the current model is always kept.
+const NON_CHAT_MODEL_RE = new RegExp([
+  'bge[-_]', 'embed', 'embedding', 'rerank', '(^|[-_/])e5[-_]', '(^|[-_/])gte[-_]',
+  'text-embedding', 'nomic', 'splade', 'colbert',
+  'whisper', '(^|[-_/])tts([-_]|$)', 'text-to-speech', 'speech', 'voxtral',
+  'dall-?e', 'stable-diffusion', 'sdxl', 'imagen', '(^|[-_/])flux([-_.]|$)',
+  'moderation', 'guard', 'shieldgemma',
+  '(^|[-_/])ocr([-_]|$)', 'clip', 'siglip',
+].join('|'), 'i');
+
+function isNonChatModel(m) {
+  const n = m && m.label || '';
+  return NON_CHAT_MODEL_RE.test(n) || /:batch$/i.test(n);   // :batch = async endpoint, not interactive
+}
 
 // Map a session to its tool key in MODEL_CATALOG (or null if no models known)
 function sessionToolKey(s) {
   if (!s) return null;
-  // ACP model switching is only wired for Claude (ANTHROPIC_MODEL on respawn).
-  // Gemini/Codex ACP run at their default model → hide the selector for now.
-  if (s.type === 'acp') return s.agent === 'claude' ? 'claude' : null;
-  const base = (s.command || '').trim().split(/\s+/)[0].replace(/.*\//, '');
+  // ACP model switching is wired for Claude (ANTHROPIC_MODEL on respawn) and
+  // Hermes (`-p <profile>` on respawn). Gemini/Codex ACP run at their default
+  // model → hide the selector for them.
+  if (s.type === 'acp') return (s.agent === 'claude' || s.agent === 'hermes') ? s.agent : null;
+  const cmd = (s.command || '').trim();
+  // A local session still starts with `codex`, so key it off the --oss flags
+  // instead — otherwise the picker would offer the cloud lineup (GPT-5, o3…)
+  // for a model that's running on the local GPU.
+  if (/(^|\s)--(oss|local-provider)(\s|$)/.test(cmd)) return 'local';
+  const base = cmd.split(/\s+/)[0].replace(/.*\//, '');
   return MODEL_CATALOG[base] ? base : null;
 }
 
@@ -2044,7 +2152,11 @@ let sessionProfiles = (() => {
       // the chat front-end. Terminal stays one click away via the toggle.
       if (!localStorage.getItem(LS.profilesAcpV2)) {
         parsed = parsed.map(p => {
-          const base = (p.command || '').trim().split(/\s+/)[0];
+          const cmd = (p.command || '').trim();
+          // Local (--oss) sessions are Codex too, but must stay terminal-only —
+          // they have no ACP mode to be upgraded to.
+          if (/(^|\s)--(oss|local-provider)(\s|$)/.test(cmd)) return p;
+          const base = cmd.split(/\s+/)[0];
           return (base === 'gemini' || base === 'codex') ? { ...p, acp: true } : p;
         });
         localStorage.setItem(LS.profilesAcpV2, '1');
@@ -2720,6 +2832,134 @@ function createNotifToggle() {
   btn.innerHTML = Notif.isOn() ? ALERT_ON_ICON : ALERT_OFF_ICON;
   btn.title = Notif.isOn() ? 'Notification sounds: on' : 'Notification sounds: off';
   btn.addEventListener('click', (e) => { e.stopPropagation(); Notif.toggle(); });
+  return btn;
+}
+
+// ── Status-bar lens indicator ─────────────────────────────────────
+// Which response lenses are on, shown after "READY" behind a hairline divider.
+// Digger handoff is per-project (it lives in the project's memory files) so it is
+// re-read on session switch; Caveman is global.
+let diggerHandoffActive = false;
+
+function syncStatusFlags() {
+  const parts = [];
+  if (diggerHandoffActive) parts.push('Digger active');
+  if (caveMode)            parts.push('Caveman active');
+  const text = parts.join(', ');
+  document.querySelectorAll('.acp-status').forEach(bar => {
+    const f = bar.querySelector('.acp-status-flags');
+    const d = bar.querySelector('.acp-status-div');
+    if (!f || !d) return;
+    f.textContent = text;
+    f.hidden = d.hidden = !text;   // no lenses → the bar looks untouched
+  });
+}
+
+function refreshStatusFlags() {
+  return ipcRenderer.invoke(IPC.DIGGER_HANDOFF_GET)
+    .then(v => { diggerHandoffActive = !!v; })
+    .catch(() => {})
+    .then(() => syncStatusFlags());
+}
+
+// Same kebab glyph as the session tabs, so one icon means one thing app-wide.
+const KEBAB_ICON = '<svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor">' +
+  '<circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>';
+
+// Status-bar kebab: session-level switches that are not worth permanent chrome.
+// Sits left of the bell. Currently holds the Digger handoff toggle.
+let statusKebabMenu = null;
+function closeStatusKebabMenu() { statusKebabMenu?.remove(); statusKebabMenu = null; }
+
+async function openStatusKebabMenu(btn) {
+  closeStatusKebabMenu();
+  const menu = document.createElement('div');
+  menu.id = 'status-kebab-menu';          // own id — shares the tab dropdown's styles via CSS
+
+  // Digger needs both halves present to be offerable; Caveman always applies.
+  let avail = { ok: false }, on = false;
+  try {
+    [avail, on] = await Promise.all([
+      ipcRenderer.invoke(IPC.DIGGER_AVAILABLE),
+      ipcRenderer.invoke(IPC.DIGGER_HANDOFF_GET),
+    ]);
+  } catch (_) {}
+
+  // One LED switch per row. `apply` may be async and may throw — on failure the
+  // optimistic flip is reverted so the switch never lies about persisted state.
+  const addSwitchRow = (label, title, isOn, apply) => {
+    const row = document.createElement('div');
+    row.className = 'tab-settings-item status-kebab-row';
+    row.title = title;
+    row.innerHTML = `<span>${label}</span>`
+      + `<button class="vt-switch${isOn ? ' on' : ''}" role="switch" aria-checked="${isOn}">`
+      + '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button>';
+    const sw = row.querySelector('.vt-switch');
+    const paint = v => { sw.classList.toggle('on', v); sw.setAttribute('aria-checked', String(v)); };
+    row.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const next = !sw.classList.contains('on');
+      paint(next);
+      try { await apply(next); }
+      catch (_) { paint(!next); showToast(`Couldn't update ${label}`, { duration: 3000 }); }
+    });
+    menu.appendChild(row);
+  };
+
+  // Hidden when unavailable — EXCEPT when the block is already in the files, where
+  // hiding it would strand a live instruction with no way to switch it back off.
+  if ((avail && avail.ok) || on) {
+    addSwitchRow(
+      'Digger handoff',
+      "Tell this project's agents to offload bulk text work (log triage, summarising, "
+        + 'extraction) to the local digger CLI — no API tokens, no session quota.',
+      on,
+      async (next) => {
+        await ipcRenderer.invoke(IPC.DIGGER_HANDOFF_SET, { on: next });
+        diggerHandoffActive = next;
+        syncStatusFlags();
+        showToast(next ? 'Digger handoff on — agents will offload bulk work' : 'Digger handoff off',
+                  { duration: 2600 });
+      });
+  }
+
+  addSwitchRow(
+    'Caveman',
+    'Ask the agent for terse, stripped-down replies (no filler or preamble; bullets over '
+      + 'prose) to save tokens. Code, commands and file paths stay exact. Stacks on any persona.',
+    caveMode,
+    (next) => {
+      caveMode = next;
+      localStorage.setItem('cathode-caveman', next ? '1' : '0');
+      syncStatusFlags();
+    });
+
+  document.body.appendChild(menu);
+  const r = btn.getBoundingClientRect();
+  // The kebab lives at the far right of the status bar, so anchor the menu's RIGHT
+  // edge to it and let it grow leftward — left-anchoring ran it off the window.
+  menu.style.left = Math.round(Math.max(8, r.right - menu.offsetWidth)) + 'px';
+  menu.style.top  = Math.round(r.top - menu.offsetHeight - 6) + 'px';   // pop upward off the status bar
+  statusKebabMenu = menu;
+
+  const close = (ev) => {
+    if (menu.contains(ev.target) || ev.target === btn) return;
+    closeStatusKebabMenu();
+    document.removeEventListener('mousedown', close, true);
+  };
+  setTimeout(() => document.addEventListener('mousedown', close, true), 0);
+}
+
+function createStatusKebab() {
+  const btn = document.createElement('button');
+  btn.className = 'status-kebab';
+  btn.title = 'Session options';
+  btn.innerHTML = KEBAB_ICON;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();                                  // the status bar itself interrupts the agent
+    if (statusKebabMenu) closeStatusKebabMenu();
+    else openStatusKebabMenu(btn);
+  });
   return btn;
 }
 
@@ -3474,7 +3714,7 @@ ipcRenderer.on(IPC.ACP_INSTALL_PROGRESS, (_, { id, text }) => {
   acpScrollEnd(s);
 });
 
-ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes }) => {
+ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes, models }) => {
   const s = acpSession(id);
   if (!s) return;
   if (agent) s.agent = agent;
@@ -3484,10 +3724,28 @@ ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes }) => 
   }
   s.cwd = cwd || s.cwd || '';
   s.modes = modes || null;   // ACP permission modes (may be absent for some agents)
+  // Models the agent advertises for session/set_model. When present these drive
+  // the Model submenu (live list, in-place switching); when absent the static
+  // MODEL_CATALOG is used and switching respawns the adapter instead.
+  //
+  // Deliberately NOT written into s.model: that field is the *launch* selector
+  // replayed on respawn (Claude → ANTHROPIC_MODEL, Hermes → `-p <profile>`), and
+  // an advertised id like "openrouter:anthropic/claude-fable-5" is not a valid
+  // profile name. Current selection lives in acpModels.currentModelId instead.
+  s.acpModels = models || null;
   acpSetStatus(s, 'ready');
+  refreshStatusFlags();   // the block is per-project — re-read for this session's cwd
   renderAcpBanner(s, version || '', model || '', cwd || '');
   if (s === sessions.get(activeId)) updateModePill();
   finishModelSwitch(s);  // dismiss "switching…" toast + confirm, if a model switch is pending
+});
+
+ipcRenderer.on(IPC.ACP_MODEL_CHANGED, (_, { id, currentModelId, error }) => {
+  const s = acpSession(id);
+  if (!s) return;
+  if (s.acpModels && currentModelId) s.acpModels.currentModelId = currentModelId;
+  finishModelSwitch(s);   // in-place switch: no respawn, so nothing else dismisses the toast
+  if (error) showToast(`Couldn't switch model: ${error}`, { duration: 3000 });
 });
 
 ipcRenderer.on(IPC.ACP_MODE_CHANGED, (_, { id, currentModeId, error }) => {
@@ -4696,26 +4954,101 @@ function openTabSettingsMenu(btn, s) {
 
   // Model — inline submenu of the tool's available models
   const mKey = sessionToolKey(s);
-  if (mKey && MODEL_CATALOG[mKey]) {
-    const cur = s.model || (MODEL_CATALOG[mKey].models[0]?.id || '');
+  const mList = sessionModels(s);
+  if (mList.length) {
+    // Re-poll Ollama in the background so a model pulled since launch shows up
+    // on the next open (this menu is built synchronously from the cache).
+    if (mKey === 'local') refreshLocalModels();
+    const cur = (s.acpModels && s.acpModels.currentModelId) || s.model || (mList[0]?.id || '');
     const parent = document.createElement('div');
     parent.className = 'tab-settings-item tab-settings-parent';
     parent.innerHTML = `<span>Model</span><span class="tab-settings-chev ui-chev"></span>`;
     const sub = document.createElement('div');
     sub.className = 'tab-settings-submenu';
     sub.hidden = true;
-    MODEL_CATALOG[mKey].models.forEach(m => {
+
+    const pickModel = (m) => (e) => {
+      e.stopPropagation();
+      closeTabSettingsMenu();
+      if (s.id !== activeId) switchSession(s.id);
+      selectModel(m.id);
+    };
+    const mkModelRow = (m, cls) => {
       const si = document.createElement('div');
-      si.className = 'tab-settings-item tab-settings-sub' + (m.id === cur ? ' selected' : '');
-      si.textContent = m.label;
-      si.addEventListener('click', e => {
-        e.stopPropagation();
-        closeTabSettingsMenu();
-        if (s.id !== activeId) switchSession(s.id);
-        selectModel(m.id);
+      si.className = `tab-settings-item ${cls}` + (m.id === cur ? ' selected' : '');
+      // Inside a vendor group the prefix is redundant — "claude-fable-5" beats
+      // "anthropic/claude-fable-5" repeated forty times.
+      si.textContent = cls === 'tab-settings-sub2' ? m.label.slice(m.label.indexOf('/') + 1) : m.label;
+      if (m.desc) si.title = m.desc;
+      si.addEventListener('click', pickModel(m));
+      return si;
+    };
+
+    // Hide models that can't hold a conversation (embeddings, rerankers, TTS,
+    // image gen, :batch endpoints). Always keep the current model, and offer a
+    // way back — the filter is a name heuristic and will occasionally be wrong.
+    const shown  = s._showAllModels ? mList : mList.filter(m => m.id === cur || !isNonChatModel(m));
+    const hidden = mList.length - shown.length;
+
+    // Providers like Nous Portal advertise hundreds of models. Group them by
+    // vendor (the part before the "/") once the list stops being scannable;
+    // small lists (a local Ollama set, Claude's five) stay flat.
+    const GROUP_THRESHOLD = 12;
+    const vendorOf = m => (m.label.includes('/') ? m.label.slice(0, m.label.indexOf('/')) : '');
+    const grouped = shown.length > GROUP_THRESHOLD && shown.some(vendorOf);
+
+    if (!grouped) {
+      shown.forEach(m => sub.appendChild(mkModelRow(m, 'tab-settings-sub')));
+    } else {
+      const groups = new Map();
+      const loose  = [];
+      shown.forEach(m => {
+        const v = vendorOf(m);
+        if (!v) { loose.push(m); return; }
+        if (!groups.has(v)) groups.set(v, []);
+        groups.get(v).push(m);
       });
-      sub.appendChild(si);
-    });
+      // Ungrouped entries (local model tags, and the profile rows appended by
+      // sessionModels) sit at the top where they stay one click away.
+      loose.forEach(m => sub.appendChild(mkModelRow(m, 'tab-settings-sub')));
+      [...groups.keys()].sort().forEach(v => {
+        const items   = groups.get(v);
+        const isCur   = items.some(m => m.id === cur);
+        const gParent = document.createElement('div');
+        gParent.className = 'tab-settings-item tab-settings-sub tab-settings-parent' + (isCur ? ' selected' : '');
+        gParent.innerHTML =
+          `<span>${v}<span class="tab-settings-count">${items.length}</span></span>` +
+          `<span class="tab-settings-chev ui-chev"></span>`;
+        const gSub = document.createElement('div');
+        gSub.className = 'tab-settings-submenu';
+        gSub.hidden = !isCur;                       // open the group holding the current model
+        if (isCur) gParent.classList.add('open');
+        items.forEach(m => gSub.appendChild(mkModelRow(m, 'tab-settings-sub2')));
+        gParent.addEventListener('click', e => {
+          e.stopPropagation();
+          gSub.hidden = !gSub.hidden;
+          gParent.classList.toggle('open', !gSub.hidden);
+        });
+        sub.appendChild(gParent);
+        sub.appendChild(gSub);
+      });
+    }
+    // Escape hatch: the non-chat filter is a name heuristic, so always leave a
+    // way to see everything the agent actually advertised.
+    if (hidden > 0 || s._showAllModels) {
+      const toggle = document.createElement('div');
+      toggle.className = 'tab-settings-item tab-settings-sub tab-settings-more';
+      toggle.textContent = s._showAllModels
+        ? 'Show chat models only'
+        : `Show all models (+${hidden} non-chat)`;
+      toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        s._showAllModels = !s._showAllModels;
+        openTabSettingsMenu(btn, s);                       // rebuild in place
+        document.querySelector('#tab-settings-menu .tab-settings-parent')?.click();
+      });
+      sub.appendChild(toggle);
+    }
     parent.addEventListener('click', e => {
       e.stopPropagation();
       sub.hidden = !sub.hidden;

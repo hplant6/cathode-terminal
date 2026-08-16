@@ -402,6 +402,40 @@ ipcMain.handle(IPC.TOP_PROCS, (_, by) => {
 ipcMain.handle(IPC.PORTS_LIST, () => platform.listPorts());
 ipcMain.handle(IPC.PORTS_KILL, (_, pid) => platform.killPid(pid));
 
+// ── Local (Ollama) models ─────────────────────────────────────────
+// Ask the Ollama daemon what's actually pulled, so the model menu shows real
+// tags instead of a hardcoded guess. Hit over HTTP rather than shelling out to
+// `ollama list` — no PATH assumptions, and it can't block on a WSL round-trip.
+// Never rejects: a missing/stopped daemon just yields [] and the caller falls
+// back to the static catalog.
+const OLLAMA_ORIGIN = (() => {
+  const h = (process.env.OLLAMA_HOST || '127.0.0.1:11434').trim();
+  return /^https?:\/\//.test(h) ? h : `http://${h}`;
+})();
+function localModelTags() {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = v => { if (!settled) { settled = true; resolve(v); } };
+    let req;
+    try {
+      req = require('http').get(new URL('/api/tags', OLLAMA_ORIGIN), res => {
+        if (res.statusCode !== 200) { res.resume(); return finish([]); }
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', c => { body += c; });
+        res.on('end', () => {
+          try {
+            finish((JSON.parse(body).models || []).map(m => m && m.name).filter(Boolean).sort());
+          } catch (_) { finish([]); }
+        });
+      });
+    } catch (_) { return finish([]); }
+    req.on('error', () => finish([]));
+    req.setTimeout(2500, () => { try { req.destroy(); } catch (_) {} finish([]); });
+  });
+}
+ipcMain.handle(IPC.LOCAL_MODELS, () => localModelTags());
+
 // ── Window setup ──────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -1898,6 +1932,95 @@ ipcMain.handle(IPC.STORYBOOK_CLEAR_MEMORY, () => {
   return { ok: true, dir };
 });
 
+// ── Digger handoff ───────────────────────────────────────────────
+// A delimited block telling the session's agent to offload bulk text work to the
+// local `digger` CLI instead of reading big files itself. Off by default and
+// toggled per project from the status-bar kebab: it only pays off where an agent
+// actually meets large logs/outputs, and it costs prompt budget everywhere else.
+// Same managed-block mechanics as the Storybook and project blocks — other blocks
+// in the file are never touched.
+const DG_START = '<!-- cathode:digger:start -->';
+const DG_END   = '<!-- cathode:digger:end -->';
+
+function diggerBlock() {
+  return [
+    DG_START,
+    '## DIGGER — local model for bulk text work',
+    '',
+    "`digger` runs a model on this machine's GPU. Use it to pre-digest large inputs",
+    'so they never enter your context. It costs no API tokens and no session quota.',
+    '',
+    '**Use it whenever input >> output and the result is checkable:**',
+    '- `digger summarize <file>` — long log/output → at most 6 bullets',
+    '- `digger triage <logfile>` — errors, failures and warnings only',
+    '- `digger extract "<fields>" <file>` — raw JSON, no fences',
+    '- `digger filter "<criterion>" <file>` — matching lines, verbatim',
+    '- `digger describe <codefile>` — what it does, under 8 lines',
+    '- `digger ask "<prompt>" <file>` — freeform',
+    '',
+    'Reads a file argument or stdin, and chunks oversized input automatically.',
+    'Reach for it *before* reading any file over ~500 lines, and before wading',
+    'through build logs, test output, CI dumps or dependency trees.',
+    '',
+    '**Do not use it for** architecture calls, subtle bug hunting, or anything whose',
+    'reasoning you would have to re-derive — that round trip costs more than doing',
+    'the work yourself. It is labour, not judgement.',
+    '',
+    '**Trust boundary.** It is a small local model. Figures it extracts are reliable;',
+    'units in its *summaries* are not — it will write "GB" for a log that said "MB".',
+    '`UNKNOWN` means "not stated in those words", not "absent": retry naming fields',
+    'the way the source names them. Verify anything load-bearing before acting on it.',
+    '',
+    'Flags: `--stats` (tokens/time/compression), `--light` (force the small model —',
+    'use when the GPU is needed for other work), `--model NAME`.',
+    DG_END,
+  ].join('\n');
+}
+
+function diggerHandoffOn(dir) {
+  try {
+    return fs.readFileSync(path.join(dir, MEMORY_FILES[0]), 'utf8').includes(DG_START);
+  } catch (_) { return false; }
+}
+
+// The toggle is only meaningful when the handoff would actually work, so gate the
+// UI on BOTH halves of it: the `digger` CLI has to exist (the block tells agents to
+// run it — advertising a missing command is worse than not offering the feature),
+// and Ollama has to be serving at least one model for it to talk to. Either half
+// missing → the row is hidden rather than shown-but-broken.
+ipcMain.handle(IPC.DIGGER_AVAILABLE, async () => {
+  try {
+    const [env, tags] = await Promise.all([resolveAgentEnv('digger'), localModelTags()]);
+    return { ok: !!env && tags.length > 0, cli: !!env, models: tags.length };
+  } catch (_) {
+    return { ok: false, cli: false, models: 0 };
+  }
+});
+
+ipcMain.handle(IPC.DIGGER_HANDOFF_GET, () => diggerHandoffOn(sessionCwd()));
+
+ipcMain.handle(IPC.DIGGER_HANDOFF_SET, (_, { on } = {}) => {
+  const dir = sessionCwd();
+  for (const name of MEMORY_FILES) {
+    const fp = path.join(dir, name);
+    try {
+      let existing = '';
+      try { existing = fs.readFileSync(fp, 'utf8'); } catch (_) {}
+      const base = stripDelimited(existing, DG_START, DG_END).replace(/\n+$/, '');
+      if (on) {
+        fs.writeFileSync(fp, (base ? base + '\n\n' : '') + diggerBlock() + '\n', 'utf8');
+      } else if (existing.includes(DG_START)) {
+        // Only delete a file we are emptying — never remove one that had other content.
+        if (base.trim()) fs.writeFileSync(fp, base + '\n', 'utf8');
+        else { try { fs.unlinkSync(fp); } catch (_) {} }
+      }
+    } catch (e) {
+      console.error('[digger] handoff write failed', name, e.message);
+    }
+  }
+  return { ok: true, on: !!on, dir };
+});
+
 // ── Project-identity agent memory (Phase 3b) ─────────────────────
 // An app-owned, delimited block written into the active project's memory files so
 // every agent session knows which project it's in and how to launch its servers.
@@ -2204,7 +2327,10 @@ function startProjectWatchers(dir) {
 // On macOS/Linux there is no split — agents run natively. resolveAgentEnv,
 // agentVersion (Windows cmd.exe versions) and agentCwd live in the platform
 // adapter; aliased here so existing call sites read unchanged.
-const DUAL_ENV_BINS = new Set(['gemini', 'codex']);
+// Agents that may live on either side. `ollama` is Windows-only in practice —
+// the daemon binds Windows-side localhost, so a WSL spawn finds no binary and
+// could not reach the daemon anyway. Probing sends it to cmd.exe.
+const DUAL_ENV_BINS = new Set(['gemini', 'codex', 'ollama']);
 const resolveAgentEnv = platform.resolveAgentEnv;
 const winVersion = platform.agentVersion;
 function winCwd() { return platform.agentCwd(sessionCwd(), homeDir()); }
@@ -2581,8 +2707,40 @@ const ACP_LAUNCH = {
   claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
   gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
   codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
-  hermes: { launch: () => launchAcpAgent('hermes', ['acp'], 'hermes', { bridgeStdio: true }) },
+  // Hermes selects its model via a *profile* (provider + base_url + model in
+  // one), not a --model flag — so the model menu picks a profile. `-p` is a
+  // global flag and must precede the subcommand.
+  //
+  // Guard: profile names are lowercase alphanumeric (`hermes profile create`
+  // enforces it). An *advertised* model id — "openrouter:anthropic/claude-fable-5"
+  // — is not a profile, and passing one made Hermes hang until the connect
+  // timeout with no usable error. Ignore anything that isn't profile-shaped.
+  hermes: { launch: (m) => {
+    const profile = /^[a-z0-9][a-z0-9_-]*$/.test(String(m || '')) ? m : '';
+    if (m && !profile) console.warn('[acp] ignoring non-profile Hermes selector:', m);
+    return launchAcpAgent('hermes', profile ? ['-p', profile, 'acp'] : ['acp'], 'hermes', { bridgeStdio: true });
+  } },
 };
+
+// Normalise the ACP model selector an agent attaches to session/new|load|resume.
+// The wire format is camelCase, but agents bridged from other languages sometimes
+// leak snake_case, so accept both and hand the renderer one shape. Returns null
+// when the agent advertises no models (Claude/Gemini/Codex today) — callers then
+// fall back to the static MODEL_CATALOG.
+function acpModelState(r) {
+  const m = r && r.models;
+  if (!m) return null;
+  const list = m.availableModels || m.available_models || [];
+  const models = list
+    .map(x => ({
+      id:    x && (x.modelId || x.model_id),
+      label: (x && (x.name || x.modelId || x.model_id)) || '',
+      desc:  (x && x.description) || '',
+    }))
+    .filter(x => x.id);
+  if (!models.length) return null;
+  return { currentModelId: m.currentModelId || m.current_model_id || '', models };
+}
 
 async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resume = null) {
   const acp = await requireAcp();
@@ -2603,9 +2761,19 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
   // Accumulate stderr so we can show it if the process dies early
   let stderrBuf = '';
   proc.stderr.on('data', d => {
-    stderrBuf += d.toString();
+    const chunk = d.toString();
+    stderrBuf += chunk;
     if (stderrBuf.length > 65536) stderrBuf = stderrBuf.slice(-65536);   // keep only recent stderr (error report uses the tail)
-    console.error('[acp]', d.toString().trim());
+    console.error('[acp]', chunk.trim());
+    // An agent that dies before speaking ACP usually says why on stderr and exits.
+    // We can't rely on the 'exit' event to notice: the bridgeStdio wrapper runs the
+    // agent inside `cat | … | cat`, so bash keeps the pipeline (and the pid we
+    // watch) alive until OUR stdin closes. Without this, a one-line fatal like
+    // "Error: Profile 'digger' does not exist" was swallowed for the full 120s and
+    // surfaced as a misleading connect timeout. Match only a line-initial
+    // "Error:" so ordinary warnings mentioning errors don't trip it.
+    const fatal = /^Error:[^\n]*/m.exec(chunk);
+    if (fatal) failEarly(fatal[0].trim());
   });
 
   let connected = false;
@@ -2619,6 +2787,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     errorSent = true;
     clearTimeout(connectTimer);
     uiSend(IPC.ACP_ERROR, { id, message });
+    safeKill(proc);   // with bridgeStdio the wrapper outlives the agent — don't leak it
   };
   proc.on('exit', (code, signal) => {
     if (connected || errorSent) return; // normal exit after use — already handled via conn.closed
@@ -2762,7 +2931,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     }
     // WSL-side agents (Claude/Gemini/Codex/Hermes on Windows) chdir into this cwd
     // and fail to launch on a raw `C:\…` path — hand them the /mnt path.
-    let sessionId, modes = null;
+    let sessionId, modes = null, models = null;
     const caps = (initResult && initResult.agentCapabilities) || {};
     if (resume && resume.sessionId) {
       // Resume a past conversation. cwd MUST match the session's original project;
@@ -2772,24 +2941,24 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
         // loadSession replays the prior turns via session/update — the chat repopulates.
         const r = await conn.loadSession({ sessionId: resume.sessionId, cwd: rcwd, mcpServers: [] });
         sessionId = resume.sessionId;
-        modes = (r && r.modes) || null;
+        modes = (r && r.modes) || null; models = acpModelState(r);
       } else {
         // Adapter can't replay — start fresh in that project (can't restore history).
         const r = await conn.newSession({ cwd: rcwd, mcpServers: [] });
-        sessionId = r.sessionId; modes = (r && r.modes) || null;
+        sessionId = r.sessionId; modes = (r && r.modes) || null; models = acpModelState(r);
         send(IPC.APP_TOAST, { message: "This agent can't replay history — started a fresh session in that project." });
       }
     } else {
       const r = await conn.newSession({ cwd: platform.toWslPath(sessionCwd()), mcpServers: [] });
-      sessionId = r.sessionId; modes = (r && r.modes) || null;
+      sessionId = r.sessionId; modes = (r && r.modes) || null; models = acpModelState(r);
     }
     clearTimeout(connectTimer);
     connected = true;
     // ACP session modes (Claude Code's permission modes: default/acceptEdits/plan/
     // bypassPermissions). Advertised by capable agents; absent for the rest.
-    const entry = { proc, conn, sessionId, modes };
+    const entry = { proc, conn, sessionId, modes, models };
     acpSessions.set(id, entry);
-    send(IPC.ACP_READY, { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey, modes });
+    send(IPC.ACP_READY, { id, version: acpVersion, model: acpModel, cwd: acpCwd, agent: agentKey, modes, models });
     conn.closed.then(() => {
       // Guard: a model-switch respawn reuses the id — a stale close from the
       // killed session must not delete the replacement (or report it closed).
@@ -2811,6 +2980,34 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     safeKill(proc);
   }
 }
+
+// Switch a session's model in place via ACP `session/set_model` — no respawn, so
+// the conversation survives. Agents advertise the list on session/new (Hermes
+// carries provider context in the id, e.g. "ollama:digger-agent", and re-resolves
+// base_url on its side, so switching across providers works too).
+//
+// The SDK we pin (0.25.0) types setSessionMode but not setSessionModel, so go
+// through the generic JSON-RPC escape hatch. `connection` is `private` only in the
+// TypeScript declarations — at runtime it is a plain public field.
+ipcMain.on(IPC.ACP_SET_MODEL, async (_, { id, modelId } = {}) => {
+  const s = acpSessions.get(id);
+  if (!s || !s.conn || !modelId) return;
+  const prev = s.models && s.models.currentModelId;
+  try {
+    if (typeof s.conn.setSessionModel === 'function') {
+      await s.conn.setSessionModel({ sessionId: s.sessionId, modelId });   // typed path, once the SDK gains it
+    } else if (s.conn.connection && typeof s.conn.connection.sendRequest === 'function') {
+      await s.conn.connection.sendRequest('session/set_model', { sessionId: s.sessionId, modelId });
+    } else {
+      throw new Error('ACP SDK exposes no way to set a model');
+    }
+    if (s.models) s.models.currentModelId = modelId;
+    uiSend(IPC.ACP_MODEL_CHANGED, { id, currentModelId: modelId });
+  } catch (e) {
+    console.error('[acp] setSessionModel failed:', (e && e.message) || e);
+    uiSend(IPC.ACP_MODEL_CHANGED, { id, currentModelId: prev, error: (e && e.message) || 'set model failed' });
+  }
+});
 
 // Switch a session's ACP permission mode (Claude Code default/acceptEdits/plan/
 // bypassPermissions). Optimistically confirmed by the renderer; on failure we echo
