@@ -1115,7 +1115,7 @@ async function refreshUsage() {
   const seq = ++_usageSeq;   // a slower earlier fetch must not overwrite a newer session's meters
   try {
     const [ctx, lim] = await Promise.all([
-      isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '' }) : Promise.resolve(null),
+      isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '', id: activeId }) : Promise.resolve(null),
       // Claude's 5h/weekly limits are Anthropic-account numbers — meaningless under another agent.
       acpOther ? Promise.resolve(null) : ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
     ]);

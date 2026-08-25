@@ -3099,8 +3099,14 @@ const fsp = fs.promises;
 const USAGE_RELOCATE_MS = 30000;   // rescan for a newer transcript at most this often
 let _usageCache = null;            // { file, offset, tail, inT, outT, cc, cr, model, lastCtx }
 let _usageLocatedAt = 0;
+let _usageSessionId = null;   // agent session id the cached transcript belongs to
 
-async function findTranscriptFile(cwdHint) {
+// Claude Code names a project's transcript directory after the session cwd with
+// every non-alphanumeric byte replaced by '-'. The agent runs WSL-side, so the
+// name it wrote is built from the /mnt path — while the UI carries `C:\…`.
+function encodeProjectDir(p) { return String(p).replace(/[^a-zA-Z0-9]/g, '-'); }
+
+async function findTranscriptFile(cwdHint, sessionIdHint) {
   const dir = await claudeProjectsDir();
   if (!dir) return null;
   let subdirs;
@@ -3113,12 +3119,28 @@ async function findTranscriptFile(cwdHint) {
     subdirs = flags.filter(Boolean);
   } catch { return null; }
 
-  // Prefer the directory matching the session's cwd, fall back to all dirs
+  // Narrow to this session's project. Try both encodings of the hint — the
+  // Windows path and its /mnt form — and if neither matches, report nothing:
+  // falling back to every project meant showing some *other* conversation's
+  // context fill, which reads as "a new session already starts at 36%".
   let pool = subdirs;
   if (cwdHint) {
-    const enc = cwdHint.replace(/[^a-zA-Z0-9]/g, '-');
-    const match = subdirs.find(p => path.basename(p) === enc);
-    if (match) pool = [match];
+    const wanted = new Set([encodeProjectDir(cwdHint), encodeProjectDir(platform.toWslPath(cwdHint))]);
+    const matches = subdirs.filter(p => wanted.has(path.basename(p)));
+    if (!matches.length) return null;
+    pool = matches;
+  }
+
+  // Transcripts are named <sessionId>.jsonl. When the live session id is known,
+  // take that file outright and never guess: for the first turns of a new
+  // session the *previous* transcript is still the newest by mtime, so mtime
+  // alone reports the fill of the conversation that just ended.
+  if (sessionIdHint) {
+    for (const sd of pool) {
+      const fp = path.join(sd, `${sessionIdHint}.jsonl`);
+      try { await fsp.access(fp); return fp; } catch {}
+    }
+    return null;   // not written yet — an empty meter beats a stale one
   }
 
   const pick = async (dirs) => {
@@ -3137,8 +3159,7 @@ async function findTranscriptFile(cwdHint) {
     return best;
   };
 
-  let best = await pick(pool);
-  if (!best && pool !== subdirs) best = await pick(subdirs);
+  const best = await pick(pool);
   return best ? best.fp : null;
 }
 
@@ -3203,16 +3224,21 @@ async function computeUsage(file) {
   };
 }
 
-ipcMain.handle(IPC.GET_USAGE, async (_, { cwd } = {}) => {
+ipcMain.handle(IPC.GET_USAGE, async (_, { cwd, id } = {}) => {
   try {
+    // The agent's own session id names its transcript — resolve it from the tab.
+    const sid = (acpSessions.get(id) || {}).sessionId || null;
     // Reuse the cached transcript path; rescan the projects tree at most every
-    // USAGE_RELOCATE_MS (catches a new session's transcript appearing).
+    // USAGE_RELOCATE_MS (catches a new session's transcript appearing). A tab
+    // switch or a respawn changes the session id: relocate at once, or the
+    // meters keep reporting the transcript they were already following.
     let file = _usageCache ? _usageCache.file : null;
     const now = Date.now();
-    if (!file || now - _usageLocatedAt > USAGE_RELOCATE_MS) {
-      const located = await findTranscriptFile(cwd);
+    if (!file || sid !== _usageSessionId || now - _usageLocatedAt > USAGE_RELOCATE_MS) {
+      const located = await findTranscriptFile(cwd, sid);
       _usageLocatedAt = now;
-      if (located) file = located;
+      _usageSessionId = sid;
+      file = located;   // null when this session has no transcript yet
     }
     if (!file) return { ok: false, reason: 'no-transcript' };
     return { ok: true, ...(await computeUsageSerial(file)) };
