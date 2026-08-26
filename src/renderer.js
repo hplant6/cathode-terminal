@@ -4440,7 +4440,9 @@ let openBudgetModal = null;
 (function initBudget() {
   const modal = document.getElementById('budget-modal');
   if (!modal) return;
-  const ctl = wireModal(modal);
+  // Closing by any route (✕, backdrop, Escape) means "no" — a successful handoff clears
+  // handoffBusy before it closes, so this only fires on an actual dismissal.
+  const ctl = wireModal(modal, { onClose: () => cancelHandoff() });
   const AGENT_LABEL = BUDGET_AGENT_LABEL;
   const cfg = budgetConfig();
   const save = () => saveBudgetConfig(cfg);
@@ -4464,6 +4466,13 @@ let openBudgetModal = null;
   // armedResetAt persists across restarts: the resetsAt of the window we last auto-fired for.
   // Without this the in-memory guard reset to null every launch and re-fired while usage stayed over threshold — a credit-burning loop.
   let lastLimits = null, armedResetAt = (localStorage.getItem(BUDGET_ARMED_KEY) || null), lastCheck = 0, handoffBusy = false, countdownTimer = null;
+  // A handoff spends real usage: it makes the current agent write the brief, then spawns
+  // the target agent. Auto-handoff opens this modal AND starts that work at the same
+  // moment, so the modal has to be able to call it off — closing it used to hide the UI
+  // while the brief kept being written and the target agent still launched.
+  let handoffToken = 0;        // bumped to invalidate an in-flight run at its next await
+  let handoffFromId = null;    // session that was asked for the brief, so cancel targets it
+  let stopCountdown = null;    // set while the auto countdown toast is up
   let firstAutoGovern = true;   // the first governed check after launch never auto-fires — it only arms, so launching already over threshold can't kick off a handoff
   const governing = () => budgetGovern(lastLimits);
   const pctOf = (m) => (m && typeof m.utilization === 'number' ? Math.round(m.utilization) : null);
@@ -4498,7 +4507,9 @@ let openBudgetModal = null;
     slider.value = cfg.threshold; thresholdV.textContent = cfg.threshold + '%'; updateDsSlider(slider);
     targetEl.value = cfg.target; destEl.value = cfg.dest;
     setAutoUI(!!cfg.autoHandoff);
-    resetPerform(); showStatus('');
+    // Don't wipe the button back to idle while a handoff is actually running — reopening
+    // the modal mid-handoff would otherwise show "Perform Handoff Now" over live work.
+    if (!handoffBusy) { resetPerform(); showStatus(''); }
   }
 
   async function checkLimits(auto) {
@@ -4540,22 +4551,43 @@ let openBudgetModal = null;
     if (handoffBusy) return;
     const s = sessions.get(activeId);
     if (!s || s.type !== 'acp') { showStatus('Open an agent chat first, then hand off.', 'error'); return; }
+    const token = ++handoffToken;
+    handoffFromId = activeId;
     handoffBusy = true; performBtn.disabled = true; showStatus('');
     performBtn.textContent = 'Writing brief…';
     const r = writeHandoffBriefNow();
     if (!r.ok) { showStatus('Open an agent chat first.', 'error'); resetPerform(); return; }
     const ok = await waitForBrief(r.dest);
+    if (token !== handoffToken) return;   // declined while the brief was being written
     if (!ok) { showStatus('The brief didn’t finish in time — try again.', 'error'); resetPerform(); return; }
     const label = AGENT_LABEL[cfg.target] || cfg.target;
     performBtn.textContent = 'Starting ' + label + '…';
     let id = null;
     try { id = createSession(label, cfg.target, true, false); } catch (_) {}
+    if (token !== handoffToken) return;   // declined while the target agent was starting
     if (id == null) { showStatus('Could not start ' + label + '.', 'error'); resetPerform(); return; }
     switchSession(id);
     const kickoff = `You're taking over this project from another agent. Read \`${cfg.dest}\` in the project root for the full handoff brief, then continue the work from there. Ask me only if something is genuinely unclear.`;
     const ta = document.getElementById('ui-textarea');
     if (ta) { ta.value = kickoff; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); }
     handoffBusy = false; ctl.close(); setTimeout(syncControls, 300);
+  }
+
+  // Refusing the handoff. Stops the pending countdown, invalidates any run already in
+  // flight, and cancels the brief the agent is part-way through writing — so declining
+  // costs nothing further. Returns true if something was actually called off.
+  function cancelHandoff(note) {
+    if (stopCountdown) stopCountdown();
+    if (!handoffBusy) return false;
+    handoffToken++;                       // in-flight run bails at its next await
+    handoffBusy = false;
+    // Stop the brief mid-write. Targets the session we asked, not whatever is active now.
+    const from = handoffFromId != null ? sessions.get(handoffFromId) : null;
+    if (from && from.type === 'acp' && from.status === 'thinking') ipcRenderer.send(IPC.ACP_CANCEL, { id: handoffFromId });
+    handoffFromId = null;
+    resetPerform();
+    if (note) showStatus(note, 'idle');
+    return true;
   }
 
   // Auto handoff fires this after a short, cancelable countdown (safety escape hatch).
@@ -4568,7 +4600,8 @@ let openBudgetModal = null;
     document.body.appendChild(toast);
     let left = secs;
     const tick = () => { txt.textContent = `Usage at ${Math.round(g.pct)}% of your ${g.label} limit — handing off to ${label} in ${left}s`; };
-    const stop = () => { clearInterval(countdownTimer); countdownTimer = null; toast.remove(); };
+    const stop = () => { clearInterval(countdownTimer); countdownTimer = null; stopCountdown = null; toast.remove(); };
+    stopCountdown = stop;
     tick();
     countdownTimer = setInterval(() => { if (--left <= 0) { stop(); openBudgetModal(); performHandoff(); } else tick(); }, 1000);
     toast.querySelector('.ua-cd-cancel').addEventListener('click', stop);
@@ -4579,6 +4612,7 @@ let openBudgetModal = null;
   targetEl.addEventListener('change', () => { cfg.target = targetEl.value; save(); });
   destEl.addEventListener('change', () => { cfg.dest = destEl.value; save(); });
   performBtn.addEventListener('click', performHandoff);
+  document.getElementById('budget-decline')?.addEventListener('click', () => { cancelHandoff(); ctl.close(); });
   document.getElementById('budget-close')?.addEventListener('click', ctl.close);
 
   ipcRenderer.on(IPC.ACP_DONE, () => checkLimits(true));
