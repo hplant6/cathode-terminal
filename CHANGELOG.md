@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-08-26
+
+### Fixed
+- **Closing the handoff modal now actually calls the handoff off.** Auto handoff opened the modal and started the work in the same moment, and closing the modal only hid it — the brief kept being written and the budget agent still launched behind a dialog you had just dismissed, spending usage you had declined. **Don't Hand Off** sits beside *Perform Handoff Now*, and refusing is real: it stops the countdown, cancels the brief mid-write, and lands before the target agent is spawned. Closing by ✕, backdrop or Escape does the same thing.
+- **The chat keeps following new output unless you actually scroll away.** Whether to follow was re-read from scroll position on every sample, so any reflow that briefly left the view short of the bottom latched following off — and it never recovered, because the growing reply only pushed the bottom further away. A tool card expanding, a code block getting its syntax colours, an image finishing its load, or a reply that started streaming while the view was still animating could each do it, none of which involve scrolling. Position now only ever resumes following; stopping it takes a real gesture. Content that grows *after* it was posted re-pins on its own.
+- **Links in chat are clickable as soon as they appear**, rather than once a later message happened to re-render the bubble. URLs are turned into links as the reply streams, and a reply whose last chunks arrive after the turn has already resolved — which some agents do — is now closed out on its own instead of sitting there as raw text with dead links and unformatted code.
+- **The context gauge reads this session, not the newest one anywhere.** It looked up the transcript from a Windows path while the agent had recorded a WSL one, so the lookup silently missed and it fell back to the most recently touched conversation on the machine — a brand-new session could open reading 36% full, borrowed from unrelated work. It now resolves the transcript by the live session's own id, and shows nothing rather than someone else's numbers.
+
 ## [1.10.0] - 2026-08-16
 
 ### Added
@@ -510,7 +518,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.0.17...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.10.1
 [1.0.17]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.17
 [1.0.16]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.16
 [1.0.15]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.15
