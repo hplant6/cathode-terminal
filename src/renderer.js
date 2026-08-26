@@ -3492,7 +3492,11 @@ function acpAppendChunk(s, text, messageId) {
   }
   // Append only the new chunk — reassigning the full accumulated text made
   // long responses O(n²) (full re-serialize + reflow per chunk).
-  s.streamTextEl.appendChild(document.createTextNode(text));
+  // Linkify the chunk as it lands so URLs are clickable while the reply streams, rather
+  // than only once acpFinalizeStream re-renders the bubble. Still O(chunk), and the
+  // anchors carry their URL as text, so textContent keeps round-tripping to the exact
+  // string finalize re-renders from (a URL split across two chunks is caught there).
+  appendLinkified(s.streamTextEl, text);
   acpScrollEnd(s);
 }
 
@@ -3655,6 +3659,11 @@ function handleAcpUpdate(s, update) {
       s._trailingTimer = setTimeout(() => {
         s._trailingWork = false;
         if (s.status === 'thinking') acpSetStatus(s, 'ready');
+        // Trailing chunks land after ACP_DONE already finalized the turn's bubble, so
+        // they open a new one that no ACP_DONE will ever close. It stayed raw text —
+        // dead links, unrendered fences — until some later message happened to finalize
+        // it. Close it here, where the trailing activity is known to have gone quiet.
+        acpFinalizeStream(s);
       }, 3000);
     }
   }
