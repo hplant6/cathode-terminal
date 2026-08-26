@@ -622,6 +622,14 @@ function createAcpSession(id, name, agent = 'claude', command = 'claude', resume
   chatEl.appendChild(scrollBtn);
 
   msgsEl.addEventListener('scroll', () => { updateMsgsFade(msgsEl); updateStickyUser(msgsEl, stickyUser); updateScrollBtn(msgsEl, scrollBtn); }, { passive: true });
+  // What counts as the user scrolling away on purpose (see updateMsgsFade). pointermove
+  // with a button held covers dragging the scrollbar, which emits no wheel event.
+  const markGesture = () => { msgsEl._lastGesture = Date.now(); };
+  msgsEl.addEventListener('wheel', markGesture, { passive: true });
+  msgsEl.addEventListener('touchmove', markGesture, { passive: true });
+  msgsEl.addEventListener('keydown', markGesture);
+  msgsEl.addEventListener('pointerdown', markGesture);
+  msgsEl.addEventListener('pointermove', e => { if (e.buttons) markGesture(); }, { passive: true });
 
   // Terminal view — real xterm PTY (lazy-spawned on first switch)
   const termEl = document.createElement('div');
@@ -3044,7 +3052,23 @@ function updateMsgsFade(el) {
   // dimmed by it — even if a layout reflow (System/Usage panels toggling) leaves the
   // scroll a few px short of the exact bottom.
   el.classList.toggle('fade-bot', fromBottom > 60);
-  el._stick = fromBottom < 80;   // near bottom → keep following
+  // Following new output was re-derived from scroll position on every sample, so ANY
+  // programmatic reflow that briefly left the view >80px from the bottom latched it OFF
+  // even though the user never scrolled — a smooth scroll still mid-animation, a tool
+  // card expanding, Monaco colorizing a fence, an image finishing its load. Once off it
+  // never recovered, because the growing reply only pushed the bottom further away.
+  // Position may now only RE-ENABLE following; turning it off takes a real gesture.
+  if (fromBottom < 80) el._stick = true;
+  else if (Date.now() - (el._lastGesture || 0) < 400) el._stick = false;
+}
+
+// Re-pin a chat whose content grew AFTER its message was appended (Monaco colorize, an
+// image load). Nothing calls acpScrollEnd for those, so the newest output silently ends
+// up off-screen while the chat still believes it is following.
+function repinChatFor(node) {
+  const msgs = node && node.closest ? node.closest('.acp-messages') : null;
+  if (!msgs) return;
+  for (const s of sessions.values()) if (s.msgsEl === msgs) { acpScrollEnd(s); return; }
 }
 
 // Cap the rendered chat at ACP_MAX_MSGS nodes so long sessions stay bounded
@@ -3095,6 +3119,16 @@ function acpScrollUserToMiddle(s, el) {
     const eTop = el.getBoundingClientRect().top;
     const target = s.msgsEl.scrollTop + (eTop - cTop) - s.msgsEl.clientHeight * 0.45;
     s.msgsEl.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    // Un-sticking above only protects this smooth scroll from being yanked by a reply
+    // that starts streaming while it animates. Resume following once it settles: the
+    // user just posted, so the newest output should stay in view unless THEY scroll
+    // away. Without this, a reply that outgrew the viewport mid-animation left the chat
+    // pinned to the user's message with the live output scrolling on below it.
+    clearTimeout(s._pinSettle);
+    s._pinSettle = setTimeout(() => {
+      if (Date.now() - (s.msgsEl._lastGesture || 0) > 400) s.msgsEl._stick = true;
+      acpScrollEnd(s);
+    }, 450);
   });
 }
 
@@ -3302,7 +3336,7 @@ function renderRichText(container, text) {
       if (!monaco) return;   // no Monaco → keep the styled plain blocks
       for (const j of jobs) {
         monaco.editor.colorize(j.code, j.lang, {})
-          .then(html => { if (html) j.codeEl.innerHTML = html; })
+          .then(html => { if (html) { j.codeEl.innerHTML = html; repinChatFor(j.codeEl); } })
           .catch(() => {});
       }
     });
@@ -3428,6 +3462,7 @@ function appendChatImages(el, images) {
     thumb.className = 'chat-img-thumb';
     thumb.alt = name; thumb.title = name;
     loadChatImg(thumb, p);
+    thumb.addEventListener('load', () => repinChatFor(thumb));   // height only exists once loaded
     thumb.addEventListener('click', () => openImgLightbox(thumb.src, name));
     wrap.appendChild(thumb);
   });
