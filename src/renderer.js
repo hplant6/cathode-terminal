@@ -1434,6 +1434,41 @@ const FOLDER_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" hei
 const TOOL_ATTACH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg>`;
 
 // Clone the main persona dropdown (reuses its glyph SVG) as a class-styled copy.
+// ── "Intent" lens — tool panels only ─────────────────────────────
+// Direct manipulation produces exact numbers: a hex the eyedropper sampled, a px value a
+// slider happened to land on, a colour nudged until it looked right. Those are a sketch of
+// what was wanted, not a specification — and pasted in literally they bypass the project's
+// tokens and scales. With this on, the agent is told to reproduce the EFFECT the project's
+// own way. Deliberately NOT part of applyLenses: persona and caveman are global lenses that
+// ride on every message, and "these values are approximate" is meaningless on a plain chat
+// message that carries no measured values.
+let intentMode = localStorage.getItem('cathode-intent') === '1';
+const INTENT_DIRECTIVE = [
+  'The CSS values below are a sketch, not a specification. They came from direct manipulation',
+  'in a live preview, so treat them as intent — the direction and rough magnitude of the change',
+  'I want, not literal numbers to paste in.',
+  '',
+  'Reproduce the same visual effect the way this project already does things:',
+  '- Prefer existing design tokens, CSS variables, spacing/type scales, and utility or component',
+  '  classes over raw values. Where a sketched value is close to an existing step, use that step.',
+  '- Apply the change at the level that owns this element — its component or stylesheet — not as',
+  '  an inline style on a single node.',
+  '- Keep the result visually equivalent to the sketch. If doing it properly means a noticeably',
+  '  different result, do it properly and tell me what you changed and why.',
+].join('\n');
+const intentControls = [];
+function setIntentMode(on) {
+  intentMode = !!on;
+  try { localStorage.setItem('cathode-intent', intentMode ? '1' : '0'); } catch (_) {}
+  // Every tool panel has its own bar; one switch, so they can't disagree.
+  for (let i = intentControls.length - 1; i >= 0; i--) {
+    const b = intentControls[i];
+    if (!b.isConnected) { intentControls.splice(i, 1); continue; }
+    b.classList.toggle('on', intentMode);
+    b.setAttribute('aria-checked', intentMode ? 'true' : 'false');
+  }
+}
+
 function makeToolPersonaControl() {
   const wrap = personaWrap.cloneNode(true);
   wrap.removeAttribute('id');
@@ -1446,6 +1481,28 @@ function makeToolPersonaControl() {
   const menu = wrap.querySelector('div');   // the cloned #persona-menu
   menu.removeAttribute('id'); menu.classList.add('tp-persona-menu'); menu.innerHTML = '';
   return { wrap, btn, label, menu };
+}
+
+// Wire an element as a file drop target: `onPaths` gets the dropped absolute paths.
+// Shared by the main composer and every tool panel's footer so a drop behaves the same
+// wherever you aim it.
+function wireFileDrop(zone, onPaths) {
+  if (!zone || zone._fileDropWired) return;
+  zone._fileDropWired = true;
+  // Electron 41 removed File.path — resolve the real path via webUtils.getPathForFile.
+  const pathOf = (f) => { try { return require('electron').webUtils.getPathForFile(f) || ''; } catch (_) { return f.path || ''; } };
+  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  let depth = 0;   // dragenter/leave fire per descendant — count so the highlight doesn't flicker
+  zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add('drag-over'); });
+  zone.addEventListener('dragover',  (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  zone.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove('drag-over'); });
+  zone.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    depth = 0; zone.classList.remove('drag-over');
+    const paths = Array.from(e.dataTransfer.files || []).map(pathOf).filter(Boolean);
+    if (paths.length) onPaths(paths);
+  });
 }
 
 function makeToolComposerBar(foot) {
@@ -1466,7 +1523,27 @@ function makeToolComposerBar(foot) {
   const chips = document.createElement('div');
   chips.className = 'tp-attach-chips';
 
-  bar.append(attachBtn, persona.wrap, chips);
+  // Label + the design system's switch (.view-toggle / .vt-label / .vt-switch), the same
+  // component the Usage/System toggles and the Auto Handoff row use — so the label picks
+  // up its on/off colour from `.view-toggle:has(.vt-switch.on)` for free.
+  const intentWrap = document.createElement('div');
+  intentWrap.className = 'view-toggle tp-intent-wrap';
+  intentWrap.title = 'Send these values as intent, not exact numbers — the agent reproduces the effect using the project\'s own tokens, scales and components.';
+  const intentLabel = document.createElement('span');
+  intentLabel.className = 'vt-label';
+  intentLabel.textContent = 'Send as Intent';
+  const intentBtn = document.createElement('button');
+  intentBtn.type = 'button';
+  intentBtn.className = 'vt-switch' + (intentMode ? ' on' : '');
+  intentBtn.setAttribute('role', 'switch');
+  intentBtn.setAttribute('aria-checked', intentMode ? 'true' : 'false');
+  intentBtn.innerHTML = '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span>';
+  intentWrap.append(intentLabel, intentBtn);
+  // The whole control is the hit target — clicking the label toggles too.
+  intentWrap.addEventListener('click', (e) => { e.stopPropagation(); setIntentMode(!intentMode); });
+  intentControls.push(intentBtn);
+
+  bar.append(attachBtn, persona.wrap, intentWrap, chips);
   foot.insertBefore(bar, foot.firstChild);
   registerPersonaControl(persona);
 
@@ -1494,6 +1571,13 @@ function makeToolComposerBar(foot) {
     renderChips();
   });
 
+  // Drop files anywhere on the footer — the textarea, the toolbar or the chip strip —
+  // and they attach exactly as the paperclip would.
+  wireFileDrop(foot, (paths) => {
+    paths.forEach(p => { if (p && !attach.some(a => a.path === p)) attach.push({ kind: 'file', path: p }); });
+    renderChips();
+  });
+
   const api = { attachPaths: () => attach.map(a => a.path), clear: () => { attach = []; renderChips(); } };
   foot._composerBar = api;
   return api;
@@ -1505,6 +1589,8 @@ function decorateToolInstruction(instruction, foot) {
   let text = (instruction || '').trim();
   const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
   if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
+  // Framing goes first: the agent should know the numbers are a sketch before it reads them.
+  if (intentMode) text = INTENT_DIRECTIVE + (text ? '\n\n' + text : '');
   return applyLenses(text);
 }
 
@@ -9690,24 +9776,7 @@ document.getElementById('btn-ui-attach-folder')?.addEventListener('click', async
 });
 
 // ── Drag & drop files onto the composer → attach (same pipeline as the paperclip) ──
-(function initInputDrop() {
-  const zone = document.getElementById('ui-input-area');
-  if (!zone) return;
-  // Electron 41 removed File.path — resolve the real path via webUtils.getPathForFile.
-  const pathOf = (f) => { try { return require('electron').webUtils.getPathForFile(f) || ''; } catch (_) { return f.path || ''; } };
-  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
-  let depth = 0;   // dragenter/leave fire per descendant — count so the highlight doesn't flicker
-  zone.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; zone.classList.add('drag-over'); });
-  zone.addEventListener('dragover',  (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-  zone.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) zone.classList.remove('drag-over'); });
-  zone.addEventListener('drop', (e) => {
-    if (!hasFiles(e)) return;
-    e.preventDefault(); e.stopPropagation();
-    depth = 0; zone.classList.remove('drag-over');
-    const paths = Array.from(e.dataTransfer.files || []).map(pathOf).filter(Boolean);
-    if (paths.length) addAttachChips(paths, 'file');
-  });
-})();
+wireFileDrop(document.getElementById('ui-input-area'), (paths) => addAttachChips(paths, 'file'));
 // A file dropped anywhere else would navigate the whole window to file://… (Chromium's
 // default, which our will-navigate guard permits for file://) — swallow those drops.
 window.addEventListener('dragover', (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });

@@ -2616,8 +2616,10 @@ html, body {
   border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1;
 }
 #update-band-x:hover { background: rgba(255,255,255,0.12); color: #fff; }
-/* Drag a file over the composer → dashed accent overlay + "Drop to attach" hint. */
-#ui-input-area.drag-over::after {
+/* Drag a file over the composer, or over any tool panel's footer → dashed accent
+   overlay + "Drop to attach" hint. .tp-foot is already position:relative. */
+#ui-input-area.drag-over::after,
+.tp-foot.drag-over::after {
   content: 'Drop to attach';
   position: absolute; inset: 0; z-index: 5; pointer-events: none;   /* let drag events reach the composer beneath */
   display: flex; align-items: center; justify-content: center;
@@ -3019,6 +3021,11 @@ html, body {
 }
 .tp-tool-btn:hover { color: var(--spec-text); }
 .tp-tool-btn svg { width: 18px; height: 18px; }
+/* Intent toggle — the design system's label+switch (.view-toggle) dropped into the tool
+   bar. Layout and the label's on/off colour come from the component; this only spaces it. */
+.tp-intent-wrap { flex-shrink: 0; margin-left: 4px; padding: 0 6px; cursor: pointer; }
+.tp-intent-wrap .vt-label { user-select: none; }
+
 /* Persona dropdown — same look as #btn-persona / #persona-menu */
 .tp-persona-wrap { position: relative; flex-shrink: 0; }
 .tp-persona-btn {
