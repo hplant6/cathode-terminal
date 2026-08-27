@@ -277,6 +277,17 @@ applyTheme(activeThemeName);   // initial
 // ── Theme modal ───────────────────────────────────────────────────
 const themeModalEl = document.getElementById('theme-modal');
 
+// Paint a colour onto a swatch. `.pp-swatch` shows it over a checkerboard so a
+// translucent pick doesn't just read as "slightly different panel background" — the
+// colour is a gradient layer above the checker, which an inline `background` shorthand
+// would wipe out, so it travels as a custom property. Other swatches (the theme
+// circles) are opaque by construction and keep the plain inline background.
+function paintSwatch(swEl, v) {
+  if (!swEl) return;
+  if (swEl.classList.contains('pp-swatch')) swEl.style.setProperty('--sw', v || 'transparent');
+  else swEl.style.background = v;
+}
+
 function normHex(c) {
   c = (c || '').trim();
   if (/^#[0-9a-fA-F]{6}$/.test(c)) return c.toUpperCase();
@@ -6307,20 +6318,70 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   // ── States: a sticky row inside each element's drawer. Each drawer forces
   // :hover/:focus/:active/:disabled on its OWN element (via CDP). ──
   const STATE_LIST = ['hover', 'focus', 'active', 'disabled'];
+  // Which state a drawer is editing. '' is the element's resting style; the chips are
+  // single-select, so every edit belongs to exactly one CSS rule. (They used to be
+  // additive, which only made sense while they were a preview toggle — an additive
+  // selection would mean authoring `&:hover:focus` combinations.)
+  const BASE = '';
+  // Per-state edits and selections are keyed by state, so a hover change and a base
+  // change to the same property coexist instead of overwriting each other.
+  const modsOf    = (row, st) => (row.mods[st === undefined ? row.state : st] ||= {});
+  const checkedOf = (row, st) => (row.checked[st === undefined ? row.state : st] ||= new Set());
+  const countChecked = row => Object.values(row.checked).reduce((a, set) => a + set.size, 0);
+  // Transitions/animations are the mechanism a state change rides on, not the change
+  // itself — they'd otherwise head the "changed" list on every animated element.
+  const DIFF_NOISE = new Set(['transition', 'animation']);
+
   function clearStates() { ipcRenderer.send(IPC.STATES_CLEAR); }
-  function buildStatesRow(row) {
+
+  // Re-read this element with its state forced, and work out which properties the state
+  // actually changes. Cached per state — the page only needs asking once.
+  async function refreshStateCSS(row, i) {
+    if (!row.state) { row.changed = new Set(); return; }
+    if (!row.stateCSS[row.state]) {
+      // STATES_FORCE is fire-and-forget; let the page restyle before reading it back.
+      await new Promise(r => setTimeout(r, 80));
+      row.stateCSS[row.state] = await ipcRenderer.invoke(IPC.PICK_PANEL_READ_CSS, { i }).catch(() => []) || [];
+    }
+    const base = new Map((row.item.cssProps || []).map(p => [p.name, p.value]));
+    const changed = new Set();
+    for (const p of row.stateCSS[row.state]) {
+      if (DIFF_NOISE.has(p.name)) continue;
+      if (base.get(p.name) !== p.value) changed.add(p.name);
+    }
+    row.changed = changed;
+  }
+
+  // The value a property resolves to in the drawer's current state.
+  function stateValue(row, name, fallback) {
+    if (row.state && row.stateCSS[row.state]) {
+      const hit = row.stateCSS[row.state].find(x => x.name === name);
+      if (hit) return hit.value;
+    }
+    return fallback;
+  }
+
+  function buildStatesRow(row, i, rebuild) {
     const wrap = el('div', 'pp-states');
     wrap.appendChild(el('span', 'pp-states-label', 'States'));
-    STATE_LIST.forEach(s => {
-      const chip = el('button', 'states-chip' + (row.states.has(s) ? ' on' : ''), ':' + s);
-      chip.addEventListener('click', (e) => {
+    const chips = [];
+    const addChip = (st, text) => {
+      const chip = el('button', 'states-chip' + (row.state === st ? ' on' : ''), text);
+      chip._st = st;
+      chip.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (row.states.has(s)) { row.states.delete(s); chip.classList.remove('on'); }
-        else { row.states.add(s); chip.classList.add('on'); }
-        ipcRenderer.send(IPC.STATES_FORCE, { selector: row.item.cssSelector, states: Array.from(row.states) });
+        if (row.state === st) return;
+        row.state = st;
+        chips.forEach(c => c.classList.toggle('on', c._st === st));
+        ipcRenderer.send(IPC.STATES_FORCE, { selector: row.item.cssSelector, states: st ? [st] : [] });
+        await refreshStateCSS(row, i);
+        rebuild();
       });
+      chips.push(chip);
       wrap.appendChild(chip);
-    });
+    };
+    addChip(BASE, 'Base');
+    STATE_LIST.forEach(st => addChip(st, ':' + st));
     return wrap;
   }
 
@@ -6345,7 +6406,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     return e;
   }
   function activeIndices() { return rows.map((r, i) => (r.removed ? -1 : i)).filter(i => i >= 0); }
-  function applyStyle(i, prop, value) { ipcRenderer.send(IPC.PICK_PANEL_STYLE, { i, prop, value }); }
+  function applyStyle(i, prop, value, state) { ipcRenderer.send(IPC.PICK_PANEL_STYLE, { i, prop, value, state: state || '' }); }
   // Every CSS property this Chromium build knows (renderer engine == page engine),
   // for the "User Added" picker — lets you add a property the detected list omits.
   const ALL_CSS_PROPS = (() => {
@@ -6358,11 +6419,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   // ── one CSS property row ──────────────────────────────────────
   // ── property metadata (Method 2 sections + Method 3 typed controls) ─
+  // Order here is the order sections render in. Position leads because the Padding
+  // section is appended ahead of all of them (buildSideSection), and the two are
+  // the same four-sided, slider-driven job — so they sit together at the top.
   const SECTIONS = [
+    ['Position',   ['position', 'top', 'right', 'bottom', 'left', 'z-index']],
     ['Layout',     ['display', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'align-self', 'gap', 'grid-template-columns', 'grid-template-rows']],
     ['Sizing',     ['width', 'height', 'min-width', 'max-width', 'min-height', 'max-height']],
     ['Spacing',    ['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left']],
-    ['Position',   ['position', 'top', 'right', 'bottom', 'left', 'z-index']],
     ['Typography', ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align', 'text-transform', 'color']],
     ['Appearance', ['background-color', 'background-image', 'background-size', 'border-radius', 'border-top-width', 'border-top-style', 'border-top-color', 'box-shadow', 'opacity', 'overflow', 'cursor', 'transform']],
   ];
@@ -6401,10 +6465,26 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const m = /^(-?\d*\.?\d+)\s*(px|%|em|rem|vw|vh|vmin|vmax|pt|ch|fr|deg)?$/.exec(String(v).trim());
     return m ? { num: m[1], unit: m[2] || '' } : null;
   }
+  // Keywords a dimension can hold instead of a length. They ride in the unit dropdown
+  // (where 'auto' already lived), so the slider and number field stay available: picking
+  // one commits the keyword, typing or dragging a number switches back to a real length.
+  const LEN_KEYWORDS = new Set(['auto', 'none']);
+  // Dimensions whose resting value is a keyword rather than a length. `none` / `auto`
+  // aren't parseable, so these fell through to a bare text box while their siblings
+  // (min-width at 0px, the padding sides) got the slider, number and unit picker.
+  // Keep the dimension control for them so the whole set matches.
+  //   max-width / max-height        → `none`
+  //   top / right / bottom / left   → `auto`, and the same four-sided job as padding
+  // z-index is deliberately absent: it's UNITLESS, so ctrlLength builds no unit
+  // dropdown, and its `auto` would have nowhere to live.
+  //   margin-*                    → `auto`, which is how you centre a box
+  const KEYWORD_LENGTH_PROPS = new Set(['max-width', 'max-height', 'top', 'right', 'bottom', 'left',
+                                        'margin-top', 'margin-right', 'margin-bottom', 'margin-left']);
   function controlType(prop, val) {
     if (COLOR_PROPS.has(prop) || /(^|-)color$/.test(prop)) return 'color';
     if (ENUMS[prop]) return 'enum';
     if (parseLen(val)) return 'length';
+    if (KEYWORD_LENGTH_PROPS.has(prop) && LEN_KEYWORDS.has(String(val).trim())) return 'length';
     return 'text';
   }
 
@@ -6420,41 +6500,45 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   // Total selected properties across all (kept) elements → Send button label.
   function updateSendCount() {
-    const n = rows.filter(r => !r.removed).reduce((a, r) => a + r.checked.size, 0);
+    const n = rows.filter(r => !r.removed).reduce((a, r) => a + countChecked(r), 0);
     sendBtn.textContent = n ? `Send (${n})` : 'Send';
-    fieldBodies.forEach(fb => { if (fb.count) fb.count.textContent = `${fb.row.checked.size} Selected`; });
+    fieldBodies.forEach(fb => { if (fb.count) fb.count.textContent = `${countChecked(fb.row)} Selected`; });
   }
 
   // ── one property as a field card with a typed control ─────────
   function buildField(row, i, p) {
-    const cur = row.mods[p.name] !== undefined ? row.mods[p.name] : p.value;
+    const mods = modsOf(row), checked = checkedOf(row);
+    // In a forced state the row shows what that state resolves to, not the resting value.
+    const shown = stateValue(row, p.name, p.value);
+    const cur = mods[p.name] !== undefined ? mods[p.name] : shown;
     const field = el('div', 'pp-field');
     field.dataset.name = p.name;
     field.dataset.val  = cur;
-    if (row.checked.has(p.name)) field.classList.add('selected');
-    if (row.mods[p.name] !== undefined) field.classList.add('modified');
+    if (checked.has(p.name)) field.classList.add('selected');
+    if (mods[p.name] !== undefined) field.classList.add('modified');
 
     const sel = el('button', 'pp-field-sel'); sel.title = 'Include in message';
     sel.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (row.checked.has(p.name)) { row.checked.delete(p.name); field.classList.remove('selected'); }
-      else { row.checked.add(p.name); field.classList.add('selected'); }
+      if (checked.has(p.name)) { checked.delete(p.name); field.classList.remove('selected'); }
+      else { checked.add(p.name); field.classList.add('selected'); }
       updateSendCount();
     });
     const label = el('span', 'pp-field-label', labelFor(p.name)); label.title = p.name;
     const ctrl  = el('div', 'pp-field-ctrl');
 
     function commit(v) {
-      row.mods[p.name] = v;
-      row.checked.add(p.name);
-      applyStyle(i, p.name, v);
+      mods[p.name] = v;
+      checked.add(p.name);
+      applyStyle(i, p.name, v, row.state);
       field.dataset.val = v;
       field.classList.add('selected', 'modified');
       updateSendCount();
     }
 
     const type = controlType(p.name, cur);
-    if      (type === 'color')  ctrlColor(ctrl, field, cur, commit);
+    if      (p.name === 'box-shadow') ctrlShadow(ctrl, field, cur, commit);
+    else if (type === 'color')  ctrlColor(ctrl, field, cur, commit);
     else if (type === 'enum')   ctrlEnum(ctrl, p.name, cur, commit);
     else if (type === 'length') ctrlLength(ctrl, p.name, cur, commit);
     else                        ctrlText(ctrl, cur, commit);
@@ -6480,16 +6564,18 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
 
   function ctrlColor(ctrl, field, cur, commit) {
-    const sw = el('span', 'pp-swatch'); sw.style.background = (cur === 'none' || !cur) ? 'transparent' : cur;
+    const sw = el('span', 'pp-swatch'); paintSwatch(sw, (cur === 'none' || !cur) ? 'transparent' : cur);
     const hex = el('input', 'pp-ctrl-input pp-color-hex'); hex.type = 'text'; hex.value = cur; hex.spellcheck = false;
     ctrl.append(sw, hex);
     sw.addEventListener('click', (e) => {
       e.stopPropagation();
-      colorPicker.open(sw, field.dataset.val, (h) => { hex.value = h; sw.style.background = h; commit(h); });
+      // These fields take any CSS colour string (computed styles already hand them
+      // rgba()), so they get the alpha channel.
+      colorPicker.open(sw, field.dataset.val, (h) => { hex.value = h; paintSwatch(sw, h); commit(h); }, { alpha: true });
     });
     hex.addEventListener('click', e => e.stopPropagation());
     hex.addEventListener('keydown', e => e.stopPropagation());
-    hex.addEventListener('input', () => { sw.style.background = hex.value; commit(hex.value); });
+    hex.addEventListener('input', () => { paintSwatch(sw, hex.value); commit(hex.value); });
   }
   function ctrlEnum(ctrl, prop, cur, commit) {
     const sel = el('select', 'pp-select');
@@ -6503,7 +6589,12 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   function ctrlLength(ctrl, prop, cur, commit) {
     const parsed = parseLen(cur);
-    const num = el('input', 'pp-ctrl-input pp-num'); num.type = 'text'; num.value = parsed ? parsed.num : cur;
+    const keyword = LEN_KEYWORDS.has(String(cur).trim()) ? String(cur).trim() : null;
+    const num = el('input', 'pp-ctrl-input pp-num'); num.type = 'text';
+    // A keyword lives in the unit dropdown, so the number field shows it as a hint
+    // rather than as text you would have to delete before typing a value.
+    num.value = keyword ? '' : (parsed ? parsed.num : cur);
+    if (keyword) num.placeholder = keyword;
     // Slider: drag the knob to scrub the value (relative; Shift ±10, Alt ±0.1).
     const slider = el('div', 'pp-slider'); slider.title = 'Drag to adjust';
     const knob = el('div', 'pp-slider-knob');
@@ -6516,9 +6607,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       document.body.style.cursor = 'ew-resize';
       function onMove(ev) {
         const off = Math.max(-half, Math.min(half, ev.clientX - startX));
-        num.value = Math.round(V * (1 + off / half) * 1000) / 1000;   // left → 0, centre → V, right → 2×V
+        // The scrub is multiplicative (left → 0, centre → V, right → 2×V), which can
+        // never leave zero — 0 × anything is 0. A dimension at `none`, `auto` or 0px is
+        // exactly where you reach for the slider, so seed an absolute range from there.
+        num.value = V === 0
+          ? Math.round(off / half * 100)
+          : Math.round(V * (1 + off / half) * 1000) / 1000;
         knob.style.transform = `translate(calc(-50% + ${off}px), -50%)`;
-        apply();
+        leaveKeyword(); apply();
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove, true);
@@ -6539,7 +6635,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       function onMove(ev) {
         const step = ev.shiftKey ? 10 : ev.altKey ? 0.1 : 1;
         num.value = Math.round((startNum + Math.round((ev.clientX - startX) / 2) * step) * 1000) / 1000;
-        apply();
+        leaveKeyword(); apply();
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove, true);
@@ -6555,19 +6651,25 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (!UNITLESS.has(prop)) {
       unitSel = el('select', 'pp-unit');
       const units = ['', ...UNITS];                 // '' = unitless (e.g. line-height)
-      const u = parsed ? parsed.unit : '';
+      if (KEYWORD_LENGTH_PROPS.has(prop) && !units.includes('none')) units.push('none');
+      const u = keyword || (parsed ? parsed.unit : '');
       if (u && !units.includes(u)) units.push(u);
       units.forEach(x => { const op = el('option'); op.value = x; op.textContent = x || '—'; unitSel.appendChild(op); });
       unitSel.value = u;
       ctrl.appendChild(unitSel);
     }
+    // Typing or dragging a number means a length is wanted, so the keyword steps aside.
+    const leaveKeyword = () => {
+      if (unitSel && LEN_KEYWORDS.has(unitSel.value)) unitSel.value = 'px';
+    };
     const apply = () => {
       const n = num.value.trim();
       const u = unitSel ? unitSel.value : '';
-      commit(u === 'auto' ? 'auto' : (n + (u || '')));
+      if (LEN_KEYWORDS.has(u)) { commit(u); return; }   // `none` / `auto` replace the length outright
+      commit(n + (u || ''));
     };
     num.addEventListener('click', e => e.stopPropagation());
-    num.addEventListener('input', apply);
+    num.addEventListener('input', () => { leaveKeyword(); apply(); });
     num.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -6580,6 +6682,133 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     });
     if (unitSel) { unitSel.addEventListener('change', apply); compactSelect(unitSel, true); }
   }
+  // ── box-shadow: a real editor, not one cramped text box ───────
+  // Shadows are a comma-separated list of layers, each
+  //   [inset] <x> <y> [blur] [spread] [color]
+  // which is unreadable and near-impossible to nudge in a 135px input. Each layer gets
+  // its own row: inset toggle, colour swatch (alpha matters more here than anywhere),
+  // and drag-scrubbable X / Y / Blur / Spread.
+  const SHADOW_LEN_RE = /^-?\d*\.?\d+(px|em|rem|%|vh|vw|pt)?$/i;
+  // Split at top-level commas only — the ones inside rgba(…) separate channels, not layers.
+  function splitLayers(v) {
+    const out = []; let depth = 0, cur = '';
+    for (const ch of String(v || '')) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map(x => x.trim()).filter(Boolean);
+  }
+  function parseShadowLayer(str) {
+    const layer = { inset: false, x: '0px', y: '0px', blur: '0px', spread: '0px', color: 'rgba(0, 0, 0, 0.5)' };
+    // Tokenise, keeping function calls whole so rgba(…) survives as one token.
+    const toks = String(str).match(/(?:[a-z-]+\([^)]*\)|[^\s]+)/gi) || [];
+    const lens = [];
+    for (const t of toks) {
+      if (/^inset$/i.test(t)) { layer.inset = true; continue; }
+      if (SHADOW_LEN_RE.test(t)) { lens.push(t); continue; }
+      layer.color = t;   // anything not a keyword or a length is the colour
+    }
+    ['x', 'y', 'blur', 'spread'].forEach((k, idx) => { if (lens[idx] != null) layer[k] = lens[idx]; });
+    return layer;
+  }
+  function parseShadow(v) {
+    const t = String(v || '').trim();
+    if (!t || t === 'none') return [];
+    return splitLayers(t).map(parseShadowLayer);
+  }
+  const formatShadow = (layers) => layers.length
+    ? layers.map(L => [L.inset ? 'inset' : '', L.x, L.y, L.blur, L.spread, L.color].filter(Boolean).join(' ')).join(', ')
+    : 'none';
+
+  function ctrlShadow(ctrl, field, cur, commit) {
+    let layers = parseShadow(cur);
+    const push = () => commit(formatShadow(layers));
+    const list = el('div', 'pp-sh-list');
+
+    // One scrubbable length. The token keeps its own unit — the drag only moves the
+    // number, so `0.5rem` stays in rem rather than being silently rewritten to px.
+    function numField(lbl, L, key) {
+      const w = el('div', 'pp-sh-num');
+      w.appendChild(el('span', 'pp-sh-numlbl', lbl));
+      const inp = el('input', 'pp-sh-input'); inp.type = 'text'; inp.value = L[key]; inp.spellcheck = false;
+      const scrub = el('span', 'pp-scrub'); scrub.innerHTML = SLIDE_ICON; scrub.title = 'Drag to adjust';
+      const setFrom = (raw) => { L[key] = raw; push(); };
+      inp.addEventListener('click', e => e.stopPropagation());
+      inp.addEventListener('keydown', e => e.stopPropagation());
+      inp.addEventListener('input', () => setFrom(inp.value.trim()));
+      scrub.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const m = /^(-?\d*\.?\d+)(.*)$/.exec(String(L[key]).trim()) || [null, '0', 'px'];
+        const start = parseFloat(m[1]) || 0, unit = m[2] || 'px', startX = e.clientX;
+        document.body.style.cursor = 'ew-resize';
+        const onMove = (ev) => {
+          const step = ev.shiftKey ? 10 : ev.altKey ? 0.1 : 1;
+          const n = Math.round((start + Math.round((ev.clientX - startX) / 2) * step) * 1000) / 1000;
+          inp.value = n + unit; setFrom(inp.value);
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove, true);
+          document.removeEventListener('mouseup', onUp, true);
+          document.body.style.cursor = '';
+        };
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup', onUp, true);
+      });
+      w.append(inp, scrub);
+      return w;
+    }
+
+    function render() {
+      list.innerHTML = '';
+      layers.forEach((L, idx) => {
+        const rowEl = el('div', 'pp-sh-layer');
+        const head = el('div', 'pp-sh-head');
+
+        const sw = el('span', 'pp-swatch'); paintSwatch(sw, L.color);
+        sw.title = 'Shadow colour';
+        sw.addEventListener('click', (e) => {
+          e.stopPropagation();
+          colorPicker.open(sw, L.color, (h) => { L.color = h; paintSwatch(sw, h); push(); }, { alpha: true });
+        });
+
+        const insetBtn = el('button', 'pp-sh-inset' + (L.inset ? ' on' : ''), 'inset');
+        insetBtn.title = 'Draw the shadow inside the box';
+        insetBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          L.inset = !L.inset; insetBtn.classList.toggle('on', L.inset); push();
+        });
+
+        const del = el('button', 'pp-sh-del', '✕'); del.title = 'Remove this shadow';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          layers.splice(idx, 1); push(); render();
+        });
+
+        head.append(sw, insetBtn, el('span', 'pp-sh-spacer'), del);
+        const grid = el('div', 'pp-sh-grid');
+        grid.append(numField('X', L, 'x'), numField('Y', L, 'y'),
+                    numField('Blur', L, 'blur'), numField('Spread', L, 'spread'));
+        rowEl.append(head, grid);
+        list.appendChild(rowEl);
+      });
+
+      const add = el('button', 'pp-sh-add', '+ Add shadow');
+      add.addEventListener('click', (e) => {
+        e.stopPropagation();
+        layers.push(parseShadowLayer('0px 2px 6px 0px rgba(0, 0, 0, 0.35)'));
+        push(); render();
+      });
+      list.appendChild(add);
+    }
+
+    render();
+    ctrl.appendChild(list);
+    field.classList.add('pp-field-stack');
+  }
+
   function ctrlText(ctrl, cur, commit) {
     const inp = el('input', 'pp-ctrl-input pp-text'); inp.type = 'text'; inp.value = cur; inp.spellcheck = false;
     inp.addEventListener('click', e => e.stopPropagation());
@@ -6631,9 +6860,41 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function buildBody(row, i, body) {
     if (body.dataset.built) return;
     body.dataset.built = '1';
-    const PADDING_SIDES = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'];
-    const props = (row.item.cssProps || []).filter(p => !PADDING_SIDES.includes(p.name));   // padding → its own slider section
-    body.appendChild(buildPaddingSection(row, i));   // always present, even when padding is 0
+    // Properties this state changes move to the top — so they come out of the sectioned
+    // list below rather than appearing twice. A state can also introduce a property the
+    // resting capture skipped (a transparent background that becomes a colour on hover);
+    // seed those so they render and stay editable like any other.
+    const changedNames = row.state ? (row.changed || new Set()) : new Set();
+    if (changedNames.size) {
+      row.item.cssProps = row.item.cssProps || [];
+      for (const name of changedNames) {
+        if (!row.item.cssProps.some(x => x.name === name)) row.item.cssProps.push({ name, value: '' });
+      }
+    }
+    // Padding and margin get their own four-sided sections, so their sides are kept out
+    // of the generic sectioned list (they'd otherwise show up again under Spacing).
+    const BOX_SIDES = ['top', 'right', 'bottom', 'left'].flatMap(s => ['padding-' + s, 'margin-' + s]);
+    const props = (row.item.cssProps || []).filter(p => !BOX_SIDES.includes(p.name) && !changedNames.has(p.name));
+    // What this state actually changes, pinned above everything else — the reason to be
+    // in a state at all. `:disabled` on a non-form element matches nothing, so say that
+    // rather than render an empty section that looks broken.
+    if (row.state) {
+      const sec = el('div', 'pp-section pp-changed-sec');
+      sec.dataset.section = 'Changed';
+      sec.appendChild(el('div', 'pp-section-title', 'Changed in :' + row.state));
+      const names = changedNames;
+      if (names.size) {
+        (row.item.cssProps || []).filter(p => names.has(p.name))
+          .forEach(p => sec.appendChild(buildField(row, i, p)));
+      } else {
+        sec.appendChild(el('div', 'pp-changed-empty',
+          'Nothing changes in this state — anything you set below becomes a new :' + row.state + ' rule.'));
+      }
+      body.appendChild(sec);
+    }
+
+    const padSec = buildSideSection(row, i, 'Padding', 'padding');   // always present, even at 0
+    body.appendChild(padSec);
     if (!props.length) { appendUserAddedSection(row, i, body); return; }
     const disp = (props.find(p => p.name === 'display') || {}).value || '';
     // A zero-width / styleless border makes its style + color irrelevant too.
@@ -6652,40 +6913,42 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         const sl = bySection[secName]; if (!sl) return;
         const sec = el('div', 'pp-section'); sec.dataset.section = secName;
         sec.appendChild(el('div', 'pp-section-title', secName));
-        sl.forEach(p => sec.appendChild(buildField(row, i, p)));
+        sl.forEach(p => {
+          const f = buildField(row, i, p);
+          // A property sitting at its default is still a property you came here to set
+          // (border-radius: 0 is exactly what you want to change), so it lives in its
+          // own section like everything else — just dimmed, so the ones already doing
+          // something still stand out at a glance.
+          if (!meaningful(p)) f.classList.add('pp-field-default');
+          sec.appendChild(f);
+        });
         container.appendChild(sec);
       });
     };
 
-    const primary = props.filter(meaningful);
-    const defaults = props.filter(p => !meaningful(p));
-    renderSections(primary, body);
-
-    if (defaults.length) {
-      // Collapsible strip for default/irrelevant props — same escape-hatch pattern as
-      // the "Layout containers" element group. Collapsed by default; a filter opens it.
-      const wrap = el('div', 'pp-defaults-wrap'); wrap.dataset.open = '0';
-      const head = el('div', 'pp-defaults-head');
-      head.appendChild(el('span', 'pp-defaults-caret'));
-      head.appendChild(el('span', 'pp-defaults-label', 'Defaults'));
-      head.appendChild(el('span', 'pp-defaults-count', String(defaults.length)));
-      head.title = 'Properties at their default / no-op value, or not applicable to this element — expand to see the full computed set.';
-      const dbody = el('div', 'pp-defaults-body'); dbody.style.display = 'none';
-      renderSections(defaults, dbody);
-      head.addEventListener('click', () => { wrap.dataset.open = wrap.dataset.open === '1' ? '0' : '1'; applyFilter(); });
-      wrap.append(head, dbody);
-      body.appendChild(wrap);
-    }
+    // Every property renders in its section. These used to be split, with defaults and
+    // context-irrelevant props folded into a collapsed "Defaults (N)" strip at the
+    // bottom — which buried most of the things you would actually want to adjust behind
+    // a drawer nobody thinks to open when they are looking for a property to set.
+    renderSections(props, body);
+    // Margin sits directly under Position, sharing Padding's four-sided control. It is
+    // inserted rather than appended because the sections above render in one pass.
+    const marginSec = buildSideSection(row, i, 'Margin', 'margin');
+    // Falls back to sitting under Padding if this element surfaced no position props.
+    (body.querySelector('.pp-section[data-section="Position"]') || padSec).after(marginSec);
     appendUserAddedSection(row, i, body);   // User Added — pinned to the very bottom of the drawer
   }
 
-  // Padding — always shown per element (even at 0), one slider per side. Padding
-  // props are omitted from the serialized CSS when 0, so we seed any missing side.
-  function buildPaddingSection(row, i) {
-    const SIDES = [['padding-top', 'Top'], ['padding-right', 'Right'], ['padding-bottom', 'Bottom'], ['padding-left', 'Left']];
-    const sec = el('div', 'pp-section pp-pad-sec');
-    sec.appendChild(el('div', 'pp-section-title', 'Padding'));
-    SIDES.forEach(([name, short]) => {
+  // A four-sided box section (Padding, Margin) — one row per side, always shown even at
+  // 0, since a side that's currently 0 is exactly the one you came here to set. Serialized
+  // CSS omits zero sides, so any missing side is seeded before it's rendered.
+  function buildSideSection(row, i, title, prefix) {
+    const SIDES = [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']];
+    const sec = el('div', 'pp-section pp-box-sec');
+    sec.dataset.section = title;
+    sec.appendChild(el('div', 'pp-section-title', title));
+    SIDES.forEach(([side, short]) => {
+      const name = prefix + '-' + side;
       let p = (row.item.cssProps || []).find(x => x.name === name);
       if (!p) { p = { name, value: '0px' }; (row.item.cssProps = row.item.cssProps || []).push(p); }
       // Identical control to width/height (buildField → ctrlLength: knob slider +
@@ -6710,57 +6973,125 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const p = (row.item.cssProps || []).find(x => x.name === name);
       if (p) fields.appendChild(buildField(row, i, p));
     });
-    const combo = el('div', 'pp-ua-combo');
-    const input = el('input', 'pp-ua-input'); input.type = 'text'; input.placeholder = 'add a CSS property…'; input.spellcheck = false; input.autocomplete = 'off';
-    const menu = el('div', 'pp-ua-menu');
-    combo.append(input, menu);
-    wrap.appendChild(combo);
+    // A standard dropdown: a trigger button that always reads "Add a CSS property", and a
+    // menu whose own search box and category filters sit at the top of the list. The two
+    // are separate — the trigger is not an input, so typing a query never changes what the
+    // closed control says.
+    const combo   = el('div', 'pp-ua-combo');
+    const panel   = el('div', 'pp-ua-panel');
+    const head    = el('div', 'pp-ua-head');
+    const input   = el('input', 'pp-ua-input'); input.type = 'text'; input.placeholder = 'search properties…'; input.spellcheck = false; input.autocomplete = 'off';
+    const filters = el('div', 'pp-ua-filters');
+    const list    = el('div', 'pp-ua-list');
+    head.append(input, filters);
+    panel.append(head, list);
+    const trigger = el('button', 'pp-ua-trigger');
+    trigger.type = 'button';
+    trigger.append(el('span', 'pp-ua-trigger-label', 'Add a CSS property'), el('span', 'pp-ua-chev'));
+    // Panel BEFORE trigger: the combo is a sticky footer pinned by its bottom edge, so the
+    // menu grows upward out of the trigger rather than off the bottom of the scrollport.
+    combo.append(panel, trigger);
+    // The combo is a sibling of the User Added section, not a child of it, so its sticky
+    // containing block is the drawer body — that's what lets it pin to the bottom of the
+    // drawer for the whole scroll instead of only while its own section is in view.
     body.appendChild(wrap);
+    body.appendChild(combo);
+
+    let activeCat = 'All';
+    const CATS = ['All', ...SECTIONS.map(sec => sec[0])];
+    CATS.forEach(cat => {
+      const chip = el('button', 'pp-ua-chip' + (cat === activeCat ? ' on' : ''), cat);
+      // mousedown, not click — a click would blur the search box and close the panel first.
+      chip.addEventListener('mousedown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        activeCat = cat;
+        filters.querySelectorAll('.pp-ua-chip').forEach(c => c.classList.toggle('on', c.textContent === cat));
+        renderMenu();
+        input.focus();
+      });
+      filters.appendChild(chip);
+    });
+    // Outside-click closes, the way the app's other dropdowns behave. Registered only
+    // while open, and self-removing if the drawer is rebuilt out from under it.
+    function onOutside(e) {
+      if (!combo.isConnected) { document.removeEventListener('mousedown', onOutside, true); return; }
+      if (!combo.contains(e.target)) closeMenu();
+    }
+    function openMenu() {
+      if (combo.classList.contains('open')) return;
+      combo.classList.add('open');
+      renderMenu();
+      input.focus();
+      document.addEventListener('mousedown', onOutside, true);
+    }
+    function closeMenu() {
+      combo.classList.remove('open');
+      input.value = '';
+      document.removeEventListener('mousedown', onOutside, true);
+    }
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      combo.classList.contains('open') ? closeMenu() : openMenu();
+    });
 
     function addField(prop) {
       prop = (prop || '').trim().toLowerCase();
       if (!prop || !/^-?[a-z-]+$/.test(prop)) return;
       if (!row.userAdded) row.userAdded = new Set();
-      if (row.userAdded.has(prop)) { input.value = ''; menu.style.display = 'none'; return; }
+      if (row.userAdded.has(prop)) { input.value = ''; closeMenu(); return; }
       let p = (row.item.cssProps || []).find(x => x.name === prop);
       if (!p) { p = { name: prop, value: '' }; (row.item.cssProps = row.item.cssProps || []).push(p); }
       row.userAdded.add(prop);
       const field = buildField(row, i, p);
       fields.appendChild(field);
-      input.value = ''; menu.style.display = 'none';
+      input.value = ''; closeMenu();
       const ctl = field.querySelector('input, select');
       if (ctl) { ctl.focus(); if (ctl.select) ctl.select(); }
     }
     function renderMenu() {
       const q = input.value.trim().toLowerCase();
       const have = new Set((row.item.cssProps || []).map(p => p.name));
-      const matches = ALL_CSS_PROPS.filter(p => !have.has(p) && (!q || p.indexOf(q) !== -1)).slice(0, 50);
-      menu.innerHTML = '';
-      if (!matches.length) { menu.appendChild(el('div', 'pp-ua-empty', 'no matching property')); menu.style.display = 'block'; return; }
+      const inCat = (p) => activeCat === 'All' || SECTION_OF[p] === activeCat;
+      const matches = ALL_CSS_PROPS
+        .filter(p => !have.has(p) && inCat(p) && (!q || p.indexOf(q) !== -1))
+        // Alphabetical order alone opens the list on -webkit-box-ordinal-group, because
+        // '-' sorts first. Rank what you're likely to want: a prefix match on what you
+        // typed, then standard properties, then the vendor-prefixed tail.
+        .sort((a, b) => {
+          if (q) {
+            const pa = a.startsWith(q) ? 0 : 1, pb = b.startsWith(q) ? 0 : 1;
+            if (pa !== pb) return pa - pb;
+          }
+          const va = a.startsWith('-') ? 1 : 0, vb = b.startsWith('-') ? 1 : 0;
+          if (va !== vb) return va - vb;
+          return a < b ? -1 : a > b ? 1 : 0;
+        })
+        .slice(0, 200);
+      list.innerHTML = '';
+      if (!matches.length) { list.appendChild(el('div', 'pp-ua-empty', 'no matching property')); return; }
       matches.forEach((p, k) => {
         const it = el('div', 'pp-ua-item' + (k === 0 ? ' active' : ''), p);
         it.dataset.prop = p;
         it.addEventListener('mousedown', e => { e.preventDefault(); addField(p); });   // mousedown beats input blur
-        menu.appendChild(it);
+        list.appendChild(it);
       });
-      menu.style.display = 'block';
+      list.scrollTop = 0;
     }
-    input.addEventListener('focus', renderMenu);
     input.addEventListener('input', renderMenu);
-    input.addEventListener('blur', () => setTimeout(() => { menu.style.display = 'none'; }, 150));
+    input.addEventListener('click', e => e.stopPropagation());
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      const list = [...menu.querySelectorAll('.pp-ua-item')];
-      const active = menu.querySelector('.pp-ua-item.active');
+      const items = [...list.querySelectorAll('.pp-ua-item')];
+      const active = list.querySelector('.pp-ua-item.active');
       if (e.key === 'Enter') { e.preventDefault(); addField((active && active.dataset.prop) || input.value); }
-      else if (e.key === 'Escape') { menu.style.display = 'none'; }
+      else if (e.key === 'Escape') { closeMenu(); }
       else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (!list.length) return;
-        let idx = list.indexOf(active);
-        idx = e.key === 'ArrowDown' ? Math.min(list.length - 1, idx + 1) : Math.max(0, idx - 1);
-        list.forEach(x => x.classList.remove('active'));
-        list[idx].classList.add('active'); list[idx].scrollIntoView({ block: 'nearest' });
+        if (!items.length) return;
+        let idx = items.indexOf(active);
+        idx = e.key === 'ArrowDown' ? Math.min(items.length - 1, idx + 1) : Math.max(0, idx - 1);
+        items.forEach(x => x.classList.remove('active'));
+        items[idx].classList.add('active'); items[idx].scrollIntoView({ block: 'nearest' });
       }
     });
   }
@@ -6798,14 +7129,23 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       if (row.item.descriptor) name.appendChild(el('span', 'pp-el-desc', `${row.item.descriptor}: `));
       name.appendChild(document.createTextNode(row.item.label));
       name.title  = row.item.cssSelector || row.item.label;
-      const count = el('span', 'pp-el-count', `${row.checked.size} Selected`);
+      const count = el('span', 'pp-el-count', `${countChecked(row)} Selected`);
       const x     = el('button', 'pp-el-x', '✕'); x.title = 'Remove';
       head.append(caret, name, count, x);
       // Head + per-element states row stick together as ONE unit, so the title never
       // folds under the chips when the drawer's properties scroll.
       const sticky = el('div', 'pp-drawer-sticky');
       sticky.appendChild(head);
-      const statesRow = buildStatesRow(row);
+      // Switching state re-reads the element, so the drawer is rebuilt from scratch:
+      // every field's shown value, its selected/modified marks and the Changed section
+      // all belong to the state being edited.
+      const rebuildBody = () => {
+        body.dataset.built = '';
+        body.innerHTML = '';
+        buildBody(row, i, body);
+        updateSendCount();
+      };
+      const statesRow = buildStatesRow(row, i, rebuildBody);
       statesRow.style.display = row.expanded ? '' : 'none';
       sticky.appendChild(statesRow);
       drawer.appendChild(sticky);
@@ -6853,22 +7193,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const okText = !q  || f.dataset.name.includes(q) || f.dataset.val.toLowerCase().includes(q);
       f.style.display = (okChip && okText) ? '' : 'none';
     });
-    // Defaults strip: open while searching (so matches surface), else honor its toggle.
-    const filtering = !!(kw || q);
-    listEl.querySelectorAll('.pp-defaults-wrap').forEach(w => {
-      const open = filtering || w.dataset.open === '1';
-      const dbody = w.querySelector('.pp-defaults-body');
-      if (dbody) dbody.style.display = open ? '' : 'none';
-      w.querySelector('.pp-defaults-head')?.classList.toggle('open', open);
-    });
     listEl.querySelectorAll('.pp-section').forEach(sec => {
       const any = [...sec.querySelectorAll('.pp-field')].some(f => f.style.display !== 'none');
       sec.style.display = any ? '' : 'none';
-    });
-    // Hide the whole Defaults strip when a search filters every property out of it.
-    listEl.querySelectorAll('.pp-defaults-wrap').forEach(w => {
-      const any = [...w.querySelectorAll('.pp-field')].some(f => f.style.display !== 'none');
-      w.style.display = any ? '' : 'none';
     });
   }
   if (filterSelect) {
@@ -6882,14 +7209,38 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const colorPicker = (function () {
     let cpEl = null, cpIro = null, applyFn = null, swatchEl = null;
     let syncing = false, mode = 'hex', inputs = null, built = false;
+    // Alpha is opt-in per caller. The box/lasso fields take any CSS colour string, so
+    // they can carry rgba(); the theme swatches run their value through normHex, which
+    // only understands #rrggbb and silently returns #000000 for anything else — so an
+    // always-on alpha channel would blacken theme colours. `cpAlpha` is the mode the
+    // cached iro instance was built with; a caller wanting the other one rebuilds it.
+    let wantAlpha = false, cpAlpha = null;
+
+    // Opaque colours stay plain hex (what every consumer already produces and stores);
+    // rgba() appears only once there is real transparency to express.
+    function outValue(color) {
+      if (!color) return '#ffffff';
+      const a = wantAlpha ? color.alpha : 1;
+      if (a >= 1) return color.hexString;
+      const { r, g, b } = color.rgb;
+      return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + Math.round(a * 100) / 100 + ')';
+    }
 
     function sync(color) {
       if (!inputs) return;
       syncing = true;
-      inputs.hex.value = color.hexString;
+      inputs.hex.value = (wantAlpha && color.alpha < 1) ? color.hex8String : color.hexString;
       const rgb = color.rgb; inputs.r.value = rgb.r; inputs.g.value = rgb.g; inputs.b.value = rgb.b;
       const hsl = color.hsl; inputs.h.value = Math.round(hsl.h); inputs.s.value = Math.round(hsl.s); inputs.l.value = Math.round(hsl.l);
+      const pct = Math.round((color.alpha == null ? 1 : color.alpha) * 100);
+      inputs.a.forEach(i => { i.value = pct; });
       syncing = false;
+    }
+    // Show the A field (and the hex panel's note) only for callers that asked for alpha.
+    function setAlphaUI(on) {
+      if (!cpEl) return;
+      cpEl.querySelectorAll('.pp-cp-alpha').forEach(n => { n.style.display = on ? '' : 'none'; });
+      cpEl.classList.toggle('has-alpha', !!on);
     }
     function setMode(m) {
       mode = m;
@@ -6907,31 +7258,36 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
           '<button class="pp-cp-mode" data-m="hsl">HSL</button>' +
         '</div>' +
         '<div class="pp-cp-panel" data-m="hex" style="margin-top:7px"><input class="pp-cp-hex" type="text"/></div>' +
-        '<div class="pp-cp-panel" data-m="rgb" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>R</span><input data-c="r" type="number" min="0" max="255"/><span>G</span><input data-c="g" type="number" min="0" max="255"/><span>B</span><input data-c="b" type="number" min="0" max="255"/></div></div>' +
-        '<div class="pp-cp-panel" data-m="hsl" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>H</span><input data-c="h" type="number" min="0" max="360"/><span>S</span><input data-c="s" type="number" min="0" max="100"/><span>L</span><input data-c="l" type="number" min="0" max="100"/></div></div>';
+        '<div class="pp-cp-panel" data-m="rgb" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>R</span><input data-c="r" type="number" min="0" max="255"/><span>G</span><input data-c="g" type="number" min="0" max="255"/><span>B</span><input data-c="b" type="number" min="0" max="255"/><span class="pp-cp-alpha">A</span><input class="pp-cp-alpha" data-c="a" type="number" min="0" max="100"/></div></div>' +
+        '<div class="pp-cp-panel" data-m="hsl" style="margin-top:7px;display:none"><div class="pp-cp-fields"><span>H</span><input data-c="h" type="number" min="0" max="360"/><span>S</span><input data-c="s" type="number" min="0" max="100"/><span>L</span><input data-c="l" type="number" min="0" max="100"/><span class="pp-cp-alpha">A</span><input class="pp-cp-alpha" data-c="a" type="number" min="0" max="100"/></div></div>';
       document.body.appendChild(cpEl);
       cpEl.querySelectorAll('.pp-cp-mode').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); setMode(b.dataset.m); place(); }));
       inputs = {
         hex: cpEl.querySelector('.pp-cp-hex'),
         r: cpEl.querySelector('[data-c=r]'), g: cpEl.querySelector('[data-c=g]'), b: cpEl.querySelector('[data-c=b]'),
         h: cpEl.querySelector('[data-c=h]'), s: cpEl.querySelector('[data-c=s]'), l: cpEl.querySelector('[data-c=l]'),
+        a: Array.from(cpEl.querySelectorAll('[data-c=a]')),   // one per numeric panel, kept in step
       };
       const wire = (inputEl, setter) => inputEl.addEventListener('input', () => {
         if (!cpIro || syncing) return;
         syncing = true; try { setter(inputEl.value); } catch (_) {} syncing = false;
-        sync(cpIro.color); push(cpIro.color.hexString);
+        sync(cpIro.color); push();
       });
-      wire(inputs.hex, v => { cpIro.color.hexString = v; });
+      // set() parses any CSS colour string, so the hex field also accepts #rrggbbaa
+      // and rgba(...) — it throws on a half-typed value, which `wire` already swallows.
+      wire(inputs.hex, v => { cpIro.color.set(v); });
       wire(inputs.r, v => { const c = cpIro.color.rgb; c.r = +v; cpIro.color.rgb = c; });
       wire(inputs.g, v => { const c = cpIro.color.rgb; c.g = +v; cpIro.color.rgb = c; });
       wire(inputs.b, v => { const c = cpIro.color.rgb; c.b = +v; cpIro.color.rgb = c; });
       wire(inputs.h, v => { const c = cpIro.color.hsl; c.h = +v; cpIro.color.hsl = c; });
       wire(inputs.s, v => { const c = cpIro.color.hsl; c.s = +v; cpIro.color.hsl = c; });
       wire(inputs.l, v => { const c = cpIro.color.hsl; c.l = +v; cpIro.color.hsl = c; });
+      inputs.a.forEach(i => wire(i, v => { cpIro.color.alpha = Math.max(0, Math.min(100, +v || 0)) / 100; }));
     }
-    function push(hex) {
-      if (swatchEl) swatchEl.style.background = hex;
-      if (applyFn) applyFn(hex);
+    function push() {
+      const v = outValue(cpIro && cpIro.color);
+      paintSwatch(swatchEl, v);
+      if (applyFn) applyFn(v);
     }
     function onOutside(e) {
       if (cpEl && !cpEl.contains(e.target) && e.target !== swatchEl) hide();
@@ -6957,15 +7313,23 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       cpEl.style.left = Math.max(8, left) + 'px';
       cpEl.style.top = Math.max(8, Math.min(top, window.innerHeight - ph - 8)) + 'px';
     }
-    function open(swatch, value, fn) {
+    function open(swatch, value, fn, opts) {
       if (!built) build();
+      wantAlpha = !!(opts && opts.alpha);
       swatchEl = swatch; applyFn = fn;
+      setAlphaUI(wantAlpha);
       cpEl.style.display = 'block';
       setMode(mode);   // before place() — mode decides the panel's height
       place();
       setTimeout(() => document.addEventListener('mousedown', onOutside, true), 0);
 
-      const attach = () => cpIro.on('color:change', (color) => { if (syncing) return; sync(color); push(color.hexString); });
+      const attach = () => cpIro.on('color:change', (color) => { if (syncing) return; sync(color); push(); });
+      // The alpha slider is part of the layout, so switching between an alpha caller and
+      // a plain one means building a new picker rather than reusing the cached instance.
+      if (cpIro && cpAlpha !== wantAlpha) {
+        try { cpIro.off('color:change'); } catch (_) {}
+        cpIro = null;
+      }
       if (cpIro) {
         try { cpIro.off('color:change'); } catch (_) {}
         try { cpIro.color.set(value || '#ffffff'); } catch (_) {}
@@ -6974,12 +7338,12 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       }
       ensureIro(() => {
         const mount = cpEl.querySelector('.pp-cp-iro'); mount.innerHTML = '';
+        const layout = [{ component: iro.ui.Box }, { component: iro.ui.Slider, options: { sliderType: 'hue' } }];
+        if (wantAlpha) layout.push({ component: iro.ui.Slider, options: { sliderType: 'alpha' } });
         try {
-          cpIro = new iro.ColorPicker(mount, {
-            width: 200, color: value || '#ffffff',
-            layout: [{ component: iro.ui.Box }, { component: iro.ui.Slider, options: { sliderType: 'hue' } }],
-          });
+          cpIro = new iro.ColorPicker(mount, { width: 200, color: value || '#ffffff', layout });
         } catch (_) { return; }
+        cpAlpha = wantAlpha;
         attach(); sync(cpIro.color);
         place();   // first open measured a picker-less box — re-place now that iro has height
       });
@@ -6992,7 +7356,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function open(items, tool) {
     clearPickMode();
     if (tool) titleEl.textContent = tool;
-    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: new Set(), mods: {}, states: new Set(), userAdded: new Set() }));   // single selection → open by default
+    // checked/mods/stateCSS are keyed by state ('' = the element's resting style).
+    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: {}, mods: {}, state: BASE, stateCSS: {}, changed: new Set(), userAdded: new Set() }));   // single selection → open by default
     structuralExpanded = !rows.some(r => !r.item.structural);   // if nothing paint-y was found, show the containers by default
     clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
@@ -7022,11 +7387,27 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const it = r.item;
       // Modified props read as a change ("prop: was → now"); selected-but-unchanged
       // props are marked current-value context so the agent doesn't "apply" them.
-      const selectedCSS = (it.cssProps || []).filter(p => r.checked.has(p.name)).map(p => {
-        const nv = r.mods[p.name];
-        if (nv !== undefined) return p.value ? `${p.name}: ${p.value} → ${nv}` : `${p.name}: ${nv}`;   // user-added props have no prior value
-        return `${p.name}: ${p.value}   (current)`;
-      });
+      // Base declarations come first; each pseudo-state that was edited follows as its
+      // own nested block, so the agent is told which rule a change belongs to instead of
+      // receiving a bare declaration and having to guess it was meant for :hover.
+      const selectedCSS = [];
+      const emitState = (st) => {
+        const ck = r.checked[st];
+        if (!ck || !ck.size) return;
+        const mods = r.mods[st] || {};
+        const lines = [...ck].map(name => {
+          const was = st
+            ? (((r.stateCSS[st] || []).find(x => x.name === name) || {}).value)
+            : (((it.cssProps || []).find(x => x.name === name) || {}).value);
+          const nv = mods[name];
+          if (nv !== undefined) return was ? `${name}: ${was} → ${nv}` : `${name}: ${nv}`;   // user-added props have no prior value
+          return `${name}: ${was}   (current)`;
+        });
+        if (!st) selectedCSS.push(...lines);
+        else selectedCSS.push(`&:${st} {`, ...lines.map(l => '  ' + l), '}');
+      };
+      emitState(BASE);
+      STATE_LIST.forEach(emitState);
       return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector,
       domPath: it.domPath, openTag: it.openTag, testId: it.testId, markers: it.markers,
       reactComponent: it.reactComponent, reactPath: it.reactPath,

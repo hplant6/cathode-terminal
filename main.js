@@ -4420,11 +4420,22 @@ ipcMain.on(IPC.PICK_PANEL_UPDATE, async (_, { active } = {}) => {
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
 });
 // Live style edit from a drawer → apply to the actual page element.
-ipcMain.on(IPC.PICK_PANEL_STYLE, async (_, { i, prop, value } = {}) => {
+ipcMain.on(IPC.PICK_PANEL_STYLE, async (_, { i, prop, value, state } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   const v = (value === null || value === undefined) ? 'null' : JSON.stringify(String(value));
-  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.style(${Number(i)}, ${JSON.stringify(String(prop))}, ${v})`); } catch (_) {}
+  const st = JSON.stringify(String(state || ''));
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.style(${Number(i)}, ${JSON.stringify(String(prop))}, ${v}, ${st})`); } catch (_) {}
+});
+// Re-read an element's computed CSS. Called after forcing a pseudo-state, so the values
+// come back as that state resolves them — the panel diffs them against the resting set.
+ipcMain.handle(IPC.PICK_PANEL_READ_CSS, async (_, { i } = {}) => {
+  const p = pendingPanelPick;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return [];
+  try {
+    const r = await p.view.webContents.executeJavaScript(`window.__cathodePanel ? window.__cathodePanel.readCSS(${Number(i)}) : []`);
+    return Array.isArray(r) ? r : [];
+  } catch (_) { return []; }
 });
 // Finalize: the renderer sends the resolved items (with selectedCSS already built).
 // Picked images are passed by absolute local path (in url('…')); tell the agent

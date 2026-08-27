@@ -156,6 +156,7 @@ const IPC = Object.freeze({
   PICK_PANEL_OPEN: 'pick-panel-open',
   PICK_PANEL_SEND: 'pick-panel-send',
   PICK_PANEL_STYLE: 'pick-panel-style',
+  PICK_PANEL_READ_CSS: 'pick-panel-read-css',   // re-read one element's computed CSS (with any forced pseudo-state applied)
   PICK_PANEL_UPDATE: 'pick-panel-update',
   PICK_PROJECT_DIR: 'pick-project-dir',
   PICK_RESIZE: 'pick-resize',

@@ -625,20 +625,69 @@ function cathodeCombinedPage(OPTS) {
         if (b) phost.appendChild(b);
       });
     }
+    // Per-state style overrides: { "<itemIndex>|<state>": { prop: value } }, serialized
+    // into one injected stylesheet. The selector repeats the attribute three times to
+    // outweigh ordinary page rules without needing an id.
+    const _editRules = {};
+    function _flushEditRules() {
+      let sheet = document.getElementById('__cathode_edit_css__');
+      if (!sheet) {
+        sheet = document.createElement('style');
+        sheet.id = '__cathode_edit_css__';
+        (document.head || document.documentElement).appendChild(sheet);
+      }
+      const out = [];
+      for (const key of Object.keys(_editRules)) {
+        const decls = _editRules[key];
+        const names = Object.keys(decls);
+        if (!names.length) continue;
+        const [idx, state] = key.split('|');
+        const a = '[data-cathode-edit="' + idx + '"]';
+        out.push(a + a + a + ':' + state + ' { ' +
+          names.map(n => n + ': ' + decls[n] + ' !important;').join(' ') + ' }');
+      }
+      sheet.textContent = out.join('\n');
+    }
+
     const pReflow = () => pDraw(window.__cathodePanel ? window.__cathodePanel.active : null);
     window.addEventListener('scroll', pReflow, true);
     window.addEventListener('resize', pReflow, true);
     window.__cathodePanel = {
       active: [],   // nothing highlighted until the panel hovers/opens a drawer
       set(idx) { this.active = idx; pDraw(idx); },
-      // Live-edit a selected element's inline style from the left-column panel.
-      // value null/undefined → remove the override. Reflow so outlines track.
-      style(i, prop, value) {
+      // Live-edit a selected element from the left-column panel.
+      // `state` is '' for the element's resting style, or a pseudo-class name
+      // ('hover' / 'focus' / 'active' / 'disabled') that the panel is currently forcing
+      // via CDP. value null/undefined → remove the override. Reflow so outlines track.
+      //
+      // Base edits stay INLINE, exactly as before — inline always wins, so nothing that
+      // worked before can stop working. A state can't be expressed inline at all (inline
+      // style applies in every state), so those go into an injected stylesheet keyed to a
+      // stamped attribute. Those rules carry !important purely so the preview beats the
+      // element's own inline base value and the page's own rules; it is a preview
+      // mechanism only and never reaches the agent, which is handed clean nested CSS.
+      style(i, prop, value, state) {
         const el = items[i] && items[i].el;
         if (!el) return;
-        if (value === null || value === undefined) el.style.removeProperty(prop);
-        else el.style.setProperty(prop, value);
+        if (!state) {
+          if (value === null || value === undefined) el.style.removeProperty(prop);
+          else el.style.setProperty(prop, value);
+        } else {
+          if (!el.hasAttribute('data-cathode-edit')) el.setAttribute('data-cathode-edit', String(i));
+          const key = String(i) + '|' + state;
+          _editRules[key] = _editRules[key] || {};
+          if (value === null || value === undefined) delete _editRules[key][prop];
+          else _editRules[key][prop] = value;
+          _flushEditRules();
+        }
         pDraw(this.active);
+      },
+      // Re-read an element's computed styles. With a pseudo-state forced through CDP the
+      // engine resolves styles as if it matched, so this returns the state's values —
+      // which is what lets the panel diff a state against the element's resting style.
+      readCSS(i) {
+        const el = items[i] && items[i].el;
+        return el ? getElementCSS(el) : [];
       },
       // Extract tool: run the chosen extractors / collect media over the live
       // selection (uses the helpers hoisted into this function's scope).
@@ -667,6 +716,8 @@ function cathodeCombinedPage(OPTS) {
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
         const h = document.getElementById('__cathode_panel_hl__'); if (h) h.remove();
         const s = document.getElementById('__cathode_selection__'); if (s) s.remove();   // drop the 40% selection fill too
+        const ec = document.getElementById('__cathode_edit_css__'); if (ec) ec.remove();   // and the per-state preview rules
+        document.querySelectorAll('[data-cathode-edit]').forEach(function (n) { n.removeAttribute('data-cathode-edit'); });
         window.__cathodePanel = null;
       },
     };

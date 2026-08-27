@@ -2995,6 +2995,14 @@ html, body {
 }
 .states-chip:hover { color: var(--spec-text); }
 .states-chip.on { background: var(--spec-accent); color: #fff; }
+
+/* "Changed in :hover" — what the forced state actually alters, pinned above the rest
+   of the drawer. Accented title so it reads as a finding, not another property group. */
+.pp-changed-sec .pp-section-title { color: var(--spec-accent); }
+.pp-changed-empty {
+  padding: 10px 12px 12px; font: 11px/1.5 var(--font-mono);
+  color: var(--spec-text-dim); overflow-wrap: anywhere;
+}
 /* Footer instructions input */
 .tp-foot { position: relative; flex-shrink: 0; border-top: 1px solid var(--spec-structural); padding: 0; }
 .tp-textarea {
@@ -3197,41 +3205,102 @@ html, body {
 .pp-swatch {
   display: inline-block; flex-shrink: 0; width: 10px; height: 10px; align-self: center;
   border: 1px solid rgba(255,255,255,0.2); border-radius: 2px; cursor: pointer;
+  /* The colour rides above a checkerboard so a translucent pick is legible as one
+     (set via --sw by paintSwatch — an inline `background` would replace the checker). */
+  --sw: transparent;
+  background-color: rgba(0,0,0,0.35);
+  background-image:
+    linear-gradient(var(--sw), var(--sw)),
+    linear-gradient(45deg, rgba(255,255,255,0.22) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.22) 75%),
+    linear-gradient(45deg, rgba(255,255,255,0.22) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.22) 75%);
+  background-size: auto, 6px 6px, 6px 6px;
+  background-position: 0 0, 0 0, 3px 3px;
 }
 
-/* Collapsible "Defaults (N)" strip inside a drawer — default/no-op & irrelevant props.
-   No top divider: it's just the last row of the list, not a sticky/section container. */
-.pp-defaults-head {
-  display: flex; align-items: center; gap: 10px;
-  height: 56px; padding: 0 12px; cursor: pointer; transition: background 0.12s;   /* same height as .pp-field rows */
-  background: var(--spec-input-bg);                    /* shade 7 — matches the drawer body / rows */
-  border-bottom: 1px solid var(--spec-header-bg);      /* same separator as .pp-field */
-}
-.pp-defaults-head:hover { background: var(--spec-header-bg); }
-.pp-defaults-caret {
-  /* Occupy the same 24px slot (+3px) as .pp-field-sel's checkbox so the "Defaults"
-     label lines up exactly with the property titles; chevron itself stays 10px. */
-  width: 24px; height: 24px; flex-shrink: 0; margin-right: 3px; background: var(--spec-text-dim);
-  -webkit-mask: url('icons/chevron.svg') no-repeat center / 10px;
-          mask: url('icons/chevron.svg') no-repeat center / 10px;
-  transform: rotate(-90deg); transition: transform 0.12s;
-}
-.pp-defaults-head.open .pp-defaults-caret { transform: rotate(0deg); }
-.pp-defaults-label { flex: 1; font: 600 16px var(--font-mono); color: var(--spec-text-dim); }   /* match .pp-field-label */
-.pp-defaults-count { flex-shrink: 0; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--spec-structural); color: var(--spec-text-dim); font: 700 10px/16px var(--font-mono); text-align: center; }
-.pp-defaults-body { background: var(--spec-black); }   /* slightly recessed vs the drawer body */
+/* Properties still at their default / no-op value, or not applicable to this element.
+   They render in their own section like any other — dimmed, not hidden — so the ones
+   already doing something read first. Full strength on hover, focus or once modified. */
+.pp-field-default { opacity: 0.55; transition: opacity 0.12s; }
+.pp-field-default:hover,
+.pp-field-default:focus-within,
+.pp-field-default.selected,
+.pp-field-default.modified { opacity: 1; }
 
 /* Sectioned, typed-control property fields (Claude-design inspector style) */
 .pp-section { padding: 2px 0 8px; }
 .pp-section-title { padding: 11px 12px 7px; font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); }
 /* User Added section — searchable property picker */
 .pp-ua-wrap { border-top: 1px solid var(--spec-header-bg); }
-.pp-ua-combo { padding: 6px 12px 4px; }
-.pp-ua-input { width: 100%; box-sizing: border-box; padding: 5px 9px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); color: var(--spec-text); font: 12px var(--font-mono); outline: none; }
+/* Pinned to the bottom of the drawer, so adding a property never means scrolling to
+   the end of a long list first. A sticky bottom edge means the panel GROWS UPWARD as
+   the dropdown opens — the search and filters stay at its top, and the list below them
+   rises into the space above rather than being clipped off the bottom of the scrollport. */
+.pp-ua-combo {
+  position: sticky; bottom: 0; z-index: 3;
+  padding: 6px 12px 8px;
+  background: var(--spec-input-bg);            /* opaque: properties scroll underneath */
+  border-top: 1px solid var(--spec-structural);
+}
+/* The trigger — one of the app's dropdowns, same shell as the unit picker in a property
+   row (.pp-field .pp-ct .ct-select-btn): shade-4 fill, no border, the blob corner, a
+   chevron. It is a button, not an input: its label never changes with what you search. */
+.pp-ua-trigger {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; height: 30px; box-shadow: none;
+  padding: 0 12px; background: var(--spec-dropdown-bg);
+  border: none; border-radius: 3px 3px var(--r-blob-sm) 3px;
+  cursor: pointer; transition: background 0.12s;
+}
+.pp-ua-trigger:hover,
+.pp-ua-combo.open .pp-ua-trigger { background: var(--spec-structural); }
+.pp-ua-trigger-label {
+  font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%;
+  font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--spec-text-dim); transition: color 0.12s;
+}
+.pp-ua-trigger:hover .pp-ua-trigger-label,
+.pp-ua-combo.open .pp-ua-trigger-label { color: var(--spec-text); }
+.pp-ua-chev {
+  width: 10px; height: 10px; flex-shrink: 0; pointer-events: none; background: var(--spec-text-dim);
+  -webkit-mask: url('icons/chevron.svg') no-repeat center / 10px;
+          mask: url('icons/chevron.svg') no-repeat center / 10px;
+  transition: transform 0.12s;
+}
+.pp-ua-combo.open .pp-ua-chev { transform: rotate(180deg); }
+
+/* The menu. Sits ABOVE the trigger in the DOM so that, with the combo pinned by its
+   bottom edge, opening grows it upward instead of off the bottom of the scrollport. */
+.pp-ua-panel {
+  display: none; margin-bottom: 6px;
+  background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural);
+  border-radius: var(--radius-md); overflow: hidden;
+}
+.pp-ua-combo.open .pp-ua-panel { display: block; }
+/* Head stack: input, gap, filters, gap, then the list. The lower gap is the head's own
+   bottom padding rather than a margin on the filters — a margin there would stack with
+   the padding and leave the two gaps unequal. */
+.pp-ua-head { padding: 6px 6px 10px; }
+/* The menu's own search box — a plain input, unrelated to the trigger's label. */
+.pp-ua-input {
+  width: 100%; height: 30px; box-sizing: border-box; margin-bottom: 10px; padding: 0 10px;
+  background: var(--spec-input-bg); border: 1px solid var(--spec-structural);
+  border-radius: var(--radius-md); color: var(--spec-text);
+  font: 11px var(--font-mono); outline: none;
+}
 .pp-ua-input::placeholder { color: var(--spec-text-faint); }
 .pp-ua-input:focus { border-color: var(--spec-text-dim); }
+.pp-ua-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; }
+.pp-ua-chip {   /* bare `button` is a 28x28 icon control by default — reset it */
+  width: auto; height: auto; box-shadow: none;
+  padding: 3px 8px; border-radius: 10px;
+  background: var(--spec-structural); border: 1px solid transparent; color: var(--spec-text-dim);
+  font: 600 9px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase;
+  cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.pp-ua-chip:hover { color: var(--spec-text); }
+.pp-ua-chip.on { background: var(--spec-accent); border-color: var(--spec-accent); color: #fff; }
+.pp-ua-list { max-height: min(220px, 40vh); overflow-y: auto; border-top: 1px solid var(--spec-structural); }
 /* In-flow (not absolute) so the scrollable drawer list can't clip it. */
-.pp-ua-menu { display: none; max-height: 200px; overflow-y: auto; margin: 4px 0 2px; background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md); }
 .pp-ua-item { padding: 5px 10px; font: 12px var(--font-mono); color: var(--spec-text-dim); cursor: pointer; }
 .pp-ua-item:hover, .pp-ua-item.active { background: var(--spec-header-bg); color: var(--spec-text); }
 .pp-ua-empty { padding: 6px 10px; font: 11px var(--font-ui); color: var(--spec-text-faint); }
@@ -3269,6 +3338,46 @@ html, body {
 .pp-ctrl-input:focus { border-color: var(--spec-text-dim); }   /* shade 1 active outline */
 .pp-field.selected .pp-ctrl-input { color: var(--spec-accent); }
 .pp-num { flex: 0 0 auto; width: 135px; max-width: 135px; }   /* match the dropdown width */
+
+/* ── box-shadow editor ──────────────────────────────────────────────────
+   A shadow is a list of layers, each with five parts — far too much for the
+   fixed-height single-control row, so the field stacks and grows instead. */
+.pp-field.pp-field-stack { flex-direction: column; align-items: stretch; height: auto; padding: 10px 12px 12px; gap: 8px; }
+.pp-field.pp-field-stack .pp-field-ctrl { justify-content: stretch; }
+.pp-field.pp-field-stack > .pp-field-label { min-width: 0; }
+.pp-sh-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pp-sh-layer { border: 1px solid var(--spec-structural); border-radius: 6px; padding: 8px; background: var(--spec-input-bg); }
+.pp-sh-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pp-sh-spacer { flex: 1; }
+/* Bare `button` is a 28x28 icon control by default — text buttons must reset it. */
+.pp-sh-inset, .pp-sh-del, .pp-sh-add {
+  width: auto; height: auto; box-shadow: none;
+  font: 600 10px var(--font-mono); letter-spacing: 0.04em;
+  border-radius: 5px; cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.pp-sh-inset { padding: 4px 9px; background: var(--spec-structural); border: 1px solid transparent; color: var(--spec-text-dim); }
+.pp-sh-inset:hover { color: var(--spec-text); }
+.pp-sh-inset.on { background: var(--spec-accent); border-color: var(--spec-accent); color: #fff; }
+.pp-sh-del { padding: 3px 7px; background: transparent; border: none; color: var(--spec-text-dim); font-size: 11px; }
+.pp-sh-del:hover { color: var(--spec-accent); }
+.pp-sh-add {
+  padding: 7px 0; background: transparent; border: 1px dashed var(--spec-structural);
+  color: var(--spec-text-dim); width: 100%; text-transform: uppercase;
+}
+.pp-sh-add:hover { border-color: var(--spec-accent); color: var(--spec-accent); }
+/* Two-by-two rather than one row of four — the panel column is too narrow for four. */
+.pp-sh-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.pp-sh-num { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pp-sh-numlbl { flex: 0 0 auto; width: 34px; font: 10px var(--font-mono); color: var(--spec-text-dim); }
+.pp-sh-input {
+  flex: 1; min-width: 0; height: 26px; box-sizing: border-box;
+  background: var(--spec-black); border: 1px solid var(--spec-structural); border-radius: 4px;
+  color: var(--spec-text); font: 11px var(--font-mono); padding: 0 6px; outline: none;
+}
+.pp-sh-input:focus { border-color: var(--spec-text-dim); }
+/* .pp-scrub's own rules are scoped to .pp-num-wrap, so style it for this context too. */
+.pp-sh-num .pp-scrub { flex: 0 0 auto; display: inline-flex; align-items: center; color: var(--spec-text-dim); cursor: ew-resize; }
+.pp-sh-num .pp-scrub:hover { color: var(--spec-text); }
 #pick-panel .pp-select, #pick-panel .pp-unit {
   -webkit-appearance: none; appearance: none;
   width: auto; height: auto; box-shadow: none;
@@ -3490,6 +3599,9 @@ html, body {
 #pp-colorpicker .pp-cp-mode.active { color: var(--accent); }
 #pp-colorpicker .pp-cp-fields { margin-top: 7px; display: flex; gap: 4px; align-items: center; }
 #pp-colorpicker .pp-cp-fields span { font-size: 10px; color: var(--text-dim); width: 12px; text-align: center; flex-shrink: 0; }
+/* Four labelled fields instead of three — tighten the padding so they still fit 224px. */
+#pp-colorpicker.has-alpha .pp-cp-fields { gap: 3px; }
+#pp-colorpicker.has-alpha .pp-cp-fields input { padding: 4px 2px; text-align: center; }
 #pp-colorpicker input {
   flex: 1; min-width: 0; background: var(--bg-toolbar); border: 1px solid var(--border);
   border-radius: 3px; color: var(--text); padding: 4px; font: 11px var(--font-mono, monospace); outline: none;
