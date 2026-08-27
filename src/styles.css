@@ -1140,7 +1140,7 @@ html, body {
 .pty-tab-close:hover { background: transparent; color: var(--text) !important; }   /* no fill — override the global button:hover background */
 
 
-#btn-new-pty, #btn-restart {
+#btn-new-pty, #btn-clear-session {
   flex-shrink: 0;
   width: 36px; height: 36px;
   display: flex; align-items: center; justify-content: center;
@@ -1152,7 +1152,7 @@ html, body {
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-#btn-new-pty:hover, #btn-restart:hover { background: var(--spec-structural); color: var(--spec-text); }
+#btn-new-pty:hover, #btn-clear-session:hover { background: var(--spec-structural); color: var(--spec-text); }
 #btn-manage-profiles { flex-shrink: 0; width: 26px; height: 26px; font-size: 12px; color: var(--text-dim); }
 
 /* ── PTY sessions ── */

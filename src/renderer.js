@@ -1991,12 +1991,11 @@ function showHermesSetup(s) {
 }
 
 
-document.getElementById('btn-restart')?.addEventListener('click', () => {
-  const s = sessions.get(activeId);
-  if (!s || s.type === 'acp') return;
-  s.term.clear();
-  ipcRenderer.send(IPC.PTY_RESTART, { id: activeId, command: s.command });
-});
+// Clear the active session — a fresh conversation on the same model. This button used
+// to restart, and bailed outright on `type === 'acp'`, so in an agent chat it did
+// nothing at all. clearSession covers both kinds: it wipes the chat and respawns the
+// adapter for ACP, and clears + restarts the shell for a PTY (what this did before).
+document.getElementById('btn-clear-session')?.addEventListener('click', () => clearSession());
 
 // ── Session Profiles ─────────────────────────────────────────────
 const PROFILES_KEY = LS.profiles;
