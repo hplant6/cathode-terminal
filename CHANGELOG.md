@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-08-27
+
+### Added
+- **Edit an element's hover, focus, active and disabled styles — not just look at them.** The state chips forced the state on the page and stopped there: your edit still went to inline style, which applies in *every* state; the property rows still showed the resting values; and the agent was never told which state you meant, so a hover change arrived as a bare declaration it had to guess at. Picking a state now re-reads the element and shows what that state actually resolves to, edits are written as a rule for that state, and the message carries a `&:hover { … }` block per state you touched. **What the state changes is pinned to the top of the drawer**, so the two or three properties that differ aren't buried among forty that don't.
+- **A real editor for shadows.** A box-shadow is a list of layers, each with an offset, blur, spread, colour and an optional `inset` — previously all of it crammed into one 135px text box. Each layer now gets its own card: a colour swatch, an inset toggle, and drag-scrubbable X / Y / Blur / Spread. Multi-layer shadows are editable rather than mangled, and each value keeps its own unit, so `0.5rem` stays in rem.
+- **Send as Intent**, a switch on every tool panel's bar. Direct manipulation produces exact numbers — a hex the eyedropper sampled, a px value a slider happened to land on. Sent literally they bypass the project's own tokens and scales. With this on, the agent is told to treat them as intent and reproduce the effect the project's way: prefer existing tokens and scale steps, apply the change at the level that owns the element rather than as an inline style, and say so if doing it properly looks noticeably different.
+- **Drop files onto a tool panel** — anywhere on its footer, not just the text box — and they attach exactly as the paperclip would.
+- **Alpha in the colour picker.** Shadows and overlays are almost always `rgba`, and the picker could only produce opaque colours. Opaque picks still come out as plain hex; `rgba()` appears only when there's real transparency, and swatches show it over a checkerboard so 40% doesn't just read as a slightly different panel background.
+
+### Changed
+- **Every property gets the control it deserves.** `max-width`, `max-height`, the insets and the margin sides rest on `none` or `auto` — which isn't a length, so they used to fall through to a bare text box while `min-width: 0px` beside them got a slider. The keyword now lives in the unit dropdown and they all behave alike. The slider also works from zero, which it never did: its scrub was multiplicative, and nothing multiplied by zero leaves zero.
+- **The Defaults drawer is gone.** A property sitting at its default value is exactly the one you came to change — `border-radius: 0` is not a thing to hide behind a collapsed strip labelled "Defaults". Everything renders in its own section now, with the untouched ones dimmed rather than tucked away.
+- **Padding, Position and Margin sit together at the top**, with Margin sharing Padding's four-sided control.
+- **Adding a CSS property is a proper dropdown**: a trigger whose label doesn't change as you type, and a menu with its own search box and category filters at the top of the list. Results are ranked so standard properties lead — it used to open on `-webkit-box-ordinal-group`, because `-` sorts first. It's pinned to the bottom of the drawer and opens upward.
+- **The reload button in an agent chat clears the session.** It previously did nothing at all there — it bailed before touching anything and only ever restarted terminal sessions.
+
 ## [1.10.1] - 2026-08-26
 
 ### Fixed
@@ -518,7 +534,8 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.10.1...HEAD
+[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.11.0
 [1.10.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.10.1
 [1.0.17]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.17
 [1.0.16]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.16
