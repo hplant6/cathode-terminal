@@ -3502,10 +3502,23 @@ html, body {
 #pick-panel .pp-btn-ghost:hover { background: var(--spec-structural); color: var(--spec-text); }
 #pick-panel .pp-btn-primary { background: var(--spec-accent-dark); color: var(--spec-text-dim); border-radius: 0 0 var(--r-blob) 0; }              /* send → bottom-right blob */
 #pick-panel .pp-btn-primary:hover { background: var(--spec-accent); color: #fff; }
-/* "Send as Intent" sits between the two, so it takes no blob — the rounded corners belong
-   to the outer edges of the row. Reads as a quieter sibling of Send, not of Cancel. */
-#pick-panel .pp-btn-intent { background: var(--spec-dropdown-bg); color: var(--spec-text-dim); border-radius: 0; white-space: nowrap; flex-grow: 1.4; }
-#pick-panel .pp-btn-intent:hover { background: var(--spec-accent-dark); color: #fff; }
+
+/* "Send as Intent" — the middle segment of the three-button send bar, in BOTH bar layouts
+   (#pick-panel-btns, and .tp-inner .pp-btns for the animation and eyedropper panels). Same
+   box as Send, and the same flex, so the two read as a pair of sends rather than one being
+   the bigger offer. The blob corners stay on the outer two: they belong to the row's ends.
+   Placed after both base rule sets, which it ties with on specificity and beats on order. */
+#pick-panel-btns .pp-btn-intent,
+.tp-inner .pp-btns .pp-btn-intent {
+  flex: 1;                                  /* identical width to Send and Cancel */
+  background: var(--spec-dropdown-bg); color: var(--spec-text-dim);
+  border: none; border-radius: 0;
+  white-space: nowrap; overflow: hidden;    /* clip rather than reflow if the column is dragged narrow */
+}
+#pick-panel-btns .pp-btn-intent:hover,
+.tp-inner .pp-btns .pp-btn-intent:hover { background: var(--spec-accent-dark); color: #fff; }
+#pick-panel-btns .pp-btn-intent:disabled,
+.tp-inner .pp-btns .pp-btn-intent:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 
 .tool-panel .pp-btn {
   flex: 1; width: auto; height: 32px; border-radius: var(--radius-md); box-shadow: none;
@@ -3515,14 +3528,6 @@ html, body {
 .tool-panel .pp-btn-ghost:hover { background: var(--spec-structural); color: var(--spec-text); border-color: var(--spec-text-faint); box-shadow: none; }
 .tool-panel .pp-btn-primary { background: var(--spec-accent-dark); border: 1px solid var(--spec-accent-dark); color: var(--spec-text); }
 .tool-panel .pp-btn-primary:hover { background: var(--spec-accent); color: #fff; border-color: var(--spec-accent); box-shadow: none; }
-/* The accent as an outline rather than a fill: clearly a send, clearly not the default one. */
-.tool-panel .pp-btn-intent { background: transparent; border: 1px solid var(--spec-accent-dark); color: var(--spec-text-dim); white-space: nowrap; flex-grow: 1.4; }
-.tool-panel .pp-btn-intent:hover { background: var(--spec-accent-dark); color: #fff; border-color: var(--spec-accent-dark); box-shadow: none; }
-/* Three buttons in a footer that fits two comfortably: the label stays on one line and takes
-   the room it needs from the two shorter ones (flex-grow lives on the specific selectors
-   above, which carry more weight than `.pp-btn { flex: 1 }`). */
-#pick-panel .pp-btn-intent:disabled,
-.tool-panel .pp-btn-intent:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 
 /* Resize panel content */
 /* Resize body = a single always-open, full-height drawer (element name as title) */
