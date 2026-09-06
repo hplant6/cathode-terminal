@@ -1462,6 +1462,30 @@ const INTENT_DIRECTIVE = [
   '- Maintain visual equivalence. If doing it "the right way" noticeably changes the result,',
   '  explain why.',
 ].join('\n');
+// Motion has its own house style — a project animates with CSS transitions, or keyframes, or a
+// library, and the useful instruction is "use whichever of those this project already uses",
+// not "prefer tokens". Same shape as the CSS directive, aimed at the thing being sent.
+const MOTION_INTENT_DIRECTIVE = [
+  'Treat these animation values as rough motion intent, not strict specs. Reproduce the effect',
+  'using whatever animation standard makes the most sense for this project:',
+  '',
+  "- Match how this project already animates — CSS transitions or keyframes, its own motion",
+  '  utilities, or the animation library it already depends on. Do not introduce another one.',
+  '- Snap durations, delays and easings to the project\'s existing motion tokens or scale steps',
+  '  where it has them.',
+  '- Apply changes at the component or stylesheet level (no inline styles).',
+  '- Maintain visual equivalence. If doing it "the right way" noticeably changes the result,',
+  '  explain why.',
+].join('\n');
+// Only the tools that actually send measured values worth reinterpreting: the element panel
+// (box + lasso), the eyedropper, and the animation tool. "Treat these as approximate" says
+// nothing useful alongside an accessibility report, a screenshot or a drift scan, so those
+// footers get no button at all rather than one that does nothing for them.
+const INTENT_DIRECTIVE_BY_FOOT = {
+  'pick-panel-foot':      INTENT_DIRECTIVE,
+  'ed-panel-foot':        INTENT_DIRECTIVE,
+  'animation-panel-foot': MOTION_INTENT_DIRECTIVE,
+};
 
 function makeToolPersonaControl() {
   const wrap = personaWrap.cloneNode(true);
@@ -1525,7 +1549,8 @@ function makeToolComposerBar(foot) {
   // and sends the same message with the intent framing in front of it. As a switch it
   // was sticky state you had to remember you had left on; as a button the choice is made
   // at the moment of sending, which is the only moment it means anything.
-  const sendBtn = foot.querySelector('.pp-btn-primary');
+  const intentDirective = INTENT_DIRECTIVE_BY_FOOT[foot.id];
+  const sendBtn = intentDirective ? foot.querySelector('.pp-btn-primary') : null;
   if (sendBtn && sendBtn.parentElement) {
     const intentBtn = document.createElement('button');
     intentBtn.type = 'button';
@@ -1542,10 +1567,10 @@ function makeToolComposerBar(foot) {
     let viaIntent = false;
     // Capture, so this runs before the panel's own handler: clicking Send directly clears
     // any arming left over from an intent click whose send then bailed out.
-    sendBtn.addEventListener('click', () => { if (!viaIntent) foot._intentOnce = false; }, true);
+    sendBtn.addEventListener('click', () => { if (!viaIntent) foot._intentOnce = null; }, true);
     intentBtn.addEventListener('click', () => {
       if (intentBtn.disabled) return;
-      foot._intentOnce = true;
+      foot._intentOnce = intentDirective;   // the flag carries which framing to prepend
       viaIntent = true;
       // Reuse the panel's own send path rather than duplicating ten bespoke ones.
       try { sendBtn.click(); } finally { viaIntent = false; }
@@ -1596,8 +1621,9 @@ function decorateToolInstruction(instruction, foot) {
   if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
   // Framing goes first: the agent should know the numbers are a sketch before it reads them.
   if (foot && foot._intentOnce) {
-    foot._intentOnce = false;   // one send, not a mode
-    text = INTENT_DIRECTIVE + (text ? '\n\n' + text : '');
+    const directive = foot._intentOnce;
+    foot._intentOnce = null;   // one send, not a mode
+    text = directive + (text ? '\n\n' + text : '');
   }
   return applyLenses(text);
 }
