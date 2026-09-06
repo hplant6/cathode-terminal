@@ -7059,6 +7059,30 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       combo.classList.contains('open') ? closeMenu() : openMenu();
     });
 
+    // The drawer's scrollport is an ancestor of the panel, not a fixed class we can name
+    // here, so find it: the first ancestor that actually scrolls. Returns null when the
+    // content still fits, in which case there is nothing to reveal.
+    function scrollportOf(node) {
+      for (let a = node.parentElement; a; a = a.parentElement) {
+        const oy = getComputedStyle(a).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && a.scrollHeight > a.clientHeight) return a;
+      }
+      return null;
+    }
+    // A new field is appended to the bottom of the section — which is precisely where the
+    // sticky combo sits, with an opaque background, covering it. Neither appendChild nor
+    // the browser's own focus scrolling knows the footer is there, so the property you
+    // just added ends up hidden behind the control you added it from. Scroll it clear by
+    // the footer's own height.
+    function revealField(field) {
+      const sp = scrollportOf(field);
+      if (!sp) return;
+      const GAP = 8;
+      const overshoot = field.getBoundingClientRect().bottom
+                      - (sp.getBoundingClientRect().bottom - combo.offsetHeight - GAP);
+      if (overshoot > 0) sp.scrollTo({ top: sp.scrollTop + overshoot, behavior: 'smooth' });
+    }
+
     function addField(prop) {
       prop = (prop || '').trim().toLowerCase();
       if (!prop || !/^-?[a-z-]+$/.test(prop)) return;
@@ -7069,9 +7093,17 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       row.userAdded.add(prop);
       const field = buildField(row, i, p);
       fields.appendChild(field);
-      input.value = ''; closeMenu();
+      input.value = ''; closeMenu();   // close first: the footer is shorter once the menu is gone
+      revealField(field);
+      field.classList.add('pp-field-new');
+      setTimeout(() => field.classList.remove('pp-field-new'), 1500);
       const ctl = field.querySelector('input, select');
-      if (ctl) { ctl.focus(); if (ctl.select) ctl.select(); }
+      // preventScroll, or the browser scrolls the field to the very edge of the
+      // scrollport — back under the sticky footer revealField just cleared it from.
+      if (ctl) {
+        try { ctl.focus({ preventScroll: true }); } catch (e) { ctl.focus(); }
+        if (ctl.select) ctl.select();
+      }
     }
     function renderMenu() {
       const q = input.value.trim().toLowerCase();

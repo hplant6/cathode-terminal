@@ -3330,6 +3330,15 @@ html, body {
 }
 .pp-field:hover { background: var(--spec-header-bg); }
 .pp-field.selected { background: var(--spec-header-bg); border-bottom-color: var(--spec-input-bg); }   /* active row → shade-6 fill, shade-7 bottom border */
+/* A field just added from the picker. It appends at the bottom of the User Added
+   section — under the sticky combo — so the drawer scrolls it clear and it flashes once
+   to say which row is the new one. Fades rather than blinks: long enough to catch after
+   the scroll settles, gone before it turns into noise. */
+.pp-field.pp-field-new { animation: pp-field-new 1.5s ease-out; }
+@keyframes pp-field-new {
+  0%, 45% { background: color-mix(in srgb, var(--spec-accent) 22%, transparent); box-shadow: inset 2px 0 0 var(--spec-accent); }
+  100%    { background: transparent; box-shadow: inset 2px 0 0 transparent; }
+}
 .pp-field-sel {   /* shared checkbox (box-select + resize) */
   width: 24px; height: 24px; padding: 0; flex-shrink: 0; margin-right: 3px; border-radius: 5px; box-shadow: none;
   display: flex; align-items: center; justify-content: center;
