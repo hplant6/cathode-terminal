@@ -1072,7 +1072,14 @@ function cathodeCombinedPage(OPTS) {
         const uaSet   = userAdded[i] || new Set();
         const allP    = item.cssProps || [];
         const cssRows = allP.filter(p => !uaSet.has(p.name)).map(rowHtml).join('');
-        const uaRows  = allP.filter(p =>  uaSet.has(p.name)).map(rowHtml).join('');
+        // Walk the Set rather than the property list: a Set keeps insertion order, so
+        // the row just added is always the last one — directly above the picker it came
+        // from. Ordering by cssProps would drop an already-detected property back into
+        // its original position somewhere up the list, which is where they got lost.
+        const uaRows  = [...uaSet]
+          .map(name => allP.find(p => p.name === name))
+          .filter(Boolean)
+          .map(rowHtml).join('');
         // "User Added" section — add any CSS property (e.g. padding on a 0-padding
         // element, which the detected list omits) via a searchable picker.
         const uaSection = `
@@ -1241,6 +1248,13 @@ function cathodeCombinedPage(OPTS) {
             color: #6a6a6a; padding: 4px 12px 2px;
           }
           .ua-rows { border-bottom: 1px solid #0f0f0f; }
+          /* Fades rather than blinks: long enough to catch the eye after the scroll,
+             short enough that it is gone before it becomes noise. */
+          .css-row.ua-new { animation: ua-new-flash 1.5s ease-out; }
+          @keyframes ua-new-flash {
+            0%, 45% { background: #2b2200; box-shadow: inset 2px 0 0 #d4aa00; }
+            100%    { background: transparent; box-shadow: inset 2px 0 0 transparent; }
+          }
           .ua-combo { position: relative; padding: 5px 12px 0; }
           .ua-input {
             width: 100%; background: #040404; border: 1px solid #1e1e1e; border-radius: 4px;
@@ -1631,9 +1645,19 @@ function cathodeCombinedPage(OPTS) {
         userAdded[i].add(prop);
         expandedSet.add(i);   // keep the drawer open
         build();
-        // Open the value editor for the freshly added property so the user can type it.
         const span = shadow.querySelector('.ua-rows .prop-value[data-i="' + i + '"][data-prop="' + prop + '"]');
-        if (span) span.click();
+        if (!span) return;
+        // The User Added section sits below every detected property, and .el-list only
+        // shows 300px at a time — so on an element with a full property list the new row
+        // renders outside the scroll window and adding one reads as nothing happening.
+        // Scroll it in and flash it, so the result of the click is where the click was.
+        const row = span.closest('.css-row');
+        if (row) {
+          row.classList.add('ua-new');
+          try { row.scrollIntoView({ block: 'nearest' }); } catch (e) { row.scrollIntoView(); }
+          setTimeout(() => row.classList.remove('ua-new'), 1500);
+        }
+        span.click();   // open the value editor so the property can be typed straight away
       }
       shadow.querySelectorAll('.ua-input').forEach(input => {
         const i = parseInt(input.dataset.i);
