@@ -1959,20 +1959,38 @@ function diggerBlock() {
     DG_START,
     '## DIGGER — local model for bulk text work',
     '',
-    "`digger` runs a model on this machine's GPU. Use it to pre-digest large inputs",
-    'so they never enter your context. It costs no API tokens and no session quota.',
+    "`digger` runs a model on this machine's GPU. It costs no API tokens and no session",
+    'quota. Use it so that large text never enters your context in the first place —',
+    'once you have already read something, offloading it is too late to save anything.',
     '',
-    '**Use it whenever input >> output and the result is checkable:**',
-    '- `digger summarize <file>` — long log/output → at most 6 bullets',
+    '**Capture, then digest.** Any command whose output could run long — builds, test',
+    'runs, installs, migrations, dependency trees — is redirected to a file and',
+    'summarized, never streamed straight back into the conversation:',
+    '',
+    '```',
+    'npm run build > /tmp/build.log 2>&1; digger triage /tmp/build.log',
+    'pytest -q > /tmp/test.log 2>&1; digger triage /tmp/test.log',
+    'npm ls --all > /tmp/deps.txt 2>&1; digger ask "which packages appear at more than one version?" /tmp/deps.txt',
+    '```',
+    '',
+    'Go back to the raw file only if the summary points at something you still need.',
+    '',
+    '**Reading a file:** grep/sed when you want *a part* of it; `digger` when you want',
+    '*the whole* of it — `digger describe <codefile>` for what some code does, or',
+    '`digger summarize <file>` for a long document. Skimming a 5000-line file by',
+    'reading it in slices is exactly the work this is here to take.',
+    '',
+    '**Commands**',
+    '- `digger summarize <file>` — long text → at most 6 bullets',
     '- `digger triage <logfile>` — errors, failures and warnings only',
+    '- `digger describe <codefile>` — what it does, under 8 lines',
     '- `digger extract "<fields>" <file>` — raw JSON, no fences',
     '- `digger filter "<criterion>" <file>` — matching lines, verbatim',
-    '- `digger describe <codefile>` — what it does, under 8 lines',
     '- `digger ask "<prompt>" <file>` — freeform',
     '',
-    'Reads a file argument or stdin, and chunks oversized input automatically.',
-    'Reach for it *before* reading any file over ~500 lines, and before wading',
-    'through build logs, test output, CI dumps or dependency trees.',
+    'Takes a file argument or stdin, and chunks oversized input automatically.',
+    'Flags: `--stats` (tokens/time/compression), `--light` (force the small model — use',
+    'when the GPU is needed for other work), `--model NAME`.',
     '',
     '**Do not use it for** architecture calls, subtle bug hunting, or anything whose',
     'reasoning you would have to re-derive — that round trip costs more than doing',
@@ -1982,9 +2000,6 @@ function diggerBlock() {
     'units in its *summaries* are not — it will write "GB" for a log that said "MB".',
     '`UNKNOWN` means "not stated in those words", not "absent": retry naming fields',
     'the way the source names them. Verify anything load-bearing before acting on it.',
-    '',
-    'Flags: `--stats` (tokens/time/compression), `--light` (force the small model —',
-    'use when the GPU is needed for other work), `--model NAME`.',
     DG_END,
   ].join('\n');
 }
@@ -1993,6 +2008,25 @@ function diggerHandoffOn(dir) {
   try {
     return fs.readFileSync(path.join(dir, MEMORY_FILES[0]), 'utf8').includes(DG_START);
   } catch (_) { return false; }
+}
+
+// The block's wording is app-owned and gets sharpened over releases, but it is only
+// written at the moment the toggle is flipped — so a project that switched it on
+// months ago would keep that old text for good, and the improvements would reach
+// nobody who had already opted in. Rewrite it in place wherever it is already
+// present; a project that never opted in is left completely alone.
+function refreshDiggerBlock(dir) {
+  if (!dir) return;
+  const block = diggerBlock();
+  for (const name of MEMORY_FILES) {
+    const fp = path.join(dir, name);
+    try {
+      const existing = fs.readFileSync(fp, 'utf8');
+      if (!existing.includes(DG_START) || existing.includes(block)) continue;   // absent, or already current
+      const base = stripDelimited(existing, DG_START, DG_END).replace(/\n+$/, '');
+      fs.writeFileSync(fp, (base ? base + '\n\n' : '') + block + '\n', 'utf8');
+    } catch (_) {}
+  }
 }
 
 // The toggle is only meaningful when the handoff would actually work, so gate the
@@ -2199,6 +2233,7 @@ ipcMain.on(IPC.SET_PROJECT_DIR, (_, { dir } = {}) => {
   emitWorkLabel(currentProjectDir);
   if (currentProjectDir) writeProjectMemory(currentProjectDir);   // refresh the app-owned project block for agents
   else if (_projMemDir) clearProjectMemory(_projMemDir);
+  refreshDiggerBlock(sessionCwd());   // and bring an already-enabled digger block up to date
 });
 
 // ── Agent → app signal ───────────────────────────────────────────
