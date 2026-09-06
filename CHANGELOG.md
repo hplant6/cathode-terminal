@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed
+- **Gemini CLI is no longer a supported agent.** It is gone from the install list and the onboarding checklist, from the ACP launch table, the model catalogue, the MCP integration, the per-agent memory targets and the handoff agent picker. Removing it from the catalogue would not have helped anyone who had already added it — that profile lives in local storage and would have gone on trying to launch a binary the app no longer knows about — so a saved Gemini profile is dropped on load, matched on its launch command rather than its name, which is editable. A handoff target set to Gemini falls back to the default instead of leaving the picker showing nothing while still trying to spawn it.
+- **`GEMINI.md` is no longer written.** The Storybook, project and Digger blocks go to `CLAUDE.md` and `AGENTS.md` only. Existing `GEMINI.md` files are left alone rather than deleted — their managed blocks simply stop being updated.
+
 ## [1.12.0] - 2026-09-06
 
 ### Added

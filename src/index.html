@@ -1058,7 +1058,7 @@
     <div class="modal-box" id="mcp-modal-box">
       <button id="mcp-cancel" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">MCP Connections</div>
-      <p class="modal-desc">Connect a tool once — it's added to every installed agent (Claude, Gemini, Codex) at user scope, so it's available in all your sessions.</p>
+      <p class="modal-desc">Connect a tool once — it's added to every installed agent (Claude, Codex) at user scope, so it's available in all your sessions.</p>
       <div id="mcp-modal-list"></div>
       <div id="mcp-restart-notice" class="mcp-restart-notice">
         <span>Restart the active session to pick up new connections.</span>
@@ -1304,7 +1304,7 @@
 
       <div class="auth-section">
         <div class="auth-section-label">API Keys</div>
-        <p class="modal-desc" style="margin-bottom:8px">For models that require a direct API key (Codex, Gemini, etc.)</p>
+        <p class="modal-desc" style="margin-bottom:8px">For models that require a direct API key (Codex, etc.)</p>
         <div id="api-keys-list"></div>
         <div id="api-key-new-form" style="display:none">
           <input id="api-key-new-name"  class="modal-input" placeholder="Label (e.g. Personal)" autocomplete="off" />
@@ -1468,7 +1468,6 @@
               <label class="ua-flabel" for="budget-target">Hand off to</label>
               <select id="budget-target" class="ua-select">
                 <option value="hermes">Hermes</option>
-                <option value="gemini">Gemini</option>
                 <option value="codex">Codex</option>
               </select>
             </div>

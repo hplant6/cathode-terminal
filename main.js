@@ -1878,10 +1878,10 @@ app.on('before-quit', stopAllStorybook);
 
 // ── Storybook agent-memory files ──────────────────────────────────
 // Write a clearly-delimited managed block into each model's memory file
-// (CLAUDE.md / AGENTS.md / GEMINI.md) so every tool natively picks up the
+// (CLAUDE.md / AGENTS.md) so every tool natively picks up the
 // Storybook reference. Idempotent: the block is replaced, never duplicated,
 // and removed cleanly on disconnect. The rest of each file is untouched.
-const MEMORY_FILES = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md'];
+const MEMORY_FILES = ['CLAUDE.md', 'AGENTS.md'];
 const SB_START = '<!-- cathode:storybook:start -->';
 const SB_END   = '<!-- cathode:storybook:end -->';
 
@@ -2369,7 +2369,7 @@ function startProjectWatchers(dir) {
 }
 
 // ── Agent runtime environment (WSL vs Windows vs native) ──────────
-// Most tools (claude/hermes) run in WSL on Windows. Gemini/Codex may be
+// Most tools (claude/hermes) run in WSL on Windows. Codex may be
 // installed via *Windows* npm instead, so we detect where each binary lives.
 // On macOS/Linux there is no split — agents run natively. resolveAgentEnv,
 // agentVersion (Windows cmd.exe versions) and agentCwd live in the platform
@@ -2377,7 +2377,7 @@ function startProjectWatchers(dir) {
 // Agents that may live on either side. `ollama` is Windows-only in practice —
 // the daemon binds Windows-side localhost, so a WSL spawn finds no binary and
 // could not reach the daemon anyway. Probing sends it to cmd.exe.
-const DUAL_ENV_BINS = new Set(['gemini', 'codex', 'ollama']);
+const DUAL_ENV_BINS = new Set(['codex', 'ollama']);
 const resolveAgentEnv = platform.resolveAgentEnv;
 const winVersion = platform.agentVersion;
 function winCwd() { return platform.agentCwd(sessionCwd(), homeDir()); }
@@ -2446,7 +2446,7 @@ async function spawnPty(id, command = 'claude') {
     const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
     let proc;
     if (env === 'win') {
-      // Windows-installed agent (e.g. Gemini/Codex via Windows npm) → run on Windows.
+      // Windows-installed agent (e.g. Codex via Windows npm) → run on Windows.
       const { file, args } = platform.cmdFileArgs(['/c', command]);
       proc = pty.spawn(file, args, {
         name: 'xterm-256color', cols: 80, rows: 24,
@@ -2651,9 +2651,9 @@ ipcMain.handle(IPC.WATCH_APPROVAL_TEST, (_, patch) => watchApproval.testConnecti
 // ── Per-agent ACP launch ──────────────────────────────────────────
 // The ACP client/protocol below is agent-agnostic; only *launching* the agent
 // differs. Claude runs the Windows-side adapter (pointed at WSL's ~/.claude);
-// Gemini/Codex speak ACP themselves and run inside WSL (bash -lic for the nvm
+// Codex speaks ACP itself and runs inside WSL (bash -lic for the nvm
 // PATH, like the PTY tools). Each launcher returns { proc, version, model }.
-const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex', hermes: 'Hermes' };
+const ACP_LABELS = { claude: 'Claude Code', codex: 'Codex', hermes: 'Hermes' };
 // Terminal command that configures an agent, surfaced when its initialize reply
 // advertises auth/config methods (installed but not yet set up).
 const ACP_SETUP_CMD = { hermes: 'hermes setup' };
@@ -2708,7 +2708,7 @@ async function launchClaudeAcp(modelOverride) {
   if (modelOverride) model = modelOverride;
   const sbUrl = storybookUrlFor(sessionCwd());   // this project's Storybook, if running
   // Per-session vars cross the Windows→WSL hop via a shell export inside the command
-  // (matches the Gemini/Codex WSL launch); a real API key (API-key users) rides
+  // (matches the Codex WSL launch); a real API key (API-key users) rides
   // WSLENV so its value isn't exposed in the process list. Subscription users need none.
   let cmd = 'claude-agent-acp';
   if (modelOverride) cmd = `export ANTHROPIC_MODEL="${modelOverride}"; ${cmd}`;
@@ -2719,7 +2719,7 @@ async function launchClaudeAcp(modelOverride) {
   return { proc, version, model };
 }
 
-// Gemini/Codex speak ACP themselves. They run where they're installed — a real
+// Codex speaks ACP itself. It runs where it's installed — a real
 // WSL install (bash -lic for the nvm PATH), or a Windows npm install via
 // cmd.exe (the /mnt/c shim can't find node under WSL).
 async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
@@ -2752,7 +2752,6 @@ async function launchAcpAgent(bin, acpArgs, agentKey, opts = {}) {
 
 const ACP_LAUNCH = {
   claude: { ensure: ensureClaudeAdapter, launch: (m) => launchClaudeAcp(m) },
-  gemini: { launch: () => launchAcpAgent('gemini', ['--experimental-acp'], 'gemini') },
   codex:  { launch: () => launchAcpAgent('codex', ['acp'], 'codex') },
   // Hermes selects its model via a *profile* (provider + base_url + model in
   // one), not a --model flag — so the model menu picks a profile. `-p` is a
@@ -2772,7 +2771,7 @@ const ACP_LAUNCH = {
 // Normalise the ACP model selector an agent attaches to session/new|load|resume.
 // The wire format is camelCase, but agents bridged from other languages sometimes
 // leak snake_case, so accept both and hand the renderer one shape. Returns null
-// when the agent advertises no models (Claude/Gemini/Codex today) — callers then
+// when the agent advertises no models (Claude/Codex today) — callers then
 // fall back to the static MODEL_CATALOG.
 function acpModelState(r) {
   const m = r && r.models;
@@ -2976,7 +2975,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
         return;
       }
     }
-    // WSL-side agents (Claude/Gemini/Codex/Hermes on Windows) chdir into this cwd
+    // WSL-side agents (Claude/Codex/Hermes on Windows) chdir into this cwd
     // and fail to launch on a raw `C:\…` path — hand them the /mnt path.
     let sessionId, modes = null, models = null;
     const caps = (initResult && initResult.agentCapabilities) || {};
@@ -3566,10 +3565,9 @@ const MCP_CATALOG = {
 };
 
 // Agents exposing `<cli> mcp add/remove/list`. `sep` = needs `--` before the
-// stdio command (Claude does, Gemini does not).
+// stdio command (Claude does, Codex does not).
 const MCP_AGENTS = [
   { key: 'claude', cli: 'claude', label: 'Claude Code', sep: true  },
-  { key: 'gemini', cli: 'gemini', label: 'Gemini CLI',  sep: false },
   { key: 'codex',  cli: 'codex',  label: 'Codex CLI',   sep: false },
 ];
 
@@ -3635,7 +3633,7 @@ ipcMain.handle(IPC.CLIPBOARD_READ, () => { try { return clipboard.readText(); } 
 // agent's user-scope config. Reads the config files directly.
 ipcMain.handle(IPC.MCP_HAS_SERVER, async (_, { name } = {}) => {
   const r = await wslRun(
-    'cat ~/.claude.json 2>/dev/null; echo "==SPLIT=="; cat ~/.gemini/settings.json 2>/dev/null; echo "==SPLIT=="; cat ~/.codex/config.toml 2>/dev/null',
+    'cat ~/.claude.json 2>/dev/null; echo "==SPLIT=="; cat ~/.codex/config.toml 2>/dev/null',
     8000);
   const out = r.out || '';
   for (const chunk of out.split('==SPLIT==')) {
@@ -3663,7 +3661,7 @@ ipcMain.handle(IPC.MCP_CONNECT, async (_, { catalogKey, token, custom } = {}) =>
   const entry = catalogKey === 'custom' ? buildCustomEntry(custom) : MCP_CATALOG[catalogKey];
   if (!entry) return { ok: false, error: 'Unknown service' };
   const agents = await detectMcpAgents();
-  if (!agents.length) return { ok: false, error: 'No supported agents (Claude/Gemini/Codex) found in WSL.' };
+  if (!agents.length) return { ok: false, error: 'No supported agents (Claude/Codex) found in WSL.' };
 
   const results = [];
   for (const agent of agents) {
@@ -4280,7 +4278,6 @@ ipcMain.handle(IPC.AUTH_STATUS_READ, async () => {
 // installs). Unknown agents fall back to the project's AGENTS.md.
 const AGENT_MEMORY = {
   claude: { dir: '.claude', file: 'CLAUDE.md' },
-  gemini: { dir: '.gemini', file: 'GEMINI.md' },
   codex:  { dir: '.codex',  file: 'AGENTS.md' },
 };
 async function agentMemoryTarget(agent) {

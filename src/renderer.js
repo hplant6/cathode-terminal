@@ -511,7 +511,7 @@ function getDefaultProfile() {
 }
 
 // Agents that speak ACP (and thus get the chat front-end).
-const ACP_AGENT_KEYS = new Set(['claude', 'gemini', 'codex', 'hermes']);
+const ACP_AGENT_KEYS = new Set(['claude', 'codex', 'hermes']);
 function acpAgentFor(command) {
   const cmd = (command || '').trim();
   // A local run (`codex --oss …`) has no ACP mode — Codex only speaks the
@@ -1130,7 +1130,7 @@ async function refreshUsage() {
   if (!usageOpen) return;
   const s = sessions.get(activeId);
   const isClaude  = !!(s && s.type === 'acp' && (s.agent || 'claude') === 'claude');
-  const acpOther  = !!(s && s.type === 'acp' && !isClaude);   // hermes/gemini/codex — not Claude's meters
+  const acpOther  = !!(s && s.type === 'acp' && !isClaude);   // hermes/codex — not Claude's meters
   const seq = ++_usageSeq;   // a slower earlier fetch must not overwrite a newer session's meters
   try {
     const [ctx, lim] = await Promise.all([
@@ -2127,7 +2127,6 @@ const DEFAULT_PROFILES = [
 // by default; otherwise the agent runs terminal-only.
 const AVAILABLE_MODELS = [
   { id: 'codex',  name: 'OpenAI Codex CLI', desc: "OpenAI's AI coding agent for the terminal",       install: 'npm install -g @openai/codex',                                                              command: 'codex',  acp: true  },
-  { id: 'gemini', name: 'Gemini CLI',        desc: "Google's AI assistant for the command line",      install: 'npm install -g @google/gemini-cli',                                                         command: 'gemini', acp: true  },
   { id: 'hermes', name: 'Hermes',            desc: "Nous Research's agentic CLI",                     install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive --skip-browser --skip-setup',                        command: 'hermes',  acp: true },
   // Local models, served by Ollama and driven through Codex's open-source
   // provider. Terminal-only on purpose: Codex dropped its `acp` subcommand, so
@@ -2153,11 +2152,6 @@ const MODEL_CATALOG = {
     { id: 'gpt-5',       label: 'GPT-5' },
     { id: 'o4-mini',     label: 'o4-mini' },
     { id: 'o3',          label: 'o3' },
-  ]},
-  gemini: { flag: '-m', models: [
-    { id: '',                 label: 'Default' },
-    { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   ]},
   // Hermes bundles provider + base_url + model into a *profile*, so `id` is a
   // profile name (passed as `-p`), not a model name. 'Default' uses whichever
@@ -2247,7 +2241,7 @@ function isNonChatModel(m) {
 function sessionToolKey(s) {
   if (!s) return null;
   // ACP model switching is wired for Claude (ANTHROPIC_MODEL on respawn) and
-  // Hermes (`-p <profile>` on respawn). Gemini/Codex ACP run at their default
+  // Hermes (`-p <profile>` on respawn). Codex ACP runs at its default
   // model → hide the selector for them.
   if (s.type === 'acp') return (s.agent === 'claude' || s.agent === 'hermes') ? s.agent : null;
   const cmd = (s.command || '').trim();
@@ -2275,7 +2269,7 @@ let sessionProfiles = (() => {
       parsed = parsed.map(p => p.id === 'claude'
         ? { ...p, acp: p.acp !== false }
         : { ...p, acp: p.acp === true });
-      // One-time v2 upgrade: ACP-capable agents (Gemini/Codex) now default to
+      // One-time v2 upgrade: ACP-capable agents (Codex) now default to
       // the chat front-end. Terminal stays one click away via the toggle.
       if (!localStorage.getItem(LS.profilesAcpV2)) {
         parsed = parsed.map(p => {
@@ -2284,7 +2278,7 @@ let sessionProfiles = (() => {
           // they have no ACP mode to be upgraded to.
           if (/(^|\s)--(oss|local-provider)(\s|$)/.test(cmd)) return p;
           const base = cmd.split(/\s+/)[0];
-          return (base === 'gemini' || base === 'codex') ? { ...p, acp: true } : p;
+          return base === 'codex' ? { ...p, acp: true } : p;
         });
         localStorage.setItem(LS.profilesAcpV2, '1');
         localStorage.setItem(PROFILES_KEY, JSON.stringify(parsed));
@@ -2295,6 +2289,14 @@ let sessionProfiles = (() => {
       for (const p of parsed) byName.set(p.name, p);
       let dirty = byName.size !== parsed.length;
       parsed = Array.from(byName.values());
+      // Gemini was removed as a supported agent. Taking it out of the catalogue does
+      // nothing for anyone who had already added it: that profile lives in localStorage
+      // and would still try to launch a binary the app no longer knows about. Drop it
+      // here, matching on the launch command rather than the name, which is editable.
+      {
+        const kept = parsed.filter(p => (p.command || '').trim().split(/\s+/)[0] !== 'gemini');
+        if (kept.length !== parsed.length) { parsed = kept; dirty = true; }
+      }
       // Migrate saved Hermes profiles from the old terminal-TUI command (with the
       // "$SECONDS" no-model hint) to the ACP chat agent.
       for (const p of parsed) {
@@ -3251,7 +3253,7 @@ function acpScrollUserToMiddle(s, el) {
   });
 }
 
-const ACP_LABELS = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex', hermes: 'Hermes' };
+const ACP_LABELS = { claude: 'Claude Code', codex: 'Codex', hermes: 'Hermes' };
 // Per-agent banner art. Agents without an entry get the default block logo
 // inlined beside the info lines (Claude style).
 const AGENT_BANNER_ART = {
@@ -4569,9 +4571,16 @@ function updateDsSlider(el) {
 // ── Budget Guard config + handoff ──
 const BUDGET_CFG_KEY = 'cathode-budget';
 const BUDGET_ARMED_KEY = 'cathode-budget-armed';   // resetsAt of the limit window we've already auto-handed-off for — persists so a restart doesn't re-fire the same window (usage stays over threshold until the window resets)
-const BUDGET_AGENT_LABEL = { hermes: 'Hermes', gemini: 'Gemini', codex: 'Codex' };
+const BUDGET_AGENT_LABEL = { hermes: 'Hermes', codex: 'Codex' };
 const BUDGET_DEFAULTS = { threshold: 80, autoHandoff: false, target: 'hermes', dest: 'HANDOFF.md' };   // weekly is always watched; autoHandoff replaces autoOpen/watchWeekly
-function budgetConfig() { return Object.assign({}, BUDGET_DEFAULTS, safeParse(localStorage.getItem(BUDGET_CFG_KEY), {})); }
+function budgetConfig() {
+  const c = Object.assign({}, BUDGET_DEFAULTS, safeParse(localStorage.getItem(BUDGET_CFG_KEY), {}));
+  // A handoff target saved before that agent was dropped would leave the select showing
+  // nothing (no matching <option>) while still trying to spawn the agent on handoff.
+  // Anything the app no longer offers falls back to the default.
+  if (!BUDGET_AGENT_LABEL[c.target]) c.target = BUDGET_DEFAULTS.target;
+  return c;
+}
 function saveBudgetConfig(cfg) { localStorage.setItem(BUDGET_CFG_KEY, JSON.stringify(cfg)); }
 // Which usage limit governs the budget (weekly if watched and higher, else the 5h),
 // its %, reset, and whether it's at/over the configured threshold. null if no data.
@@ -5106,8 +5115,8 @@ const claudeMdDesc     = document.getElementById('claude-md-desc');
 
 const claudeMdModalCtl = wireModal(claudeMdModal);
 
-const MEMORY_FILE  = { claude: 'CLAUDE.md', gemini: 'GEMINI.md', codex: 'AGENTS.md' };
-const MEMORY_LABEL = { claude: 'Claude Code', gemini: 'Gemini CLI', codex: 'Codex' };
+const MEMORY_FILE  = { claude: 'CLAUDE.md', codex: 'AGENTS.md' };
+const MEMORY_LABEL = { claude: 'Claude Code', codex: 'Codex' };
 let memoryAgent = 'claude';   // which agent's memory file the modal is editing
 
 async function openMemoryModal(agent = 'claude') {
