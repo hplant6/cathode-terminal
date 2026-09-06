@@ -7094,6 +7094,16 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       const field = buildField(row, i, p);
       fields.appendChild(field);
       input.value = ''; closeMenu();   // close first: the footer is shorter once the menu is gone
+      // render() ends in applyFilter(), which hides any .pp-section holding no visible
+      // fields — and until the first property is added this section holds none, so it is
+      // display:none from the moment the panel opens. Appending into it put the new
+      // property inside a hidden container, invisible until something re-ran the filter,
+      // which is why typing in the search box was what made it appear. Un-hide both
+      // explicitly: you asked for this property, so it shows even while a filter is
+      // narrowing everything else. This must also happen BEFORE revealField measures —
+      // a hidden element reports a zero rect, and the scroll would compute to nothing.
+      wrap.style.display = '';
+      field.style.display = '';
       revealField(field);
       field.classList.add('pp-field-new');
       setTimeout(() => field.classList.remove('pp-field-new'), 1500);
