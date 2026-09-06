@@ -4006,28 +4006,43 @@ function showProjectPrompt({ name, dir, note, branch, onCreate, onStay }) {
   const cap = n => `<span class="perm-key">${n}</span>`;
   const card = document.createElement('div');
   card.className = 'acp-permission';
+  // The name the agent suggested is a starting point, not a decision — it's derived
+  // from a folder name or the agent's guess at what you're doing. Editable here,
+  // because renaming afterwards means finding the project in Mission Control.
   card.innerHTML =
-    `<div class="acp-perm-head">Start a new project for <b></b>?</div>` +
+    `<div class="acp-perm-head">Start a new project?</div>` +
+    `<input class="acp-perm-name" type="text" spellcheck="false" autocomplete="off" maxlength="80" aria-label="Project name" />` +
     `<div class="acp-perm-title"></div>` +
     `<div class="acp-perm-btns">` +
       `<button class="acp-perm-deny" type="button">Continue here${cap('2')}</button>` +
       `<button class="acp-perm-allow" type="button">Create project${cap('1')}</button>` +
     `</div>`;
-  card.querySelector('.acp-perm-head b').textContent = name;             // textContent → no markup from the agent
+  const nameEl = card.querySelector('.acp-perm-name');
+  nameEl.value = name;                                                   // value → no markup from the agent
   card.querySelector('.acp-perm-title').textContent = [note, branch ? `branch ${branch}` : '', dir].filter(Boolean).join(' · ');
+  // Blank (or all spaces) falls back to the suggestion — clearing the box is not a
+  // request for a project with no name.
+  const chosenName = () => nameEl.value.trim() || name;
   const close = () => { card.remove(); showTopPerm(s); };
   const decide = (create) => {
+    const picked = create ? chosenName() : name;   // read before close() drops the card
     close();
     if (create) {
-      onCreate && onCreate();
+      onCreate && onCreate(picked);
       routeToActiveSession(branch
-        ? `Cathode: branch "${branch}" is now tracked as its own project. Carry on in ${dir}.`
-        : `Cathode: I created a new project for "${name}" at ${dir}. Work there from now on.`);
+        ? `Cathode: branch "${branch}" is now tracked as its own project, "${picked}". Carry on in ${dir}.`
+        : `Cathode: I created a new project for "${picked}" at ${dir}. Work there from now on.`);
     }
     else        { onStay   && onStay();   routeToActiveSession(`Cathode: staying in ${here} — treat this as part of the current project.`); }
   };
   card.querySelector('.acp-perm-allow').addEventListener('click', () => decide(true));
   card.querySelector('.acp-perm-deny').addEventListener('click', () => decide(false));
+  // While the field has focus the global 1/2 shortcuts stand down (the keydown handler
+  // yields to inputs), so give the keyboard a way through from inside it.
+  nameEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')      { e.preventDefault(); decide(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); nameEl.blur(); }
+  });
   card._permKeys = { '1': () => decide(true), '2': () => decide(false) };
   s.permStackEl.appendChild(card);
   showTopPerm(s);
@@ -5891,6 +5906,16 @@ document.getElementById('btn-new-tab')?.addEventListener('click', () => createTa
   });
 })();
 document.getElementById('btn-reload')?.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_RELOAD));
+
+// ── Browser Back ──────────────────────────────────────────────────
+// The history lives in the browser view's own webContents, so main owns both the
+// step and the answer to "is there anywhere to go?" — the button starts disabled
+// and only lights up when main says there's something behind the current page.
+const btnBack = document.getElementById('btn-back');
+btnBack?.addEventListener('click', () => ipcRenderer.send(IPC.BROWSER_BACK));
+ipcRenderer.on(IPC.BROWSER_NAV_STATE, (_, { canGoBack } = {}) => {
+  if (btnBack) btnBack.disabled = !canGoBack;
+});
 
 // ── Device emulation dropdown ─────────────────────────────────────
 let openEditDevicesModal = null;   // set by the edit-devices modal IIFE
@@ -10800,11 +10825,11 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     }
     // A new branch tracked as its own project — folder is shared, so it's localStorage-only
     // (no per-folder manifest; true per-branch manifests need worktrees, a later slice).
-    function createBranchProject(t) {
+    function createBranchProject(t, name) {
       const id = projId(t.dir) + '#' + t.branch;
       const list = loadProjects();
       if (list.some(p => p.id === id)) return;
-      list.push({ id, name: `${nameFor(t.dir)} (${t.branch})`, rootDir: t.dir, branch: t.branch, branchScoped: true, repo: t.remote ? { remote: t.remote, branch: t.branch } : undefined, lastActiveAt: Date.now() });
+      list.push({ id, name: (name || '').trim() || `${nameFor(t.dir)} (${t.branch})`, rootDir: t.dir, branch: t.branch, branchScoped: true, repo: t.remote ? { remote: t.remote, branch: t.branch } : undefined, lastActiveAt: Date.now() });
       saveProjects(list); renderMenu();
     }
 
@@ -10864,10 +10889,10 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         // so it gets the same weight (and 1/2 shortcuts) as a permission request.
         showProjectPrompt({
           name: nm, dir: t.dir, note: t.note || '', branch: t.branch || '',
-          onCreate: () => {
+          onCreate: (picked) => {
             saveDecision(key, 'project');
-            if (onBranch) createBranchProject({ ...t, branch: t.branch });
-            else adoptDirAsProject(t.dir, { ...t, name: nm });
+            if (onBranch) createBranchProject({ ...t, branch: t.branch }, picked);
+            else adoptDirAsProject(t.dir, { ...t, name: picked });
           },
           onStay:   () => { saveDecision(key, 'keep'); },
         });

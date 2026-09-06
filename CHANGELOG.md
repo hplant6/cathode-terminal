@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **A Back button in the browser toolbar**, left of the address bar. The browser view has always kept a history — the right-click menu could walk it, and nothing else could. It greys out when there is nothing behind the current page rather than offering a click that does nothing, and it follows in-page route changes, so Back works on a single-page app and not just on full page loads.
+
+### Changed
+- **Name the project when an agent proposes one.** The prompt an agent raises by dropping a `new-project` signal stated a name and gave you two buttons, neither of which was "call it something else" — the name came from the folder or from the agent's guess at what you were doing, and correcting it meant creating the project first and renaming it in Mission Control afterwards. The name is now a field on the prompt, prefilled with the suggestion and editable before you accept. Clearing it falls back to the suggestion rather than creating something unnamed, Enter accepts from inside the field, and Escape hands the keyboard back to the 1/2 shortcuts.
+
 ## [1.11.0] - 2026-08-27
 
 ### Added

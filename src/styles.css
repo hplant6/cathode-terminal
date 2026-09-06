@@ -1943,6 +1943,22 @@ html, body {
 .acp-permission.show { opacity: 1; transform: translateY(0); }
 .acp-perm-head { font-size: 12.5px; color: var(--spec-text); margin-bottom: 4px; }
 .acp-perm-head b { color: var(--spec-accent); font-weight: 600; }
+/* Editable project name. The card itself is shade 7, so the field takes a lighter
+   fill (shade 6) or it reads as static text rather than something you can change. */
+.acp-perm-name {
+  width: 100%; height: 30px; margin: 6px 0 0;
+  box-sizing: border-box; padding: 0 9px;
+  background: var(--spec-toolbar-bg);            /* shade 6 — lifts off the shade-7 card */
+  border: 1px solid var(--spec-structural);      /* shade 3 */
+  border-radius: var(--radius-sm);
+  color: var(--spec-accent);                     /* it is the project's name — keep the accent it had */
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+}
+.acp-perm-name:focus {
+  outline: none;
+  border-color: var(--spec-accent);
+  background: var(--spec-input-bg);
+}
 .acp-perm-title {
   font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim);
   margin: 6px 0 10px; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto;
@@ -4104,6 +4120,12 @@ html, body {
 
 #btn-new-tab { flex-shrink: 0; width: 34px; height: 34px; font-size: 16px; color: var(--spec-text-dim); }   /* 34×34, matches reload — no fill */
 #btn-new-tab:hover { color: var(--spec-text); background: none; }   /* no fill — overrides the global button:hover background */
+
+/* Back — same 34×34 no-fill treatment as the + beside it. Disabled whenever the
+   page has no history behind it, so it never invites a click that does nothing. */
+#btn-back { flex-shrink: 0; width: 34px; height: 34px; color: var(--spec-text-dim); }
+#btn-back:hover:not(:disabled) { color: var(--spec-text); background: none; }
+#btn-back:disabled { color: var(--spec-text-faint); cursor: default; background: none; }
 
 #address-bar, #tab-bar #address-bar {
   flex: 1; min-width: 60px; height: 34px;

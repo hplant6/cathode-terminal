@@ -65,6 +65,8 @@ const IPC = Object.freeze({
   APP_VERSION: 'app-version',
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
+  BROWSER_BACK: 'browser-back',         // step back through the browser view's own history
+  BROWSER_NAV_STATE: 'browser-nav-state',   // main → renderer: { canGoBack } so the Back button can disable itself
   BROWSER_DID_NAVIGATE: 'browser-did-navigate',
   BROWSER_NAVIGATE: 'browser-navigate',
   BROWSER_RELOAD: 'browser-reload',

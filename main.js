@@ -164,6 +164,16 @@ function uiSend(channel, data) {
   }
 }
 
+// Whether the browser view has anywhere to go back to, so the Back button can grey
+// itself out instead of looking live on a page with no history. Only main knows this —
+// the view's history belongs to its own webContents, not to the app's tab list.
+function sendNavState() {
+  try {
+    if (!browserView || browserView.webContents.isDestroyed()) return;
+    uiSend(IPC.BROWSER_NAV_STATE, { canGoBack: browserView.webContents.navigationHistory.canGoBack() });
+  } catch (_) {}
+}
+
 // Most failures here are deliberately best-effort. Route the ones worth
 // diagnosing (data-losing file writes) through this so they're visible in the
 // console instead of vanishing — without changing the best-effort behavior.
@@ -522,7 +532,7 @@ function createWindow() {
   browserView.webContents.on('did-finish-load', () => { browserView.webContents.insertCSS(WF_SCROLLBAR_CSS).catch(() => {}); installHoverTracker(browserView); });
   // Address-bar loading/error indicator.
   browserView.webContents.on('did-start-loading', () => { browserLoadFailed = false; uiSend(IPC.BROWSER_LOADING, 'loading'); });
-  browserView.webContents.on('did-stop-loading',  () => { if (!browserLoadFailed) uiSend(IPC.BROWSER_LOADING, 'done'); });
+  browserView.webContents.on('did-stop-loading',  () => { if (!browserLoadFailed) uiSend(IPC.BROWSER_LOADING, 'done'); sendNavState(); });
   browserView.webContents.on('did-fail-load', (_, code, desc, url, isMainFrame) => { if (isMainFrame && code !== -3) { browserLoadFailed = true; uiSend(IPC.BROWSER_LOADING, 'error'); } });   // -3 = ABORTED (navigation replaced), ignore
 
   browserView.webContents.on('did-navigate', (_, url) => {
@@ -534,6 +544,7 @@ function createWindow() {
     // describes the OLD page. Tell the renderer to reset tools. (Not fired for
     // did-navigate-in-page: SPA/hash changes keep the same document.)
     uiSend(IPC.BROWSER_DID_NAVIGATE);
+    sendNavState();
     // Reconnect embedded DevTools after full navigation (WebSocket target URL may change)
     if (devToolsView) {
       browserView.webContents.once('did-finish-load', () => reconnectDevTools());
@@ -542,6 +553,7 @@ function createWindow() {
   browserView.webContents.on('did-navigate-in-page', (_, url) => {
     saveLastURL(url);
     uiSend(IPC.BROWSER_URL_CHANGED, url);
+    sendNavState();   // SPA route changes are history entries too — Back must follow them
   });
   browserView.webContents.on('page-title-updated', (_, title) => {
     uiSend(IPC.TAB_TITLE_UPDATED, title);
@@ -3403,6 +3415,10 @@ ipcMain.on(IPC.SET_BROWSER_EMPTY, (_, empty) => {
   repositionBrowserView();
 });
 ipcMain.on(IPC.BROWSER_RELOAD, () => browserView.webContents.reloadIgnoringCache());
+ipcMain.on(IPC.BROWSER_BACK, () => {
+  const h = browserView.webContents.navigationHistory;
+  if (h.canGoBack()) h.goBack();   // the resulting did-navigate re-broadcasts the state
+});
 ipcMain.on(IPC.BROWSER_TOGGLE_DEVTOOLS, () => {
   if (devToolsOpening) return;   // mid-open: closing now would race the async open path
   if (devToolsOpen || devToolsView) animateDevTools(false);
@@ -3477,6 +3493,9 @@ ipcMain.on(IPC.RENDERER_READY, () => {
     if (!u || u === 'about:blank') u = loadLastURL();
     if (u && u !== 'about:blank') mainWindow.webContents.send(IPC.BROWSER_URL_CHANGED, u);
   } catch (_) {}
+  // Same reason for Back: the view keeps its history across a renderer reload, but no
+  // navigation fires afterwards, so the button would sit disabled over a real history.
+  sendNavState();
 });
 
 
