@@ -1453,32 +1453,15 @@ const TOOL_ATTACH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18
 // own way. Deliberately NOT part of applyLenses: persona and caveman are global lenses that
 // ride on every message, and "these values are approximate" is meaningless on a plain chat
 // message that carries no measured values.
-let intentMode = localStorage.getItem('cathode-intent') === '1';
 const INTENT_DIRECTIVE = [
-  'The CSS values below are a sketch, not a specification. They came from direct manipulation',
-  'in a live preview, so treat them as intent — the direction and rough magnitude of the change',
-  'I want, not literal numbers to paste in.',
+  'Treat these CSS values as rough visual intent, not strict specs. Reproduce the effect using',
+  'project standards:',
   '',
-  'Reproduce the same visual effect the way this project already does things:',
-  '- Prefer existing design tokens, CSS variables, spacing/type scales, and utility or component',
-  '  classes over raw values. Where a sketched value is close to an existing step, use that step.',
-  '- Apply the change at the level that owns this element — its component or stylesheet — not as',
-  '  an inline style on a single node.',
-  '- Keep the result visually equivalent to the sketch. If doing it properly means a noticeably',
-  '  different result, do it properly and tell me what you changed and why.',
+  '- Snap raw values to the nearest existing design tokens, variables, or utility classes.',
+  '- Apply changes at the component or stylesheet level (no inline styles).',
+  '- Maintain visual equivalence. If doing it "the right way" noticeably changes the result,',
+  '  explain why.',
 ].join('\n');
-const intentControls = [];
-function setIntentMode(on) {
-  intentMode = !!on;
-  try { localStorage.setItem('cathode-intent', intentMode ? '1' : '0'); } catch (_) {}
-  // Every tool panel has its own bar; one switch, so they can't disagree.
-  for (let i = intentControls.length - 1; i >= 0; i--) {
-    const b = intentControls[i];
-    if (!b.isConnected) { intentControls.splice(i, 1); continue; }
-    b.classList.toggle('on', intentMode);
-    b.setAttribute('aria-checked', intentMode ? 'true' : 'false');
-  }
-}
 
 function makeToolPersonaControl() {
   const wrap = personaWrap.cloneNode(true);
@@ -1534,29 +1517,40 @@ function makeToolComposerBar(foot) {
   const chips = document.createElement('div');
   chips.className = 'tp-attach-chips';
 
-  // Label + the design system's switch (.view-toggle / .vt-label / .vt-switch), the same
-  // component the Usage/System toggles and the Auto Handoff row use — so the label picks
-  // up its on/off colour from `.view-toggle:has(.vt-switch.on)` for free.
-  const intentWrap = document.createElement('div');
-  intentWrap.className = 'view-toggle tp-intent-wrap';
-  intentWrap.title = 'Send these values as intent, not exact numbers — the agent reproduces the effect using the project\'s own tokens, scales and components.';
-  const intentLabel = document.createElement('span');
-  intentLabel.className = 'vt-label';
-  intentLabel.textContent = 'Send as Intent';
-  const intentBtn = document.createElement('button');
-  intentBtn.type = 'button';
-  intentBtn.className = 'vt-switch' + (intentMode ? ' on' : '');
-  intentBtn.setAttribute('role', 'switch');
-  intentBtn.setAttribute('aria-checked', intentMode ? 'true' : 'false');
-  intentBtn.innerHTML = '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span>';
-  intentWrap.append(intentLabel, intentBtn);
-  // The whole control is the hit target — clicking the label toggles too.
-  intentWrap.addEventListener('click', (e) => { e.stopPropagation(); setIntentMode(!intentMode); });
-  intentControls.push(intentBtn);
-
-  bar.append(attachBtn, persona.wrap, intentWrap, chips);
+  bar.append(attachBtn, persona.wrap, chips);
   foot.insertBefore(bar, foot.firstChild);
   registerPersonaControl(persona);
+
+  // "Send as Intent" is a second send, not a mode — so it sits between Cancel and Send
+  // and sends the same message with the intent framing in front of it. As a switch it
+  // was sticky state you had to remember you had left on; as a button the choice is made
+  // at the moment of sending, which is the only moment it means anything.
+  const sendBtn = foot.querySelector('.pp-btn-primary');
+  if (sendBtn && sendBtn.parentElement) {
+    const intentBtn = document.createElement('button');
+    intentBtn.type = 'button';
+    intentBtn.className = 'pp-btn pp-btn-intent';
+    intentBtn.textContent = 'Send as Intent';
+    intentBtn.title = 'Send these values as intent, not exact numbers — the agent reproduces the effect using the project\'s own tokens, scales and components.';
+    intentBtn.disabled = sendBtn.disabled;
+    sendBtn.parentElement.insertBefore(intentBtn, sendBtn);
+    // Some panels enable their primary only once there is something to send (the
+    // component panel waits for a pick), so follow it rather than offering an intent
+    // send where a plain send isn't on offer.
+    new MutationObserver(() => { intentBtn.disabled = sendBtn.disabled; })
+      .observe(sendBtn, { attributes: true, attributeFilter: ['disabled'] });
+    let viaIntent = false;
+    // Capture, so this runs before the panel's own handler: clicking Send directly clears
+    // any arming left over from an intent click whose send then bailed out.
+    sendBtn.addEventListener('click', () => { if (!viaIntent) foot._intentOnce = false; }, true);
+    intentBtn.addEventListener('click', () => {
+      if (intentBtn.disabled) return;
+      foot._intentOnce = true;
+      viaIntent = true;
+      // Reuse the panel's own send path rather than duplicating ten bespoke ones.
+      try { sendBtn.click(); } finally { viaIntent = false; }
+    });
+  }
 
   const baseOf = (p) => String(p || '').split(/[\\/]/).pop();
   let attach = [];   // [{ kind:'file', path }]
@@ -1601,7 +1595,10 @@ function decorateToolInstruction(instruction, foot) {
   const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
   if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
   // Framing goes first: the agent should know the numbers are a sketch before it reads them.
-  if (intentMode) text = INTENT_DIRECTIVE + (text ? '\n\n' + text : '');
+  if (foot && foot._intentOnce) {
+    foot._intentOnce = false;   // one send, not a mode
+    text = INTENT_DIRECTIVE + (text ? '\n\n' + text : '');
+  }
   return applyLenses(text);
 }
 
