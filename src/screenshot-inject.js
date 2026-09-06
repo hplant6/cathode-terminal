@@ -55,40 +55,60 @@ function getScreenshotScript() {
 
     let drawing = false, startX = 0, startY = 0;
 
-    overlay.addEventListener('mousedown', (e) => {
+    // Keep a drag inside the viewport. The pointer can leave the overlay entirely — the
+    // window's own resize border owns the outermost pixels, and the view is inset from
+    // the window edge — so clamp rather than let a stray coordinate poison the rect.
+    const clampX = (v) => Math.max(0, Math.min(window.innerWidth,  v));
+    const clampY = (v) => Math.max(0, Math.min(window.innerHeight, v));
+    const rectOf = (e) => {
+      const cx = clampX(e.clientX), cy = clampY(e.clientY);
+      return { x: Math.min(startX, cx), y: Math.min(startY, cy),
+               w: Math.abs(cx - startX), h: Math.abs(cy - startY) };
+    };
+
+    // Pointer events with capture, not mouse events on the overlay. Bound to the overlay,
+    // a drag that wandered off it never delivered its mouseup: the drag stayed open and
+    // the capture was silently stranded. That reads as a dead band around the edges, and
+    // worst at the corners, where you can leave the overlay in both axes at once.
+    // setPointerCapture routes move/up back here wherever the pointer actually goes.
+    overlay.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
+      try { overlay.setPointerCapture(e.pointerId); } catch (_) {}
       drawing = true;
-      startX = e.clientX; startY = e.clientY;
+      startX = clampX(e.clientX); startY = clampY(e.clientY);
       sel.style.left = startX + 'px'; sel.style.top = startY + 'px';
       sel.style.width = '0'; sel.style.height = '0';
       sel.style.boxShadow = '0 0 0 9999px rgba(0,0,0,0.48)';
       sel.style.display = 'block';
     });
 
-    overlay.addEventListener('mousemove', (e) => {
+    overlay.addEventListener('pointermove', (e) => {
       if (!drawing) return;
-      const x = Math.min(startX, e.clientX);
-      const y = Math.min(startY, e.clientY);
-      const w = Math.abs(e.clientX - startX);
-      const h = Math.abs(e.clientY - startY);
-      sel.style.left = x + 'px'; sel.style.top = y + 'px';
-      sel.style.width = w + 'px'; sel.style.height = h + 'px';
-      lbl.textContent = w + ' × ' + h;
-      lbl.style.left = x + 'px';
-      lbl.style.top  = (y - 18) + 'px';
+      const r = rectOf(e);
+      sel.style.left = r.x + 'px'; sel.style.top = r.y + 'px';
+      sel.style.width = r.w + 'px'; sel.style.height = r.h + 'px';
+      lbl.textContent = r.w + ' × ' + r.h;
+      lbl.style.left = r.x + 'px';
+      lbl.style.top  = (r.y - 18) + 'px';
       lbl.style.display = 'block';
     });
 
-    overlay.addEventListener('mouseup', (e) => {
+    function finish(e) {
       if (!drawing) return;
       drawing = false;
-      const x = Math.min(startX, e.clientX);
-      const y = Math.min(startY, e.clientY);
-      const w = Math.abs(e.clientX - startX);
-      const h = Math.abs(e.clientY - startY);
-      if (w < 10 || h < 10) { done(null); return; }
-      done({ x, y, width: w, height: h, mouseUpX: e.clientX, mouseUpY: e.clientY });
-    });
+      try { overlay.releasePointerCapture(e.pointerId); } catch (_) {}
+      const r = rectOf(e);
+      // 3px, not 10. The old floor quietly refused anything thin — a divider, a single
+      // line of text, a narrow icon strip — and refused it by cancelling, so the tool
+      // looked broken rather than fussy. This only needs to tell a drag from a click.
+      if (r.w < 3 || r.h < 3) { done(null); return; }
+      done({ x: r.x, y: r.y, width: r.w, height: r.h, mouseUpX: clampX(e.clientX), mouseUpY: clampY(e.clientY) });
+    }
+    overlay.addEventListener('pointerup', finish);
+    // The capture can be broken out from under us (a system gesture, the window losing
+    // focus). Settle with what was drawn instead of leaving the drag half-open forever.
+    overlay.addEventListener('pointercancel', finish);
 
     function onEsc(e) { if (e.key === 'Escape') done(null); }
     document.addEventListener('keydown', onEsc, true);
