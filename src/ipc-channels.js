@@ -63,6 +63,7 @@ const IPC = Object.freeze({
   APP_CHECK_UPDATES: 'app-check-updates',
   APP_INSTALL_UPDATE: 'app-install-update',
   APP_VERSION: 'app-version',
+  RELEASE_NOTES: 'release-notes',   // What's New: bundled changelog entries between two versions
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
   BROWSER_BACK: 'browser-back',         // step back through the browser view's own history
@@ -128,7 +129,8 @@ const IPC = Object.freeze({
   CHECK_PROJECT_FILE: 'check-project-file',   // does <active project cwd>/<name> exist? (handoff brief wait)
   GET_RATE_LIMITS: 'get-rate-limits',
   GET_USAGE: 'get-usage',
-  GET_NOUS_CREDITS: 'get-nous-credits',   // Hermes: Nous Portal credit balance (read through Hermes' own auth)
+  GET_NOUS_CREDITS: 'get-nous-credits',
+  PICK_PANEL_DROP_SEL: 'pick-panel-drop-sel',   // Box/Lasso: a selection chip was removed → drop that pick's outline   // Hermes: Nous Portal credit balance (read through Hermes' own auth)
   LOCAL_MODELS: 'local-models',               // model tags pulled locally (Ollama)
   MARKER_CANCEL: 'marker-cancel',
   MARKER_CLEAR: 'marker-clear',

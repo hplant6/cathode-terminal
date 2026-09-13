@@ -70,6 +70,7 @@
       "!node_modules/electron/**/*",
       "!node_modules/electron-builder/**/*",
       "!**/*.md",
+      "CHANGELOG.md",
       "!**/*.map",
       "!**/*.ts",
       "!**/.git/**/*",

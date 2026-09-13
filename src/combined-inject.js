@@ -607,10 +607,14 @@ function cathodeCombinedPage(OPTS) {
   // left-column panel (HTML side) can drive removal / clearing. Resolve
   // immediately with the serialized items the panel + formatter need.
   if (OPTS.panelMode) {
+    // Add to Selection: the previous session's elements (and their live edits) carry
+    // over and this pick's elements are appended after them, so every index the panel
+    // already holds still names the same element. No live session → a fresh selection.
+    const _prev = (OPTS.append && window.__cathodePanel && Array.isArray(window.__cathodePanel.items)) ? window.__cathodePanel : null;
     // ── The Page row ──────────────────────────────────────────────
     // Prepended so it lands at index 0 and every index the panel already speaks in
     // (style(i), readCSS(i), the highlight set) keeps lining up with this array.
-    if (OPTS.pageRow) {
+    if (OPTS.pageRow && !_prev) {   // an appended pick joins a panel that already has one
       const _html = document.documentElement;
       const _body = document.body;
       const _clear = (v) => !v || v === 'transparent' || v === 'rgba(0, 0, 0, 0)';
@@ -640,8 +644,18 @@ function cathodeCombinedPage(OPTS) {
         items.unshift(_info);
       }
     }
-    // Tear down a previous panel session (removes its scroll/resize listeners).
-    if (window.__cathodePanel) { try { window.__cathodePanel.clear(); } catch (e) {} }
+    let _base = 0;   // index of the first element this pick contributes
+    if (_prev) {
+      // Picking the same element twice would give it two rows fighting over one element.
+      const _known = new Set(_prev.items.map(function (it) { return it.el; }));
+      const _fresh = items.filter(function (it) { return !_known.has(it.el); });
+      _base = _prev.items.length;
+      items = _prev.items.concat(_fresh);
+      try { _prev.detach(); } catch (e) {}   // listeners only — its outlines and edits stay
+    } else if (window.__cathodePanel) {
+      // Tear down a previous panel session (removes its scroll/resize listeners).
+      try { window.__cathodePanel.clear(); } catch (e) {}
+    }
     const prev = document.getElementById('__cathode_panel_hl__');
     if (prev) prev.remove();
     const phost = document.createElement('div');
@@ -652,6 +666,11 @@ function cathodeCombinedPage(OPTS) {
     if (psel) {   // keep the drawn selection with its marching-ants border; hidden
                   // by default and revealed on hover of the Show Selection link
       psel.style.display = 'none';
+      // Un-id it so the NEXT pick's picker doesn't sweep it away: with Add to Selection
+      // every pick keeps its own outline, and Show/Hide Selection and clear() find them
+      // all by this attribute instead.
+      psel.removeAttribute('id');
+      psel.setAttribute('data-cathode-selection', String(OPTS.selId || ''));   // which selection chip this outline belongs to
       psel.querySelectorAll('rect,path').forEach(function (s) {
         s.setAttribute('fill', 'rgba(255,87,32,0.12)');
         s.setAttribute('stroke', '#FF5720');
@@ -690,6 +709,7 @@ function cathodeCombinedPage(OPTS) {
     // into one injected stylesheet. The selector repeats the attribute three times to
     // outweigh ordinary page rules without needing an id.
     const _editRules = {};
+    if (_prev && _prev.editRules) Object.assign(_editRules, _prev.editRules);   // per-state previews survive an appended pick
     function _flushEditRules() {
       let sheet = document.getElementById('__cathode_edit_css__');
       if (!sheet) {
@@ -714,6 +734,8 @@ function cathodeCombinedPage(OPTS) {
     window.addEventListener('scroll', pReflow, true);
     window.addEventListener('resize', pReflow, true);
     window.__cathodePanel = {
+      items,                  // live elements — an appended pick builds on these
+      editRules: _editRules,
       active: [],   // nothing highlighted until the panel hovers/opens a drawer
       set(idx) { this.active = idx; pDraw(idx); },
       // Live-edit a selected element from the left-column panel.
@@ -773,10 +795,19 @@ function cathodeCombinedPage(OPTS) {
           return { extracts, media };
         } finally { _xScope = prev; }
       },
+      // A selection chip was removed: its outline goes with it. Its elements stay in `items`
+      // (indices must not shift), they just stop being part of anything the panel shows.
+      dropSelection(selId) {
+        document.querySelectorAll('[data-cathode-selection="' + String(selId) + '"]').forEach(function (s) { s.remove(); });
+      },
+      // Hand-off to an appended pick: stop tracking scroll/resize, leave everything drawn.
+      detach() {
+        try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
+      },
       clear() {
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
         const h = document.getElementById('__cathode_panel_hl__'); if (h) h.remove();
-        const s = document.getElementById('__cathode_selection__'); if (s) s.remove();   // drop the 40% selection fill too
+        document.querySelectorAll('[data-cathode-selection], #__cathode_selection__').forEach(function (s) { s.remove(); });   // every pick's selection fill
         const ec = document.getElementById('__cathode_edit_css__'); if (ec) ec.remove();   // and the per-state preview rules
         document.querySelectorAll('[data-cathode-edit]').forEach(function (n) { n.removeAttribute('data-cathode-edit'); });
         window.__cathodePanel = null;
@@ -784,9 +815,9 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, descriptor, cssSelector, domPath, openTag, testId, markers, reactComponent, reactPath, tag, rect, debugSource, cssProps, structural, page, filtered }) =>
+    const serial = items.slice(_base).map(({ label, descriptor, cssSelector, domPath, openTag, testId, markers, reactComponent, reactPath, tag, rect, debugSource, cssProps, structural, page, filtered }) =>
       ({ label, descriptor, cssSelector, domPath, openTag, testId, markers: markers || [], reactComponent, reactPath, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural, page: !!page, filtered: !!filtered }));
-    return Promise.resolve({ panel: true, items: serial });
+    return Promise.resolve({ panel: true, items: serial, base: _base });   // only this pick's elements; base says where they start
   }
 
   // ── Hover highlight ─────────────────────────────────────────────
@@ -1874,7 +1905,7 @@ function cathodeCombinedPage(OPTS) {
   });
 }
 
-function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false, panelMode = false, pageRow = false }) {
+function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false, panelMode = false, pageRow = false, append = false, selId = 0 }) {
   const opts = {
     isClick: isClick === true,
     bounds: bounds || {},
@@ -1885,6 +1916,8 @@ function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevM
     wholePage: wholePage === true,
     panelMode: panelMode === true,
     pageRow: pageRow === true,
+    append: append === true,
+    selId: Number(selId) || 0,
     CSS_PROPS,
     PAGE_CSS_PROPS,
     Z,

@@ -4216,6 +4216,45 @@ ipcMain.on(IPC.APP_INSTALL_UPDATE, () => {
 });
 ipcMain.handle(IPC.APP_VERSION, () => app.getVersion());
 
+// ── What's New ────────────────────────────────────────────────────
+// Release notes come from the CHANGELOG bundled with the app (build.files re-includes it past
+// the *.md exclusion), so they're there offline and always match the build that's running.
+// Each entry leads with a bold title — that title is the bullet; the prose after it is for
+// the changelog, not a modal.
+function parseReleaseNotes(md) {
+  const releases = [];
+  let rel = null, grp = null;
+  for (const line of String(md).split(/\r?\n/)) {
+    let m;
+    if ((m = /^## \[([^\]]+)\](?:\s*-\s*(\S+))?/.exec(line))) {
+      rel = /^\d+(\.\d+)*$/.test(m[1]) ? { version: m[1], date: m[2] || '', groups: [] } : null;   // [Unreleased] isn't a release
+      if (rel) releases.push(rel);
+      grp = null;
+      continue;
+    }
+    if (!rel) continue;
+    if ((m = /^### (.+)/.exec(line))) { grp = { heading: m[1].trim(), items: [] }; rel.groups.push(grp); continue; }
+    if (grp && (m = /^- (.*)/.exec(line))) {
+      const bold = /^\*\*(.+?)\*\*/.exec(m[1]);
+      let t = bold ? bold[1] : m[1].split(/(?<=\.)\s/)[0];
+      t = t.replace(/`/g, '').replace(/\*\*/g, '').trim().replace(/[.,:;]$/, '');
+      if (t) grp.items.push(t);
+    }
+  }
+  return releases.filter(r => r.groups.some(g => g.items.length));
+}
+// since: the version this user last saw. Returns every release newer than that, up to the one
+// running, newest first. No since → just the running version's notes (the About link).
+ipcMain.handle(IPC.RELEASE_NOTES, (_, { since } = {}) => {
+  const current = app.getVersion();
+  let md = '';
+  try { md = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8'); }
+  catch (_) { return { current, releases: [] }; }
+  const releases = parseReleaseNotes(md).filter(r => !isNewerVersion(r.version, current)
+    && (since ? isNewerVersion(r.version, since) : r.version === current));
+  return { current, releases };
+});
+
 ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
   const act = id => () => uiSend(IPC.SETTINGS_ACTION, id);
   const menu = Menu.buildFromTemplate([
@@ -4465,9 +4504,14 @@ function pageSource() {
 }
 
 // ── IPC: element picker ───────────────────────────────────────────
-ipcMain.on(IPC.PICK_START, async (_, mode) => {
+let panelSelSeq = 0;   // Box/Lasso selection ids — one per pick, shared by its chip and its page outline
+ipcMain.on(IPC.PICK_START, async (_, mode, opts) => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
+  // Add to Selection only means something while a Box/Lasso panel is live on this view.
+  const append = !!(opts && opts.append) && (mode === 'box' || mode === 'lasso')
+    && !!pendingPanelPick && pendingPanelPick.view === view;
+  const selId = (mode === 'box' || mode === 'lasso') ? ++panelSelSeq : 0;
   try {
     // Phase 1: user draws selection
     const picked = await view.webContents.executeJavaScript(getPickerScript(mode));
@@ -4488,6 +4532,8 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
         aiDevMode: mode === 'aidev',
         wholePage: wholePage === true,
         panelMode: usePanel,
+        append,
+        selId,
         pageRow: mode === 'box' || mode === 'lasso',   // the Page row is the left-column panel's; Extract has its own
       })
     );
@@ -4495,6 +4541,9 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
     if (usePanel) {
       if (!result || !result.items || !result.items.length) {
         uiSend(IPC.PICK_CANCELLED);
+        // An appended pick that found nothing new leaves the panel exactly as it was —
+        // clearing here would tear down the live session its drawers are still editing.
+        if (append) return;
         await clearPanelHighlight(view);
         return;
       }
@@ -4509,10 +4558,14 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
         await ensureCDP();
         cssRefs = await getCSSSourceRefs({ cx, cy }).catch(() => []);
       }
-      pendingPanelPick = { view, items: result.items, cssRefs };
+      if (append && result.base > 0 && pendingPanelPick) {
+        pendingPanelPick = { view, items: pendingPanelPick.items.concat(result.items), cssRefs: (pendingPanelPick.cssRefs || []).concat(cssRefs) };
+      } else {
+        pendingPanelPick = { view, items: result.items, cssRefs };
+      }
       statesView = view; resetStatesCache();   // States rows force pseudo-classes in this view
       const toolLabel = mode === 'lasso' ? 'Lasso Select' : 'Box Select';
-      uiSend(IPC.PICK_PANEL_OPEN, { items: result.items, tool: toolLabel });   // full items incl. cssProps/debugSource
+      uiSend(IPC.PICK_PANEL_OPEN, { items: result.items, tool: toolLabel, base: result.base || 0, selId });   // full items incl. cssProps/debugSource
       return;   // panel stays open; result is finalized via pick-panel-send/-cancel
     }
 
@@ -4569,6 +4622,11 @@ ipcMain.on(IPC.PICK_PANEL_UPDATE, async (_, { active } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
   try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
+});
+ipcMain.on(IPC.PICK_PANEL_DROP_SEL, async (_, { selId } = {}) => {
+  const p = pendingPanelPick;
+  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.dropSelection(${Number(selId) || 0})`); } catch (_) {}
 });
 // Live style edit from a drawer → apply to the actual page element.
 ipcMain.on(IPC.PICK_PANEL_STYLE, async (_, { i, prop, value, state } = {}) => {
@@ -4656,7 +4714,8 @@ async function clearSelectionOverlay(view) {
   } catch (_) {}
 }
 async function captureSelectionShot(view, items) {
-  const rects = (items || []).map((it, i) => ({ ...(it.rect || {}), n: i + 1 })).filter(r => r.w > 0 && r.h > 0);
+  const tags = itemTags(items);
+  const rects = (items || []).map((it, i) => ({ ...(it.rect || {}), n: tags[i] })).filter(r => r.w > 0 && r.h > 0);
   if (!rects.length) return null;
   let box = null;
   try {
@@ -4714,7 +4773,7 @@ ipcMain.on(IPC.EXTRACT_PANEL_HIGHLIGHT, async (_, { active } = {}) => {
 ipcMain.on(IPC.TOGGLE_PAGE_SELECTION, (_, { visible } = {}) => {
   const view = getActivePickView();
   if (!view || view.webContents.isDestroyed()) return;
-  view.webContents.executeJavaScript(`(function(){var s=document.getElementById('__cathode_selection__');if(s)s.style.display=${visible ? "''" : "'none'"};})()`).catch(() => {});
+  view.webContents.executeJavaScript(`(function(){document.querySelectorAll('[data-cathode-selection], #__cathode_selection__').forEach(function(s){s.style.display=${visible ? "''" : "'none'"};});})()`).catch(() => {});   // every pick's outline, not just the latest
 });
 // Per-element extraction: each entry has its own keys/media chosen in its drawer,
 // extracted independently (scoped to that element), then merged into one message.
@@ -5517,6 +5576,18 @@ function renderExtract(key, data) {
   }
 }
 
+// Tags for a list of picked items, shared by the message and the screenshot badges so the
+// two always agree. Box/Lasso elements are tagged by selection — 1.1, 1.2, 2.1… — matching the
+// [Selection N] placeholders in the instruction; the Page Properties row is "Page"; items from
+// tools without selections keep plain 1, 2….
+function itemTags(items) {
+  const per = new Map(); let plain = 0;
+  return (items || []).map(it => {
+    if (it && it.page) return 'Page';
+    if (it && it.sel) { const k = (per.get(it.sel) || 0) + 1; per.set(it.sel, k); return `${it.sel}.${k}`; }
+    return String(++plain);
+  });
+}
 function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media = null, mediaSummary = null, pageUrl = null, shot = null }) {
   // ── Extract mode: the app already read the live page; hand the agent the
   // actual data / downloaded files (it should NOT re-fetch — this is the
@@ -5576,7 +5647,9 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
 
   // ── Standard pick mode format ─────────────────────────────────────
   const lines = ['───── Selected Elements ─────'];
+  const tags = itemTags(items);
   lines.push(`Live elements I picked in ${pageSource()}${pageUrl ? ` — ${pageUrl}` : ''}. Find each element below in the source code and update it. A value shown as "prop: A → B" means change that property from A to B; lines marked "(current)" are context, not changes to make.`);
+  if (items.some(it => it.sel)) lines.push('My instruction refers to what I picked as [Selection 1], [Selection 2]…. Each selection\'s elements are listed under its heading below and tagged 1.1, 1.2, 2.1… (the same tags as in the screenshot). A selection with no changes is there for reference — its values are all marked (current), so match against them rather than editing it.');
   lines.push('');
   lines.push('To locate each element, use the strongest handle first: a test id (data-testid and friends) is usually a 1:1 match in source; the opening tag shown under each bullet is greppable as a literal string; the React component chain narrows the file. The selector on the bullet line itself is a display label and is often NOT unique — use the "path:" line to disambiguate in the DOM.');
   if (shot) {
@@ -5585,10 +5658,10 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
     lines.push('Read that image to see what these elements actually look like and how they relate on the page.');
   }
 
-  items.forEach((item, i) => {
+  const pushItem = (item, i) => {
     lines.push('');
-    // Identity line: number ties the item to its outline in the screenshot.
-    lines.push(`• [${i + 1}] ${item.cssSelector || item.label || 'element'}`);
+    // Identity line: the tag ties the item to its outline in the screenshot.
+    lines.push(`• [${tags[i]}] ${item.cssSelector || item.label || 'element'}`);
     const meta = [];
     if (item.descriptor) meta.push(item.descriptor);
     if (item.label && item.label !== item.cssSelector) meta.push(`“${item.label}”`);
@@ -5607,7 +5680,22 @@ function formatSourceMessage({ items, cssRefs, instruction, extracts = [], media
     if (item.selectedCSS && item.selectedCSS.length > 0) {
       for (const css of item.selectedCSS) lines.push(`    ${css}`);
     }
+  };
+  // Page row first, then each selection under a heading that matches its placeholder in the
+  // instruction, then anything picked without a selection (other tools).
+  const bySel = new Map(), loose = [];
+  items.forEach((it, i) => {
+    if (it.sel && !it.page) { if (!bySel.has(it.sel)) bySel.set(it.sel, []); bySel.get(it.sel).push(i); }
+    else loose.push(i);
   });
+  loose.filter(i => items[i].page).forEach(i => pushItem(items[i], i));
+  [...bySel.keys()].sort((a, b) => a - b).forEach(n => {
+    const first = items[bySel.get(n)[0]];
+    lines.push('');
+    lines.push(`[Selection ${n}]${first && first.selLabel ? ` — “${first.selLabel}”` : ''}`);
+    bySel.get(n).forEach(i => pushItem(items[i], i));
+  });
+  loose.filter(i => !items[i].page).forEach(i => pushItem(items[i], i));
 
   if (cssRefs.length > 0) {
     lines.push('');

@@ -437,6 +437,9 @@ html, body {
    the idle cards beside it; the min-height (two cards + the grid gap) keeps it that tall in
    a single-column layout, where there are no neighbours to set the row heights. */
 .mc-card-active { grid-row: span 2; min-height: calc(440px * 2 + 24px); }
+/* Its screenshot shows the whole frame at 16:9 rather than the idle cards' 222px crop —
+   the card has the height for it. flex-shrink:0 so the server table gives way, not this. */
+.mc-card-active .mc-preview { height: auto; aspect-ratio: 16 / 9; flex-shrink: 0; }
 
 /* Header (title/path · badge/last-edit) */
 .mc-hd { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; padding: 10px; border-radius: 12px; }
@@ -633,6 +636,29 @@ html, body {
 .about-logo svg path { fill: var(--spec-text); }
 .about-version { font-size: 12px; font-family: var(--font-mono); color: var(--text-dim); letter-spacing: 0.03em; }
 .about-by { font-size: 12px; color: var(--text-dim); opacity: 0.8; margin-top: 7px; }
+.about-whats-new {
+  width: auto; height: auto; padding: 0; margin-top: 16px; box-shadow: none; background: none; border: none; cursor: pointer;
+  font: 11px var(--font-mono); color: var(--spec-text-dim); text-decoration: underline; text-underline-offset: 2px;
+}
+.about-whats-new:hover { background: none; color: var(--spec-accent); }
+/* What's New — the About header, then the update's changes beneath it, left-aligned. */
+.whats-new-box { width: 520px; max-width: 94vw; }
+.whats-new-title {
+  margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--spec-structural);   /* shade 3 — divides the About header from the list */
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 12px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text);
+}
+.whats-new-list { margin-top: 10px; max-height: 46vh; overflow-y: auto; text-align: left; padding-right: 4px; }
+.wn-release + .wn-release { margin-top: 18px; }
+.wn-release-head { margin-bottom: 4px; font: 600 11px var(--font-mono); color: var(--spec-text-dim); }
+.wn-group-head {
+  margin: 12px 0 4px; font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim);
+}
+.wn-list { margin: 0; padding-left: 18px; }
+.wn-list li { margin: 4px 0; font-size: 12px; line-height: 1.5; color: var(--spec-text); }
+.wn-list li::marker { color: var(--spec-accent); }
+.whats-new-actions { margin-top: 18px; justify-content: center; }
 /* Report a Performance Issue modal */
 .perf-box { width: 560px; max-width: 94vw; }
 /* Localhost server scanner modal */
@@ -3135,6 +3161,7 @@ html, body {
   transition: background 0.12s, color 0.12s;
 }
 .pp-new-sel:hover { background: #E64A1C; color: #fff; }
+
 .pp-new-wrap { margin-left: auto; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: 10px; }
 .pp-toggle-sel {
   width: auto; height: auto; min-width: 0; padding: 0; background: none; border: none; box-shadow: none;
@@ -3504,6 +3531,30 @@ html, body {
   font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;
 }
 #pick-panel-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 — matches the chat placeholder */
+/* It's a contenteditable, so the textarea's own behaviours are rebuilt: wrapping, scrolling,
+   and a placeholder while it holds neither text nor chips. */
+#pick-panel-textarea.pp-editor { white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; cursor: text; }
+#pick-panel-textarea.pp-editor.is-empty::before { content: attr(data-placeholder); color: var(--spec-structural); pointer-events: none; }
+/* A selection chip inside the sentence — the composer's file chip, sized to sit on a line of
+   12px text. The one whose elements the list is showing carries the accent. */
+.pp-sel-chip { vertical-align: middle; margin: 0 2px; padding: 2px 6px 2px 9px; gap: 6px; cursor: pointer; user-select: none; line-height: 16px; }
+.pp-sel-chip:hover { border-color: var(--spec-text-faint); }
+.pp-sel-chip.active { border-color: var(--accent); color: var(--spec-text); }
+.pp-sel-chip .chip-label { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+/* Remove icon, right side of the chip. Sized explicitly: it's the only way out of a chip
+   short of backspacing over it, so it must never collapse to nothing. */
+.pp-sel-chip .pp-chip-x {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 16px; height: 16px; margin-right: -2px; border-radius: 50%;
+  color: var(--spec-text-dim); cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.pp-sel-chip .pp-chip-x svg { display: block; }
+.pp-sel-chip .pp-chip-x:hover { color: var(--spec-text); background: var(--spec-structural); }
+/* Add Selection in the composer toolbar — a .tp-persona-btn like its neighbour; only its
+   armed state is its own, in the accent the persona button uses for "on". */
+.tp-add-sel svg { flex-shrink: 0; }
+.tp-add-sel.adding, .tp-add-sel.adding:hover { color: var(--spec-accent); }
 /* Custom resize handle, upper-right of the input (replaces the native grip) */
 .tp-resize {
   position: absolute; top: 16px; right: 12px; z-index: 2;   /* sits in the composer bar, top-right (like the main input) */

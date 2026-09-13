@@ -269,7 +269,8 @@
         </div>
         <div id="pick-panel-list"></div>
         <div id="pick-panel-foot" class="tp-foot">
-          <textarea id="pick-panel-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <!-- An editor rather than a textarea so selections can sit in the sentence as chips. -->
+          <div id="pick-panel-textarea" class="pp-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button id="pick-panel-resize" class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div id="pick-panel-btns">
             <button id="pick-panel-cancel-btn" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -1385,6 +1386,22 @@
       </div>
       <div class="about-version" id="about-version">Version …</div>
       <div class="about-by">by Hplant6</div>
+      <button id="about-whats-new" class="about-whats-new" type="button">What's new</button>
+    </div>
+  </div>
+
+  <!-- What's New — opens once after an update; top matches About -->
+  <div id="whats-new-modal" class="modal-backdrop">
+    <div class="modal-box about-box whats-new-box">
+      <button id="whats-new-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div id="whats-new-logo"></div>
+      <div class="about-version" id="whats-new-version">Version …</div>
+      <div class="about-by">by Hplant6</div>
+      <div class="whats-new-title">What's new</div>
+      <div class="whats-new-list" id="whats-new-list"></div>
+      <div class="modal-actions whats-new-actions">
+        <button class="modal-btn-confirm" id="whats-new-done" type="button">Got it</button>
+      </div>
     </div>
   </div>
 

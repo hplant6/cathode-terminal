@@ -59,6 +59,7 @@ const LS = {
   projects:       'cathode-projects',               // project registry [{id,name,rootDir,lastActiveAt}]
   activeProject:  'cathode-active-project',          // id of the active project
   pickShowAll:    'cathode-pick-show-all',           // Box/Lasso: show the elements the scan ranked out
+  lastSeenVersion: 'cathode-last-seen-version',      // What's New: the app version this user last launched
 };
 
 // First-run UI defaults — seeded once, before the panels below read these keys,
@@ -1637,7 +1638,7 @@ function wireFileDrop(zone, onPaths) {
 }
 
 function makeToolComposerBar(foot) {
-  const ta = foot.querySelector('textarea');
+  const ta = foot.querySelector('textarea, .pp-editor');   // the Box/Lasso input is an editor, not a textarea
   if (!ta || foot._composerBar) return foot._composerBar || null;
 
   const bar = document.createElement('div');
@@ -1654,7 +1655,21 @@ function makeToolComposerBar(foot) {
   const chips = document.createElement('div');
   chips.className = 'tp-attach-chips';
 
-  bar.append(attachBtn, persona.wrap, chips);
+  bar.append(attachBtn, persona.wrap);
+  // Box/Lasso: Add Selection sits with the other things you put into the message. What you
+  // draw lands as a chip at the cursor in the instruction (initPickPanel wires it by id).
+  if (foot.id === 'pick-panel-foot') {
+    const addSel = document.createElement('button');
+    addSel.type = 'button';
+    addSel.id = 'pick-panel-add';
+    addSel.className = 'tp-persona-btn tp-add-sel';   // the toolbar's button style — same as the persona dropdown beside it
+    addSel.title = 'Draw another selection — it is inserted at the cursor in your instruction';
+    // viewBox cropped to the drawn plus (caps included): the uncropped 18-unit box left ~2px of
+    // empty icon inside the left padding, so the button looked padded more on that side.
+    addSel.innerHTML = '<svg viewBox="2.75 2.75 12.5 12.5" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11"/></svg><span class="tp-persona-label">Add Selection</span>';
+    bar.append(addSel);
+  }
+  bar.append(chips);
   foot.insertBefore(bar, foot.firstChild);
   registerPersonaControl(persona);
 
@@ -2873,7 +2888,7 @@ document.querySelectorAll('select.modal-input').forEach(enhanceSelect);
 // Shared tool-panel footer: drag any .tp-resize handle to size its .tp-foot
 // textarea (up → taller). One wiring for every menu that uses the shared footer.
 document.querySelectorAll('.tp-resize').forEach(handle => {
-  const ta = handle.closest('.tp-foot')?.querySelector('textarea');
+  const ta = handle.closest('.tp-foot')?.querySelector('textarea, .pp-editor');
   if (!ta) return;
   let startY = 0, startH = 0;
   const onMove = (e) => {
@@ -4598,6 +4613,61 @@ async function openAboutModal() {
   } catch (_) {}
   aboutModalCtl.open();
 }
+
+// ── What's New modal — shown once after an update ─────────────────
+// The top is the About modal's (its logo is cloned, not duplicated in the markup); the
+// update's changes fall beneath as bullets, grouped the way the changelog groups them.
+const whatsNewModal = document.getElementById('whats-new-modal');
+const whatsNewCtl = whatsNewModal ? wireModal(whatsNewModal) : null;
+(function cloneAboutLogo() {
+  const logo = document.querySelector('#about-modal .about-logo');
+  const seat = document.getElementById('whats-new-logo');
+  if (logo && seat) seat.replaceWith(logo.cloneNode(true));
+})();
+document.getElementById('whats-new-close')?.addEventListener('click', () => whatsNewCtl?.close());
+document.getElementById('whats-new-done')?.addEventListener('click', () => whatsNewCtl?.close());
+document.getElementById('about-whats-new')?.addEventListener('click', () => { aboutModalCtl.close(); openWhatsNew(null); });
+// since: the version last seen (every release after it), or null for the running version's own.
+async function openWhatsNew(since) {
+  if (!whatsNewCtl) return false;
+  let r = null;
+  try { r = await ipcRenderer.invoke(IPC.RELEASE_NOTES, { since }); } catch (_) {}
+  if (!r || !r.releases || !r.releases.length) return false;
+  const verEl = document.getElementById('whats-new-version');
+  if (verEl) verEl.textContent = since ? `Updated to version ${r.current}` : `Version ${r.current}`;
+  const list = document.getElementById('whats-new-list');
+  list.innerHTML = '';
+  const fmtDate = (d) => { const t = new Date(d + 'T00:00:00'); return isNaN(t) ? '' : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); };
+  r.releases.forEach((rel) => {
+    const sec = document.createElement('div'); sec.className = 'wn-release';
+    // A version heading only earns its place when the update spans several releases.
+    if (r.releases.length > 1) {
+      const h = document.createElement('div'); h.className = 'wn-release-head';
+      h.textContent = rel.version + (rel.date ? ` · ${fmtDate(rel.date)}` : '');
+      sec.appendChild(h);
+    }
+    rel.groups.filter(g => g.items.length).forEach((g) => {
+      const gh = document.createElement('div'); gh.className = 'wn-group-head'; gh.textContent = g.heading;
+      const ul = document.createElement('ul'); ul.className = 'wn-list';
+      g.items.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+      sec.append(gh, ul);
+    });
+    list.appendChild(sec);
+  });
+  list.scrollTop = 0;
+  whatsNewCtl.open();
+  return true;
+}
+// On launch: a version newer than the one this user last ran means an update just landed.
+// A fresh install has nothing to compare against, so it only records the version.
+(async function showWhatsNewAfterUpdate() {
+  let v = '';
+  try { v = await ipcRenderer.invoke(IPC.APP_VERSION); } catch (_) { return; }
+  let last = null;
+  try { last = localStorage.getItem(LS.lastSeenVersion); localStorage.setItem(LS.lastSeenVersion, v); } catch (_) {}
+  if (!last || last === v) return;
+  setTimeout(() => { openWhatsNew(last); }, 1200);   // let the window settle before a modal lands on it
+})();
 
 // ── Report an Issue modal (Settings → Report an Issue) — collects diagnostics
 // (incl. an optional CPU capture for slowness) and opens a pre-filled GitHub issue ──
@@ -6362,7 +6432,7 @@ function applyPickCursor(mode) {
   document.documentElement.setAttribute('data-pick', mode || '');
 }
 
-function setPickMode(mode) {
+function setPickMode(mode, opts) {
   if (pickMode === mode) {
     // Toggle off: also dismiss the armed overlay in the page, not just the UI
     ipcRenderer.send(IPC.PICK_CANCEL);
@@ -6374,7 +6444,7 @@ function setPickMode(mode) {
   applyPickCursor(mode);
   document.querySelectorAll('.pick-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`btn-pick-${mode}`)?.classList.add('active');
-  ipcRenderer.send(IPC.PICK_START, mode);
+  ipcRenderer.send(IPC.PICK_START, mode, opts || null);   // opts.append: Add to Selection
 }
 
 document.getElementById('btn-pick-box')?.addEventListener('click',   () => setPickMode('box'));
@@ -6515,7 +6585,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const listEl      = document.getElementById('pick-panel-list');
   const filterSelect = document.getElementById('pick-panel-filter-select');
   const filterInput = document.getElementById('pick-panel-filter');
-  const textarea    = document.getElementById('pick-panel-textarea');
+  const editor      = document.getElementById('pick-panel-textarea');   // contenteditable: your instruction with selection chips in it
   const sendBtn     = document.getElementById('pick-panel-send');
   const cancelBtn   = document.getElementById('pick-panel-cancel-btn');
   const toggleSelBtn = document.getElementById('pick-panel-toggle-sel');
@@ -6601,7 +6671,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   // you have already put an edit on it, which hiding would quietly take out of the
   // message. Everything else in the panel (the list, the send count, the highlight, what
   // is sent) reads the list through this, so they can't disagree about what is here.
-  const visible = (r) => !r.removed && (!r.item.filtered || showAllItems || countChecked(r) > 0);
+  // Selections: one per pick, each shown as a chip in the instruction. The element list shows
+  // one selection at a time (whichever chip was last added or clicked) plus the Page row.
+  const selections = new Map();   // selId → { label, gone }  (gone: its chip was removed)
+  let activeSel = null;
+  const visible = (r) => !r.removed && !(r.sel != null && (!selections.has(r.sel) || selections.get(r.sel).gone))
+    && (!r.item.filtered || showAllItems || countChecked(r) > 0);
+  // …and of those, what the list is showing right now.
+  const inView = (r) => visible(r) && (r.item.page || r.sel === activeSel);
   let activeChip = null;
   let hovered = null;     // index of the drawer currently hovered
   let structuralExpanded = false;   // "Layout containers" group starts collapsed (see render)
@@ -6610,8 +6687,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   // skipped: its element is the page, so outlining it just draws ants round everything.
   function highlightSet() {
     const s = new Set();
-    rows.forEach((r, i) => { if (visible(r) && r.expanded && !r.item.page) s.add(i); });
-    if (hovered != null && rows[hovered] && visible(rows[hovered]) && !rows[hovered].item.page) s.add(hovered);
+    rows.forEach((r, i) => { if (inView(r) && r.expanded && !r.item.page) s.add(i); });
+    if (hovered != null && rows[hovered] && inView(rows[hovered]) && !rows[hovered].item.page) s.add(hovered);
     return [...s];
   }
   function pushHighlight() { ipcRenderer.send(IPC.PICK_PANEL_UPDATE, { active: highlightSet() }); }
@@ -7365,14 +7442,20 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     // mix, the containers collapse under one "Layout containers (N)" header so they
     // don't bury the elements you can actually restyle. A live filter forces them open.
     const filterActive = !!(activeChip || (filterInput.value || '').trim());
-    const grouping = rows.some(r => visible(r) && r.item.structural) && rows.some(r => visible(r) && !r.item.structural && !r.item.page);
+    const grouping = rows.some(r => inView(r) && r.item.structural) && rows.some(r => inView(r) && !r.item.structural && !r.item.page);
     const showStruct = !grouping || structuralExpanded || filterActive;
     let groupHeaderDone = false;
-    rows.forEach((row, i) => {
-      if (!visible(row)) return;
+    // Display order, not pick order: Page row, then elements, then layout containers — so
+    // an appended pick's elements don't land inside the previous pick's containers group.
+    // Indices stay the real ones; only the order they are drawn in changes.
+    const rank = (r) => (r.item.page ? 0 : r.item.structural ? 2 : 1);
+    const order = rows.map((_, i) => i).sort((a, b) => rank(rows[a]) - rank(rows[b]));
+    order.forEach((i) => {
+      const row = rows[i];
+      if (!inView(row)) return;
       if (grouping && row.item.structural && !groupHeaderDone) {
         groupHeaderDone = true;
-        const n = rows.filter(r => visible(r) && r.item.structural).length;
+        const n = rows.filter(r => inView(r) && r.item.structural).length;
         const gh = el('div', 'pp-group-head' + ((structuralExpanded || filterActive) ? ' open' : ''));
         gh.appendChild(el('span', 'pp-group-caret'));
         gh.appendChild(el('span', 'pp-group-label', 'Layout containers'));
@@ -7383,6 +7466,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       }
       const isPage = !!row.item.page;
       const drawer = el('div', 'pp-drawer' + (row.item.structural ? ' pp-structural' : '') + (isPage ? ' pp-page' : ''));
+      drawer.dataset.i = i;
       if (grouping && row.item.structural && !showStruct) drawer.style.display = 'none';
 
       const head  = el('div', 'pp-drawer-head');
@@ -7445,9 +7529,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         e.stopPropagation();
         row.removed = true;
         if (hovered === i) hovered = null;
-        // Removing the last picked element closes the panel. The Page row doesn't hold it
-        // open — it rode along with the selection, it isn't part of it.
-        if (!rows.some(r => visible(r) && !r.item.page)) { cancel(); return; }
+        // Removing a selection's last element removes the selection (and its chip). The Page
+        // row doesn't count — it rides along with every selection, it isn't part of one.
+        if (!rows.some(r => inView(r) && !r.item.page)) { removeSelection(activeSel); return; }
         pushHighlight();
         render();
       });
@@ -7460,8 +7544,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   // ── scope switch: show everything the scan found, not just its top-ranked ──
   function syncScope() {
-    const hidden = rows.filter(r => !r.removed && !visible(r)).length;
-    const shown  = rows.filter(r => visible(r) && !r.item.page).length;
+    const hidden = rows.filter(r => !r.removed && r.sel === activeSel && !visible(r)).length;   // the selection on show
+    const shown  = rows.filter(r => inView(r) && !r.item.page).length;
     showAllBtn?.classList.toggle('on', showAllItems);
     showAllBtn?.setAttribute('aria-checked', showAllItems ? 'true' : 'false');
     if (scopeCountEl) scopeCountEl.textContent = hidden ? `${hidden} hidden` : (showAllItems ? `${shown} found` : '');
@@ -7660,21 +7744,154 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   })();
   sharedColorPicker = colorPicker;   // expose for the theme-modal swatches
 
+  // ── selection chips in the instruction ────────────────────────
+  const SEL_GLYPH = '<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2.2 2.2" aria-hidden="true"><rect x="2.75" y="2.75" width="12.5" height="12.5" rx="1.5"/></svg>';
+  let savedRange = null;   // where the cursor was in the editor — Add Selection inserts there
+  document.addEventListener('selectionchange', () => {
+    const s = document.getSelection();
+    if (s && s.rangeCount && editor.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange();
+  });
+  const chipEls = () => [...editor.querySelectorAll('.pp-sel-chip')];
+  // Selection numbers are the chips' order in your text — what [Selection 1] means is
+  // whichever chip reads first, however the selections happened to be drawn.
+  const selNumbers = () => { const m = new Map(); chipEls().forEach(c => { const id = +c.dataset.sel; if (!m.has(id)) m.set(id, m.size + 1); }); return m; };
+  function selLabelFor(items) {
+    const els = items.filter(it => !it.page);
+    const lead = els.find(it => !it.structural && !it.filtered) || els.find(it => !it.filtered) || els[0];
+    let label = (lead && lead.label) || 'Selection';
+    if (label.length > 28) label = label.slice(0, 27) + '…';
+    const n = els.filter(it => !it.filtered).length;
+    return n > 1 ? `${label} +${n - 1}` : label;
+  }
+  // The instruction as text: each chip becomes its [Selection N] placeholder.
+  function editorText(nums) {
+    let out = '';
+    const walk = (node) => node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) out += n.data;
+      else if (n.nodeType === 1) {
+        if (n.classList.contains('pp-sel-chip')) { const k = nums && nums.get(+n.dataset.sel); if (k) out += `[Selection ${k}]`; }
+        else if (n.tagName === 'BR') out += '\n';
+        else { if (/^(DIV|P)$/.test(n.tagName) && out && !out.endsWith('\n')) out += '\n'; walk(n); }
+      }
+    });
+    walk(editor);
+    return out.replace(/ /g, ' ');
+  }
+  // Chips read "Selection 1", "Selection 2"… in the order they sit in the text — the same
+  // numbers the agent gets — so they renumber whenever a chip is added, removed or moved.
+  // What was actually picked lives in the tooltip.
+  function syncChipLabels() {
+    const nums = selNumbers();
+    chipEls().forEach((c) => {
+      const id = +c.dataset.sel;
+      const label = c.querySelector('.chip-label');
+      if (label) label.textContent = `Selection ${nums.get(id)}`;
+      const what = (selections.get(id) || {}).label;
+      c.title = `Selection ${nums.get(id)}${what ? ` — ${what}` : ''} · click to show its elements`;
+    });
+  }
+  function syncEmpty() {
+    editor.classList.toggle('is-empty', !chipEls().length && !editorText(null).trim());
+    syncChipLabels();   // every change to the chips passes through here
+  }
+  function syncChipActive() { chipEls().forEach(c => c.classList.toggle('active', +c.dataset.sel === activeSel)); }
+  function makeChip(id) {
+    const chip = document.createElement('span');
+    chip.className = 'composer-chip pp-sel-chip';
+    chip.contentEditable = 'false';
+    chip.dataset.sel = String(id);
+    fillChip(chip, SEL_GLYPH, 'Selection');   // numbered by syncChipLabels
+    // Remove icon on the right of the label.
+    const x = document.createElement('span');
+    x.className = 'pp-chip-x'; x.setAttribute('role', 'button'); x.title = 'Remove selection';
+    x.innerHTML = '<svg viewBox="0 0 18 18" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5l8 8M13 5l-8 8"/></svg>';
+    x.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); chip.remove(); syncEmpty(); removeSelection(id); });
+    chip.appendChild(x);
+    chip.addEventListener('mousedown', (e) => e.preventDefault());   // keep the cursor where it was
+    chip.addEventListener('click', () => activateSelection(id));
+    return chip;
+  }
+  // Put a selection's chip where the cursor is (or at the end), with a space after it to
+  // carry on typing into.
+  function insertChip(id) {
+    const chip = makeChip(id);
+    const space = document.createTextNode(' ');
+    let range = savedRange && editor.contains(savedRange.startContainer) ? savedRange : null;
+    if (range) { range.deleteContents(); range.insertNode(space); range.insertNode(chip); }
+    else { editor.append(chip, space); }
+    const after = document.createRange();
+    after.setStart(space, 1); after.collapse(true);
+    editor.focus();
+    const s = document.getSelection(); s.removeAllRanges(); s.addRange(after);
+    savedRange = after.cloneRange();
+    syncEmpty();
+  }
+  function activateSelection(id) {
+    if (!selections.has(id) || selections.get(id).gone) return;
+    activeSel = id;
+    hovered = null;
+    syncChipActive();
+    render();
+    pushHighlight();
+  }
+  // A chip is gone (✕, Backspace, or the selection emptied out): its elements drop out of the
+  // list and the message, and its outline leaves the page. No selections left → nothing to send.
+  function removeSelection(id) {
+    const sel = selections.get(id);
+    if (!sel || sel.gone) return;
+    sel.gone = true;
+    chipEls().filter(c => +c.dataset.sel === id).forEach(c => c.remove());
+    syncEmpty();
+    ipcRenderer.send(IPC.PICK_PANEL_DROP_SEL, { selId: id });
+    const left = [...selections.entries()].filter(([, s]) => !s.gone).map(([k]) => k);
+    if (!left.length) { cancel(); return; }
+    if (activeSel === id) activateSelection(left[left.length - 1]);
+    else { render(); pushHighlight(); }
+  }
+  // Typing can delete a chip (Backspace over it) or bring one back (undo): the selections
+  // follow whatever chips the text actually holds.
+  editor.addEventListener('input', () => {
+    const present = new Set(chipEls().map(c => +c.dataset.sel));
+    for (const [id, sel] of selections) {
+      if (!sel.gone && !present.has(id)) removeSelection(id);
+      else if (sel.gone && present.has(id)) { sel.gone = false; if (activeSel == null) activeSel = id; syncChipActive(); render(); pushHighlight(); }
+    }
+    syncEmpty();
+  });
+
+  // "Adding Selection" for as long as the draw tool is armed from this button.
+  function setAdding(on) {
+    const btn = document.getElementById('pick-panel-add');
+    if (!btn) return;
+    btn.classList.toggle('adding', !!on);
+    const label = btn.querySelector('.tp-persona-label');
+    if (label) label.textContent = on ? 'Adding Selection' : 'Add Selection';
+  }
+
   // ── open / close / send / cancel ──────────────────────────────
-  function open(items, tool) {
+  function newRow(item, selId, expanded) {
+    return { item, sel: item.page ? null : selId, removed: false, expanded, checked: {}, mods: {}, state: BASE, stateCSS: {}, changed: new Set(), userAdded: new Set() };
+  }
+  function open(items, tool, selId) {
     clearPickMode();
+    setAdding(false);
     colorPicker.hide();   // close() does this; a new selection rebuilds the same rows, so it has to as well
     if (tool) titleEl.textContent = tool;
     // checked/mods/stateCSS are keyed by state ('' = the element's resting style).
+    const id = selId || Date.now();
     const picked = items.filter(it => !it.page).length;   // the Page row rides along with every selection; it is not one of them
-    rows = items.map(item => ({ item, removed: false, expanded: !item.page && picked === 1, checked: {}, mods: {}, state: BASE, stateCSS: {}, changed: new Set(), userAdded: new Set() }));   // single selection → open by default
+    rows = items.map(item => newRow(item, id, !item.page && picked === 1));   // single element → open by default
+    selections.clear();
+    selections.set(id, { label: selLabelFor(items), gone: false });
+    activeSel = id;
     structuralExpanded = !rows.some(r => !r.item.structural && !r.item.page);   // if nothing paint-y was found, show the containers by default
     clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
     hovered = null;
     if (filterSelect) filterSelect.value = '';   // reset to "Filter: All"
     filterInput.value = '';
-    textarea.value = '';
+    editor.innerHTML = '';
+    savedRange = null;
     render();
     pushHighlight();         // nothing highlighted until hover/open
     panel.hidden = false;
@@ -7682,20 +7899,42 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (toggleSelBtn) toggleSelBtn.textContent = 'Show Selection';
     ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: false });
     document.getElementById('toolbar')?.classList.add('hidden-by-pick');   // hide the floating tool palette while the menu is open
-    setTimeout(() => textarea.focus(), 0);
+    setTimeout(() => { insertChip(id); syncChipActive(); }, 0);   // the first selection is the first thing in your instruction
+  }
+  // Add Selection landed: its rows join the list, its chip lands at the cursor, and the list
+  // switches to it. Nothing already staged — edits, ticks, other chips, your text — is touched.
+  function append(items, selId) {
+    clearPickMode();
+    setAdding(false);
+    colorPicker.hide();
+    const id = selId || Date.now();
+    const picked = items.filter(it => !it.page).length;
+    items.forEach(item => rows.push(newRow(item, id, picked === 1)));
+    selections.set(id, { label: selLabelFor(items), gone: false });
+    insertChip(id);
+    activateSelection(id);
+    ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible });   // the new outline follows the current Show/Hide state
   }
   function close() {
     clearStates();   // drop any forced pseudo-states on the page
+    setAdding(false);
     colorPicker.hide();
     panel.hidden = true;
     document.getElementById('toolbar')?.classList.remove('hidden-by-pick');
     hovered = null;
-    rows = []; listEl.innerHTML = ''; textarea.value = '';
+    rows = []; listEl.innerHTML = '';
+    editor.innerHTML = ''; savedRange = null;
+    selections.clear(); activeSel = null;
+    syncEmpty();
   }
   function resolvedItems() {
+    const nums = selNumbers();
+    // A selection you changed nothing on is there to be referred to ("match [Selection 1]"),
+    // so it goes with the styles it actually sets rather than as bare identity lines.
+    const edited = new Set(rows.filter(r => visible(r) && r.sel != null && countChecked(r)).map(r => r.sel));
     // The Page row is on every selection; it only belongs in the message once it carries
     // an edit, or every send would hand the agent a stray html/body bullet.
-    return rows.filter(r => visible(r) && !(r.item.page && !countChecked(r))).map(r => {
+    return rows.filter(r => visible(r) && !(r.item.page && !countChecked(r)) && (r.sel == null || nums.has(r.sel))).map(r => {
       const it = r.item;
       // Modified props read as a change ("prop: was → now"); selected-but-unchanged
       // props are marked current-value context so the agent doesn't "apply" them.
@@ -7718,17 +7957,25 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         if (!st) selectedCSS.push(...lines);
         else selectedCSS.push(`&:${st} {`, ...lines.map(l => '  ' + l), '}');
       };
-      emitState(BASE);
-      STATE_LIST.forEach(emitState);
-      return { label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector,
+      if (r.sel != null && !edited.has(r.sel) && !it.structural) {
+        (it.cssProps || []).filter(p => p.value && !isDefaultVal(p.name, p.value))
+          .forEach(p => selectedCSS.push(`${p.name}: ${p.value}   (current)`));
+      } else {
+        emitState(BASE);
+        STATE_LIST.forEach(emitState);
+      }
+      const sel = r.sel != null ? nums.get(r.sel) : null;
+      return { sel, selLabel: r.sel != null ? (selections.get(r.sel) || {}).label : null, page: !!it.page,
+      label: it.label, descriptor: it.descriptor, cssSelector: it.cssSelector,
       domPath: it.domPath, openTag: it.openTag, testId: it.testId, markers: it.markers,
       reactComponent: it.reactComponent, reactPath: it.reactPath,
       tag: it.tag, rect: it.rect, debugSource: it.debugSource, selectedCSS };
     });
   }
   function send() {
-    const _foot = textarea.closest('.tp-foot');
-    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), _foot), items: resolvedItems() });
+    const _foot = editor.closest('.tp-foot');
+    const instruction = editorText(selNumbers()).trim();
+    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(instruction, _foot), items: resolvedItems() });
     _foot?._composerBar?.clear();
     close();
   }
@@ -7741,6 +7988,15 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   cancelBtn.addEventListener('click', cancel);
   // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
   document.getElementById('pick-panel-new')?.addEventListener('click', () => { colorPicker.hide(); setPickMode(lastDrawMode); });
+  // Add Selection (composer toolbar): the same tool, but what you draw joins the message as a chip.
+  const addSelBtn = document.getElementById('pick-panel-add');
+  addSelBtn?.addEventListener('click', () => {
+    const arming = !addSelBtn.classList.contains('adding');   // a second click disarms (setPickMode toggles off)
+    colorPicker.hide();
+    setPickMode(lastDrawMode, { append: true });
+    setAdding(arming);
+  });
+  ipcRenderer.on(IPC.PICK_CANCELLED, () => setAdding(false));   // Escape, a pick that found nothing new, a toggle-off
   // Hover the link to preview the selection; leaving restores the pinned state.
   // Click pins it shown (or hides it again).
   toggleSelBtn?.addEventListener('mouseenter', () => ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: true }));
@@ -7750,15 +8006,20 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     toggleSelBtn.textContent = selVisible ? 'Hide Selection' : 'Show Selection';
     ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible });
   });
-  textarea.addEventListener('keydown', (e) => {
+  editor.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   });
   // Filter input counts as "typing" too — Escape there must not cancel the panel
   // and discard staged CSS edits (siblings whitelist their search inputs).
-  addPanelEscClose(panel, cancel, el => el === textarea || el === filterInput);
+  addPanelEscClose(panel, cancel, el => editor.contains(el) || el === filterInput);
 
-  ipcRenderer.on(IPC.PICK_PANEL_OPEN, (_, { items, tool }) => open(items || [], tool));
+  // An appended pick only merges if it lines up with the rows we hold; otherwise (the page
+  // navigated, the session was lost) it is treated as the fresh selection it really is.
+  ipcRenderer.on(IPC.PICK_PANEL_OPEN, (_, { items, tool, base, selId }) => {
+    if (base > 0 && !panel.hidden && base === rows.length) append(items || [], selId);
+    else open(items || [], tool, selId);
+  });
 })();
 
 // ── Resize tool panel (overtakes the chat column) ────────────────
