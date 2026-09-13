@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **macOS builds are back.** Neither 1.12.0 nor 1.13.0 shipped for the Mac: the build stopped while setting up code signing, with `SecKeychainUnlock: The user name or passphrase you entered is not correct`. electron-builder 26.15.3 unlocked its temporary signing keychain with the certificate's import password instead of the password it had generated for that keychain, so signing failed however the certificate was configured. The fix landed in electron-builder 26.16.1, which the build now uses, and the Mac installers are published again alongside Windows and Linux.
+
 ## [1.13.0] - 2026-09-13
 
 ### Added

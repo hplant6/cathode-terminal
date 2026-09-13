@@ -37,7 +37,7 @@
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
     "electron": "^41.9.2",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.16.1"
   },
   "build": {
     "appId": "com.cathode.terminal",
