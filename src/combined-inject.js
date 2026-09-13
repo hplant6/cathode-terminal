@@ -39,8 +39,23 @@ const CSS_PROPS = [
     'box-shadow','opacity','overflow','cursor','transform',
   ];
 
+// Properties offered on the panel's "Page" row. The page itself can never be
+// box-selected — full-viewport elements are skipped as candidates, deliberately, or
+// every drag would return the body — so html/body get a row of their own, built from
+// the handful of properties you actually set on a page rather than from the element
+// list above. Unlike CSS_PROPS these are NOT dropped when they sit at their default:
+// the page background is the thing people come here to set, and it is almost always
+// unset to begin with.
+const PAGE_CSS_PROPS = [
+    'background-color','background-image','background-size','background-position','background-repeat',
+    'color','font-family','font-size','line-height','letter-spacing',
+    'padding-top','padding-right','padding-bottom','padding-left',
+    'margin-top','margin-right','margin-bottom','margin-left',
+    'min-height','max-width','overflow',
+  ];
+
 function cathodeCombinedPage(OPTS) {
-  const { isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode, wholePage, CSS_PROPS, Z } = OPTS;
+  const { isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode, wholePage, CSS_PROPS, PAGE_CSS_PROPS, Z } = OPTS;
   ['__cathode_popup_host__', '__cathode_row_hl__'].forEach(id => {
     const e = document.getElementById(id); if (e) e.remove();
   });
@@ -193,10 +208,12 @@ function cathodeCombinedPage(OPTS) {
     return parts.join(' > ');
   }
 
-  function getInfo(el) {
+  // allowRoot is for the Page row only: html/body are excluded from ordinary picks
+  // (they are not what you drew a box around) but ARE what page-level styles live on.
+  function getInfo(el, allowRoot) {
     if (!el) return null;
     const tag = el.tagName.toLowerCase();
-    if (['html','body','head','script','style','meta','link','noscript'].includes(tag)) return null;
+    if (!allowRoot && ['html','body','head','script','style','meta','link','noscript'].includes(tag)) return null;
     const cls = typeof el.className === 'string'
       ? el.className.trim().split(/\s+/).slice(0, 2).join('.')
       : '';
@@ -322,9 +339,20 @@ function cathodeCombinedPage(OPTS) {
         c.info.structural = !_ownsPaint(c.el, cs);
         c.info.impact = _impact(c.el, c.r, cs, c.info.structural);
       }
-      const _ed = _cands.filter(c => !c.info.structural).sort((a, b) => b.info.impact - a.info.impact).slice(0, 24);
-      const _st = _cands.filter(c =>  c.info.structural).sort((a, b) => b.info.impact - a.info.impact).slice(0, 24);
-      items = _ed.concat(_st).map(c => c.info);
+      // Everything past the cut is FLAGGED, not dropped: the panel's "Show all elements"
+      // toggle reveals it, so an element the ranking thought little of is one switch away
+      // instead of a reason to draw the box again. Order still runs paint-y then
+      // structural, so the panel's "Layout containers" group stays one contiguous block.
+      // _KEEP is what the panel shows by default; the cap past it is how far "Show all"
+      // goes before a list stops being a list — typing in the property filter expands
+      // every row on screen, and each row is ~40 controls, so this is a real ceiling
+      // rather than a tidiness one.
+      const _KEEP = 24;
+      const _rank = (structural, cap) => _cands.filter(c => !!c.info.structural === structural)
+        .sort((a, b) => b.info.impact - a.info.impact)
+        .slice(0, cap)
+        .map((c, i) => { c.info.filtered = i >= _KEEP; return c.info; });
+      items = _rank(false, 72).concat(_rank(true, 48));
     }
   }
 
@@ -579,6 +607,39 @@ function cathodeCombinedPage(OPTS) {
   // left-column panel (HTML side) can drive removal / clearing. Resolve
   // immediately with the serialized items the panel + formatter need.
   if (OPTS.panelMode) {
+    // ── The Page row ──────────────────────────────────────────────
+    // Prepended so it lands at index 0 and every index the panel already speaks in
+    // (style(i), readCSS(i), the highlight set) keeps lining up with this array.
+    if (OPTS.pageRow) {
+      const _html = document.documentElement;
+      const _body = document.body;
+      const _clear = (v) => !v || v === 'transparent' || v === 'rgba(0, 0, 0, 0)';
+      // An edit only shows if it lands on whatever paints the canvas TODAY: body's
+      // background reaches the canvas only while the root has none, and the moment the
+      // root has one, body's own box paints over it. So follow the same rule the
+      // renderer does — body if body paints, the root otherwise (which also covers
+      // "nothing paints it", where the root is the one that fills the viewport).
+      const _pel = (_body && !_clear(getComputedStyle(_body).backgroundColor)) ? _body : _html;
+      const _info = _pel ? getInfo(_pel, true) : null;
+      if (_info) {
+        const _cs = getComputedStyle(_pel);
+        const _dark = /dark/.test(_cs.colorScheme || '');
+        _info.cssProps = PAGE_CSS_PROPS.map((name) => {
+          let value = (_cs.getPropertyValue(name) || '').trim();
+          // A transparent page background would hand the colour control alpha 0, where
+          // every colour you then picked would stay invisible. Nothing painting the
+          // canvas means you are looking at the browser's own default, so say so.
+          if (name === 'background-color' && _clear(value)) value = _dark ? 'rgb(18, 18, 18)' : 'rgb(255, 255, 255)';
+          return value ? { name, value } : null;
+        }).filter(Boolean);
+        _info.label = 'Page Properties';
+        _info.descriptor = 'the page itself (html/body-level styles)';
+        _info.page = true;
+        _info.structural = false;
+        _info.rect = null;   // it IS the page: a full-page rect would swallow the selection screenshot
+        items.unshift(_info);
+      }
+    }
     // Tear down a previous panel session (removes its scroll/resize listeners).
     if (window.__cathodePanel) { try { window.__cathodePanel.clear(); } catch (e) {} }
     const prev = document.getElementById('__cathode_panel_hl__');
@@ -723,8 +784,8 @@ function cathodeCombinedPage(OPTS) {
     };
     pDraw([]);
 
-    const serial = items.map(({ label, descriptor, cssSelector, domPath, openTag, testId, markers, reactComponent, reactPath, tag, rect, debugSource, cssProps, structural }) =>
-      ({ label, descriptor, cssSelector, domPath, openTag, testId, markers: markers || [], reactComponent, reactPath, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural }));
+    const serial = items.map(({ label, descriptor, cssSelector, domPath, openTag, testId, markers, reactComponent, reactPath, tag, rect, debugSource, cssProps, structural, page, filtered }) =>
+      ({ label, descriptor, cssSelector, domPath, openTag, testId, markers: markers || [], reactComponent, reactPath, tag, rect, debugSource, cssProps: cssProps || [], structural: !!structural, page: !!page, filtered: !!filtered }));
     return Promise.resolve({ panel: true, items: serial });
   }
 
@@ -1813,7 +1874,7 @@ function cathodeCombinedPage(OPTS) {
   });
 }
 
-function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false, panelMode = false }) {
+function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode = false, wholePage = false, panelMode = false, pageRow = false }) {
   const opts = {
     isClick: isClick === true,
     bounds: bounds || {},
@@ -1823,7 +1884,9 @@ function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevM
     aiDevMode: aiDevMode === true,
     wholePage: wholePage === true,
     panelMode: panelMode === true,
+    pageRow: pageRow === true,
     CSS_PROPS,
+    PAGE_CSS_PROPS,
     Z,
   };
   return `${IRO_INLINE}\n(${cathodeCombinedPage.toString()})(${JSON.stringify(opts)})`;

@@ -1747,6 +1747,23 @@ function runNixCapture(script, timeoutMs = 6000) {
     } catch (_) { fin(); }
   });
 }
+// Same, but the script goes in on stdin rather than as an argument. On Windows an argument
+// to `wsl.exe` is re-parsed by a shell on the way in, so anything multi-line or quoted —
+// a heredoc, a Python snippet — arrives mangled and silently prints nothing. `-e bash -l`
+// execs bash directly (no re-parse), and bash reads the script from stdin untouched.
+function runNixCaptureStdin(script, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    let out = '', done = false;
+    const fin = () => { if (!done) { done = true; resolve(out.split('\n').filter(Boolean)); } };
+    try {
+      const p = platform.nixSpawn(['-e', 'bash', '-l'], { windowsHide: true });
+      if (p.stdout) p.stdout.on('data', d => out += d);
+      if (p.stdin) { p.stdin.on('error', fin); p.stdin.write(script + '\n'); p.stdin.end(); }
+      p.on('close', fin); p.on('error', fin);
+      setTimeout(() => { try { p.kill(); } catch (_) {} fin(); }, timeoutMs);
+    } catch (_) { fin(); }
+  });
+}
 // For each given port, resolve the listening process's working dir + launch command
 // in whichever env dev servers run. Returns { [port]: { dir(host path), cmd, comm } }.
 async function resolveServerDirs(ports) {
@@ -3430,6 +3447,52 @@ ipcMain.handle(IPC.GET_RATE_LIMITS, async () => {
   }
 });
 
+// Nous Portal credits for Hermes sessions — the balance Hermes' own /credits shows.
+// Read THROUGH Hermes rather than beside it: the portal wants Hermes' OAuth access token,
+// which Hermes refreshes itself, so running its own account helper in its own venv means
+// Cathode never reimplements that refresh or touches the token. Account-level, not
+// per-session, and the panel refreshes after every reply, so a fresh-for-60s cache keeps
+// that from spawning Python each turn; like the Claude meters, the last good figures are
+// served (flagged stale) for up to 30 min when a fetch blips.
+const NOUS_CREDITS_SCRIPT = [
+  'H="$HOME/.hermes/hermes-agent"; P="$H/venv/bin/python"',
+  '[ -x "$P" ] || exit 0',
+  'cd "$H" && unset PYTHONPATH PYTHONHOME && "$P" - <<"PYEOF" 2>/dev/null',
+  'import json',
+  'from hermes_cli.nous_account import get_nous_portal_account_info',
+  'i = get_nous_portal_account_info(force_fresh=True)',
+  'a = getattr(i, "raw_account", None) or {}',
+  's = a.get("subscription") or {}',
+  'p = a.get("paid_service_access") or {}',
+  'print("NOUS_CREDITS " + json.dumps({"plan": s.get("plan"), "monthly": s.get("monthly_credits"),',
+  '  "subRemaining": s.get("credits_remaining"), "purchased": a.get("purchased_credits_remaining"),',
+  '  "total": p.get("total_usable_credits"), "periodEnd": s.get("current_period_end"),',
+  '  "error": getattr(i, "error", None)}))',
+  'PYEOF',
+].join('\n');
+let _nousCreditsCache = null;   // { data, at }
+let _nousCreditsInflight = null;
+ipcMain.handle(IPC.GET_NOUS_CREDITS, async () => {
+  const age = _nousCreditsCache ? Date.now() - _nousCreditsCache.at : Infinity;
+  if (age < 60 * 1000) return _nousCreditsCache.data;
+  const fail = (reason) => (age < 30 * 60 * 1000 ? { ..._nousCreditsCache.data, stale: true } : { ok: false, reason });
+  if (!_nousCreditsInflight) {
+    _nousCreditsInflight = runNixCaptureStdin(NOUS_CREDITS_SCRIPT, 20000).finally(() => { _nousCreditsInflight = null; });   // multi-line: must not go through argv
+  }
+  const lines = await _nousCreditsInflight;
+  const line = lines.find(l => l.startsWith('NOUS_CREDITS '));
+  if (!line) return fail('unavailable');   // no Hermes install, not logged in to Nous, or the fetch failed
+  try {
+    const d = JSON.parse(line.slice('NOUS_CREDITS '.length));
+    if (typeof d.total !== 'number') return fail(d.error ? String(d.error) : 'no-data');
+    const result = { ok: true, ...d };
+    _nousCreditsCache = { data: result, at: Date.now() };
+    return result;
+  } catch (e) {
+    return fail(e.message);
+  }
+});
+
 // ── IPC: browser ──────────────────────────────────────────────────
 ipcMain.on(IPC.BROWSER_NAVIGATE, (_, url) => {
   let target = (url || '').trim();
@@ -4326,6 +4389,42 @@ ipcMain.on(IPC.WINDOW_MAXIMIZE_TOGGLE, (e) => {
 });
 ipcMain.on(IPC.WINDOW_CLOSE, (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
 
+// Drag-region hover cue. A drag region hands the pointer to the OS as caption area, so the
+// page receives no mousemove while you are over one and nothing tells it you are there. The
+// renderer starts this when the pointer drops out of the page near a bar; main then reports
+// where the cursor is until it leaves the window, and the renderer stops it the moment page
+// events resume. It only ever runs while you are actually over a grab area.
+const dragHoverProbes = new Map();   // webContents.id → interval
+function stopDragHoverProbe(id) {
+  const t = dragHoverProbes.get(id);
+  if (t) { clearInterval(t); dragHoverProbes.delete(id); }
+}
+ipcMain.on(IPC.DRAG_HOVER_PROBE, (e, on) => {
+  const wc = e.sender, id = wc.id;
+  stopDragHoverProbe(id);
+  if (!on) return;
+  const w = BrowserWindow.fromWebContents(wc);
+  if (!w) return;
+  const { screen } = require('electron');
+  let lastX = null, lastY = null;
+  const tick = () => {
+    if (wc.isDestroyed() || w.isDestroyed() || w.isMinimized()) { stopDragHoverProbe(id); return; }
+    const p = screen.getCursorScreenPoint();
+    const b = w.getContentBounds();
+    if (p.x < b.x || p.y < b.y || p.x >= b.x + b.width || p.y >= b.y + b.height) {
+      stopDragHoverProbe(id);
+      wc.send(IPC.DRAG_HOVER_POINT, null);
+      return;
+    }
+    if (p.x === lastX && p.y === lastY) return;   // only report movement
+    lastX = p.x; lastY = p.y;
+    const z = wc.getZoomFactor() || 1;           // screen DIPs → page CSS px
+    wc.send(IPC.DRAG_HOVER_POINT, { x: (p.x - b.x) / z, y: (p.y - b.y) / z });
+  };
+  dragHoverProbes.set(id, setInterval(tick, 40));
+  tick();
+});
+
 ipcMain.on(IPC.NEW_WINDOW, () => {
   // Launch a separate app instance. An in-process BrowserWindow would share
   // the mainWindow-bound globals (browserView, ptyProcesses, IPC routing) and
@@ -4389,6 +4488,7 @@ ipcMain.on(IPC.PICK_START, async (_, mode) => {
         aiDevMode: mode === 'aidev',
         wholePage: wholePage === true,
         panelMode: usePanel,
+        pageRow: mode === 'box' || mode === 'lasso',   // the Page row is the left-column panel's; Extract has its own
       })
     );
 
@@ -4529,7 +4629,10 @@ function selectionOverlayScript(rects, id) {
     o.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid #ff5720;'
       + 'box-shadow:0 0 0 1px rgba(0,0,0,.55);left:' + x + 'px;top:' + y + 'px;width:' + r.w + 'px;height:' + r.h + 'px';
     const b = document.createElement('div');
-    b.textContent = String(i + 1);
+    // The badge carries the item's own number, not its position among the rects: an
+    // item without a box (the Page row) is not drawn, and numbering the drawn ones
+    // 1..n would slide every badge out of step with the list in the message.
+    b.textContent = String(r.n || i + 1);
     b.style.cssText = 'position:fixed;box-sizing:border-box;min-width:18px;height:18px;padding:0 4px;'
       + 'background:#ff5720;color:#fff;border-radius:3px;text-align:center;'
       + 'font:700 12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;'
@@ -4553,7 +4656,7 @@ async function clearSelectionOverlay(view) {
   } catch (_) {}
 }
 async function captureSelectionShot(view, items) {
-  const rects = (items || []).map(it => it.rect).filter(r => r && r.w > 0 && r.h > 0);
+  const rects = (items || []).map((it, i) => ({ ...(it.rect || {}), n: i + 1 })).filter(r => r.w > 0 && r.h > 0);
   if (!rects.length) return null;
   let box = null;
   try {

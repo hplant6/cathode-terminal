@@ -58,6 +58,7 @@ const LS = {
   codeTabRetired: 'cathode-code-tab-retired',       // one-time code-tab retirement flag
   projects:       'cathode-projects',               // project registry [{id,name,rootDir,lastActiveAt}]
   activeProject:  'cathode-active-project',          // id of the active project
+  pickShowAll:    'cathode-pick-show-all',           // Box/Lasso: show the elements the scan ranked out
 };
 
 // First-run UI defaults — seeded once, before the panels below read these keys,
@@ -1053,7 +1054,7 @@ function usageMiniItem(labelHtml, pct, sub) {
   </div>`;
 }
 
-function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel }) {
+function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel, credits }) {
   usageModelEl.textContent = (ctx && ctx.ok && ctx.model) ? ctx.model : (agentLabel || '');
 
   // Build the shared metric list (each: full label, compact label, %, sub-line)
@@ -1070,6 +1071,16 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
       label: 'Context window', mini: 'Context<br>Window',
       pct: (agentCtx.used / agentCtx.size) * 100,
       sub: `${fmtTokens(agentCtx.used)}/${fmtTokens(agentCtx.size)} tokens`,
+    });
+  }
+  if (credits && credits.ok && credits.monthly > 0 && typeof credits.subRemaining === 'number') {
+    // Hermes on Nous Portal: the plan's monthly credits, filling as they're spent — the
+    // same reading as Claude's limit bars, so a fuller bar is always the worse news.
+    const used = Math.max(0, credits.monthly - credits.subRemaining);
+    metrics.push({
+      label: `Nous credits${credits.plan ? ` (${credits.plan})` : ''}`, mini: 'Nous<br>Credits',
+      pct: (used / credits.monthly) * 100,
+      sub: `$${credits.subRemaining.toFixed(2)} of $${credits.monthly.toFixed(2)} left · ${fmtReset(credits.periodEnd)}`,
     });
   }
   if (lim && lim.ok) {
@@ -1103,6 +1114,11 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
     : (agentTokens > 0
       ? `<div class="usage-cost-row"><span class="usage-cost-label">Session tokens</span><span class="usage-cost-val">${fmtTokens(agentTokens)}</span></div>`
       : '');
+  // Total spendable Nous balance — the plan's remaining credits plus anything purchased,
+  // which is what actually runs out. Shown even without a plan (purchased-only accounts).
+  const creditsRow = (credits && credits.ok && typeof credits.total === 'number')
+    ? `<div class="usage-cost-row"><span class="usage-cost-label">Usable credits${credits.purchased > 0 ? ` (incl. $${credits.purchased.toFixed(2)} purchased)` : ''}</span><span class="usage-cost-val">$${credits.total.toFixed(2)}</span></div>`
+    : '';
 
   // Budget Guard chip — a passive nudge at the top of the panel once usage crosses
   // the configured threshold (so the guard is visible without the modal popping).
@@ -1115,7 +1131,7 @@ function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel
 
   usageBody.innerHTML = chipHtml + (usageMini
     ? `<div class="usage-mini">${metrics.map(m => usageMiniItem(m.mini, m.pct, m.sub)).join('')}</div>`
-    : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow;
+    : metrics.map(m => usageBarRow(m.label, m.pct, m.sub)).join('')) + costRow + creditsRow;
   if (showChip) {
     usageBody.querySelector('.ubc-main')?.addEventListener('click', () => openBudgetModal && openBudgetModal());
     usageBody.querySelector('.ubc-x')?.addEventListener('click', (e) => {
@@ -1131,12 +1147,14 @@ async function refreshUsage() {
   const s = sessions.get(activeId);
   const isClaude  = !!(s && s.type === 'acp' && (s.agent || 'claude') === 'claude');
   const acpOther  = !!(s && s.type === 'acp' && !isClaude);   // hermes/codex — not Claude's meters
+  const isHermes  = !!(s && s.type === 'acp' && s.agent === 'hermes');
   const seq = ++_usageSeq;   // a slower earlier fetch must not overwrite a newer session's meters
   try {
-    const [ctx, lim] = await Promise.all([
+    const [ctx, lim, credits] = await Promise.all([
       isClaude ? ipcRenderer.invoke(IPC.GET_USAGE, { cwd: s.cwd || '', id: activeId }) : Promise.resolve(null),
       // Claude's 5h/weekly limits are Anthropic-account numbers — meaningless under another agent.
       acpOther ? Promise.resolve(null) : ipcRenderer.invoke(IPC.GET_RATE_LIMITS),
+      isHermes ? ipcRenderer.invoke(IPC.GET_NOUS_CREDITS) : Promise.resolve(null),
     ]);
     if (seq !== _usageSeq) return;   // superseded by a newer refresh (e.g. session switch)
     _lastUsage = {
@@ -1144,6 +1162,7 @@ async function refreshUsage() {
       agentCtx:    acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
       agentTokens: acpOther ? (s.tokenTotal || 0) : 0,       // totalled from prompt-result usage
       agentLabel:  acpOther ? (s.name || s.agent) : '',
+      credits,
     };
     renderUsage(_lastUsage);
   } catch (_) { /* a failed usage fetch must not break the panel or reject unhandled */ }
@@ -1487,6 +1506,100 @@ const INTENT_DIRECTIVE_BY_FOOT = {
   'animation-panel-foot': MOTION_INTENT_DIRECTIVE,
 };
 
+// What Send can do. The id is the mode stored on the foot; the label is what the button
+// then reads, so a glance at the bar says which of these the next send will be.
+const SEND_MODES = [
+  { id: 'plain',  label: 'Send',
+    desc: 'Hand over the values exactly as measured.' },
+  { id: 'intent', label: 'Send as Intent',
+    desc: "Hand them over as intent, not exact numbers — the agent reproduces the effect with the project's own tokens, scales and components." },
+];
+const SEND_CARET_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+// What a foot's Send button should read. Panels that count what they are sending build
+// on this rather than hardcoding "Send", so the mode survives their own relabelling.
+function sendModeLabel(foot) {
+  const m = SEND_MODES.find(x => x.id === (foot && foot._sendMode)) || SEND_MODES[0];
+  return m.label;
+}
+// Turn a panel's Send into a split button: Send, then a caret opening the mode menu.
+function makeSendSplit(foot) {
+  const sendBtn = foot.querySelector('.pp-btn-primary');
+  if (!sendBtn || !sendBtn.parentElement) return;
+  const bar = sendBtn.parentElement;
+  foot._sendMode = foot._sendMode || 'plain';
+
+  const caret = document.createElement('button');
+  caret.type = 'button';
+  caret.className = 'pp-btn pp-btn-caret';
+  caret.title = 'Choose what Send does';
+  caret.setAttribute('aria-haspopup', 'menu');
+  caret.setAttribute('aria-expanded', 'false');
+  caret.innerHTML = SEND_CARET_SVG;
+  caret.disabled = sendBtn.disabled;
+  sendBtn.after(caret);
+  // Some panels enable their primary only once there is something to send, so follow it
+  // rather than offering a choice of sends where no send is on offer.
+  new MutationObserver(() => { caret.disabled = sendBtn.disabled; })
+    .observe(sendBtn, { attributes: true, attributeFilter: ['disabled'] });
+
+  const menu = document.createElement('div');
+  menu.className = 'pp-send-menu';
+  menu.setAttribute('role', 'menu');
+  SEND_MODES.forEach((m) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'pp-send-menu-item';
+    item.setAttribute('role', 'menuitemradio');
+    item.dataset.mode = m.id;
+    const label = document.createElement('span'); label.className = 'pp-send-menu-label'; label.textContent = m.label;
+    const desc  = document.createElement('span'); desc.className  = 'pp-send-menu-desc';  desc.textContent  = m.desc;
+    item.append(label, desc);
+    item.addEventListener('click', () => { setMode(m.id); close(); });
+    menu.appendChild(item);
+  });
+  bar.appendChild(menu);
+
+  function setMode(id) {
+    foot._sendMode = id;
+    menu.querySelectorAll('.pp-send-menu-item').forEach((n) => {
+      const on = n.dataset.mode === id;
+      n.classList.toggle('on', on);
+      n.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    sendBtn.textContent = sendModeLabel(foot);
+    // A panel that writes its own Send label (the Box/Lasso count) gets to rewrite it.
+    foot._onSendModeChange?.();
+  }
+  function onOutside(e) { if (!menu.contains(e.target) && e.target !== caret && !caret.contains(e.target)) close(); }
+  function onKey(e) {
+    if (e.key !== 'Escape') return;
+    // The panel closes on Escape too — the menu is the nearer thing, so it eats this one.
+    e.preventDefault(); e.stopPropagation();
+    close();
+  }
+  function close() {
+    menu.classList.remove('open');
+    caret.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onOutside, true);
+    document.removeEventListener('keydown', onKey, true);
+  }
+  function open() {
+    menu.classList.add('open');
+    caret.setAttribute('aria-expanded', 'true');
+    setTimeout(() => {
+      document.addEventListener('mousedown', onOutside, true);
+      document.addEventListener('keydown', onKey, true);
+    }, 0);
+  }
+  caret.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (caret.disabled) return;
+    menu.classList.contains('open') ? close() : open();
+  });
+
+  setMode(foot._sendMode);
+}
+
 function makeToolPersonaControl() {
   const wrap = personaWrap.cloneNode(true);
   wrap.removeAttribute('id');
@@ -1545,37 +1658,12 @@ function makeToolComposerBar(foot) {
   foot.insertBefore(bar, foot.firstChild);
   registerPersonaControl(persona);
 
-  // "Send as Intent" is a second send, not a mode — so it sits between Cancel and Send
-  // and sends the same message with the intent framing in front of it. As a switch it
-  // was sticky state you had to remember you had left on; as a button the choice is made
-  // at the moment of sending, which is the only moment it means anything.
-  const intentDirective = INTENT_DIRECTIVE_BY_FOOT[foot.id];
-  const sendBtn = intentDirective ? foot.querySelector('.pp-btn-primary') : null;
-  if (sendBtn && sendBtn.parentElement) {
-    const intentBtn = document.createElement('button');
-    intentBtn.type = 'button';
-    intentBtn.className = 'pp-btn pp-btn-intent';
-    intentBtn.textContent = 'Send as Intent';
-    intentBtn.title = 'Send these values as intent, not exact numbers — the agent reproduces the effect using the project\'s own tokens, scales and components.';
-    intentBtn.disabled = sendBtn.disabled;
-    sendBtn.parentElement.insertBefore(intentBtn, sendBtn);
-    // Some panels enable their primary only once there is something to send (the
-    // component panel waits for a pick), so follow it rather than offering an intent
-    // send where a plain send isn't on offer.
-    new MutationObserver(() => { intentBtn.disabled = sendBtn.disabled; })
-      .observe(sendBtn, { attributes: true, attributeFilter: ['disabled'] });
-    let viaIntent = false;
-    // Capture, so this runs before the panel's own handler: clicking Send directly clears
-    // any arming left over from an intent click whose send then bailed out.
-    sendBtn.addEventListener('click', () => { if (!viaIntent) foot._intentOnce = null; }, true);
-    intentBtn.addEventListener('click', () => {
-      if (intentBtn.disabled) return;
-      foot._intentOnce = intentDirective;   // the flag carries which framing to prepend
-      viaIntent = true;
-      // Reuse the panel's own send path rather than duplicating ten bespoke ones.
-      try { sendBtn.click(); } finally { viaIntent = false; }
-    });
-  }
+  // Send is a split button: the caret picks what Send does and the button says which.
+  // "Send as Intent" was a third full-width button, which made a narrow column read as
+  // two competing sends; before that it was a switch you could leave on without noticing.
+  // As a mode written on the button itself it is neither — the choice is visible at the
+  // moment it is made and at the moment it is used.
+  if (INTENT_DIRECTIVE_BY_FOOT[foot.id]) makeSendSplit(foot);
 
   const baseOf = (p) => String(p || '').split(/[\\/]/).pop();
   let attach = [];   // [{ kind:'file', path }]
@@ -1619,12 +1707,11 @@ function decorateToolInstruction(instruction, foot) {
   let text = (instruction || '').trim();
   const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
   if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
-  // Framing goes first: the agent should know the numbers are a sketch before it reads them.
-  if (foot && foot._intentOnce) {
-    const directive = foot._intentOnce;
-    foot._intentOnce = null;   // one send, not a mode
-    text = directive + (text ? '\n\n' + text : '');
-  }
+  // Framing goes first: the agent should know the numbers are a sketch before it reads
+  // them. Read off the foot's send mode rather than off the click, so the keyboard send
+  // (Enter in the instruction box) honours the same choice the button is advertising.
+  const directive = (foot && foot._sendMode === 'intent') ? INTENT_DIRECTIVE_BY_FOOT[foot.id] : null;
+  if (directive) text = directive + (text ? '\n\n' + text : '');
   return applyLenses(text);
 }
 
@@ -4303,6 +4390,69 @@ document.getElementById('btn-open-strip')?.addEventListener('click', () => setSi
   ipcRenderer.on(IPC.WINDOW_MAXIMIZED_STATE, (_, max) => wc.classList.toggle('maximized', !!max));
 })();
 
+// ── Drag-region hover cue ─────────────────────────────────────────
+// Lights the top strip while the pointer is over somewhere that moves the window. A drag
+// region never delivers mouse events to the page, so :hover can't do this: instead, when the
+// pointer drops out of the page near a bar, main reports the cursor position (see
+// DRAG_HOVER_PROBE) and each point is hit-tested against the elements' real app-region.
+(function initDragHoverCue() {
+  const root = document.documentElement;
+  const BARS = ['app-bar', 'terminal-header', 'tab-bar'];   // everything the stylesheet marks as drag
+  // Only consulted if this engine doesn't expose app-region through computed style —
+  // mirrors the stylesheet's drag / no-drag rules for those three bars.
+  const FALLBACK_DRAG    = '#app-bar, #app-bar-spacer, #terminal-header, #tab-bar';
+  const FALLBACK_NO_DRAG = 'button, input, select, textarea, a, img, #right-panel-tabs, #window-controls, #project-switch, #tab-bar > *, #terminal-header > *';
+  let probing = false;
+
+  // app-region is not inherited: the nearest element that sets it decides.
+  function regionOf(n) {
+    const cs = getComputedStyle(n);
+    const v = (cs.getPropertyValue('app-region') || cs.getPropertyValue('-webkit-app-region')).trim();
+    if (v === 'drag' || v === 'no-drag') return v;
+    if (v) return '';
+    if (n.matches(FALLBACK_NO_DRAG)) return 'no-drag';
+    if (n.matches(FALLBACK_DRAG)) return 'drag';
+    return '';
+  }
+  function isDragAt(x, y) {
+    for (let n = document.elementFromPoint(x, y); n && n !== root; n = n.parentElement) {
+      const r = regionOf(n);
+      if (r) return r === 'drag';
+    }
+    return false;
+  }
+  const setCue = (on) => root.classList.toggle('drag-hover', on);
+  function stop() {
+    if (!probing) return;
+    probing = false;
+    ipcRenderer.send(IPC.DRAG_HOVER_PROBE, false);
+    setCue(false);
+  }
+
+  document.addEventListener('mouseout', (e) => {
+    if (e.relatedTarget || probing) return;
+    // The pointer left the page. Beside a bar, that is the OS taking it over a drag region
+    // (or leaving the window through the top edge, which the first report settles).
+    const nearBar = BARS.some((id) => {
+      const el = document.getElementById(id);
+      const r = el && el.getBoundingClientRect();
+      return r && r.height > 0 && e.clientX >= r.left - 2 && e.clientX <= r.right + 2
+        && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2;
+    });
+    if (!nearBar) return;
+    probing = true;
+    ipcRenderer.send(IPC.DRAG_HOVER_PROBE, true);
+  });
+  // A real move reaching the page means the pointer is back over page content. Chromium
+  // also fires motionless synthetic moves when layout changes under a still pointer — the
+  // cue's own restyle is one — so those are ignored or the strip would flicker.
+  document.addEventListener('mousemove', (e) => { if (e.movementX || e.movementY) stop(); });
+  ipcRenderer.on(IPC.DRAG_HOVER_POINT, (_, p) => {
+    if (!p) { probing = false; setCue(false); return; }   // main already stopped: cursor left the window
+    setCue(isDragAt(p.x, p.y));
+  });
+})();
+
 // ── Views control bar — wires the LED toggles to their views ──────
 // Proxies the original controls (still in the DOM) so existing show/hide +
 // persistence logic stays intact. Unavailable views remove their toggle (TODO).
@@ -6369,6 +6519,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const sendBtn     = document.getElementById('pick-panel-send');
   const cancelBtn   = document.getElementById('pick-panel-cancel-btn');
   const toggleSelBtn = document.getElementById('pick-panel-toggle-sel');
+  const footEl      = document.getElementById('pick-panel-foot');
   let selVisible = false;   // pinned state; selection is hidden by default and previewed on hover of the Show/Hide selection link
   if (!panel) return;
 
@@ -6443,15 +6594,24 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
 
   let rows = [];          // [{ item, removed, expanded, checked:Set, mods:{} }]
+  const showAllBtn   = document.getElementById('pick-panel-showall');
+  const scopeCountEl = document.getElementById('pick-panel-scope-count');
+  let showAllItems = localStorage.getItem(LS.pickShowAll) === '1';
+  // A row the scan's ranking cut stays out of the list until the switch is on — unless
+  // you have already put an edit on it, which hiding would quietly take out of the
+  // message. Everything else in the panel (the list, the send count, the highlight, what
+  // is sent) reads the list through this, so they can't disagree about what is here.
+  const visible = (r) => !r.removed && (!r.item.filtered || showAllItems || countChecked(r) > 0);
   let activeChip = null;
   let hovered = null;     // index of the drawer currently hovered
   let structuralExpanded = false;   // "Layout containers" group starts collapsed (see render)
 
-  // Highlight on the page = every open drawer + the hovered one.
+  // Highlight on the page = every open drawer + the hovered one. The Page row is
+  // skipped: its element is the page, so outlining it just draws ants round everything.
   function highlightSet() {
     const s = new Set();
-    rows.forEach((r, i) => { if (!r.removed && r.expanded) s.add(i); });
-    if (hovered != null && rows[hovered] && !rows[hovered].removed) s.add(hovered);
+    rows.forEach((r, i) => { if (visible(r) && r.expanded && !r.item.page) s.add(i); });
+    if (hovered != null && rows[hovered] && visible(rows[hovered]) && !rows[hovered].item.page) s.add(hovered);
     return [...s];
   }
   function pushHighlight() { ipcRenderer.send(IPC.PICK_PANEL_UPDATE, { active: highlightSet() }); }
@@ -6462,7 +6622,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (text != null) e.textContent = text;
     return e;
   }
-  function activeIndices() { return rows.map((r, i) => (r.removed ? -1 : i)).filter(i => i >= 0); }
   function applyStyle(i, prop, value, state) { ipcRenderer.send(IPC.PICK_PANEL_STYLE, { i, prop, value, state: state || '' }); }
   // Every CSS property this Chromium build knows (renderer engine == page engine),
   // for the "User Added" picker — lets you add a property the detected list omits.
@@ -6485,7 +6644,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     ['Sizing',     ['width', 'height', 'min-width', 'max-width', 'min-height', 'max-height']],
     ['Spacing',    ['padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left']],
     ['Typography', ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align', 'text-transform', 'color']],
-    ['Appearance', ['background-color', 'background-image', 'background-size', 'border-radius', 'border-top-width', 'border-top-style', 'border-top-color', 'box-shadow', 'opacity', 'overflow', 'cursor', 'transform']],
+    ['Appearance', ['background-color', 'background-image', 'background-size', 'background-position', 'background-repeat', 'border-radius', 'border-top-width', 'border-top-style', 'border-top-color', 'box-shadow', 'opacity', 'overflow', 'cursor', 'transform']],
   ];
   const SECTION_OF = {}; SECTIONS.forEach(([n, ps]) => ps.forEach(p => { SECTION_OF[p] = n; }));
   const SECTION_ORDER = SECTIONS.map(s => s[0]).concat('Other');
@@ -6557,10 +6716,13 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
 
   // Total selected properties across all (kept) elements → Send button label.
   function updateSendCount() {
-    const n = rows.filter(r => !r.removed).reduce((a, r) => a + countChecked(r), 0);
-    sendBtn.textContent = n ? `Send (${n})` : 'Send';
+    const n = rows.filter(visible).reduce((a, r) => a + countChecked(r), 0);
+    const label = sendModeLabel(footEl);
+    sendBtn.textContent = n ? `${label} (${n})` : label;
     fieldBodies.forEach(fb => { if (fb.count) fb.count.textContent = `${countChecked(fb.row)} Selected`; });
   }
+
+  if (footEl) footEl._onSendModeChange = updateSendCount;   // the count has to survive a mode change
 
   // ── one property as a field card with a typed control ─────────
   function buildField(row, i, p) {
@@ -7203,14 +7365,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     // mix, the containers collapse under one "Layout containers (N)" header so they
     // don't bury the elements you can actually restyle. A live filter forces them open.
     const filterActive = !!(activeChip || (filterInput.value || '').trim());
-    const grouping = rows.some(r => !r.removed && r.item.structural) && rows.some(r => !r.removed && !r.item.structural);
+    const grouping = rows.some(r => visible(r) && r.item.structural) && rows.some(r => visible(r) && !r.item.structural && !r.item.page);
     const showStruct = !grouping || structuralExpanded || filterActive;
     let groupHeaderDone = false;
     rows.forEach((row, i) => {
-      if (row.removed) return;
+      if (!visible(row)) return;
       if (grouping && row.item.structural && !groupHeaderDone) {
         groupHeaderDone = true;
-        const n = rows.filter(r => !r.removed && r.item.structural).length;
+        const n = rows.filter(r => visible(r) && r.item.structural).length;
         const gh = el('div', 'pp-group-head' + ((structuralExpanded || filterActive) ? ' open' : ''));
         gh.appendChild(el('span', 'pp-group-caret'));
         gh.appendChild(el('span', 'pp-group-label', 'Layout containers'));
@@ -7219,18 +7381,27 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         gh.addEventListener('click', () => { structuralExpanded = !structuralExpanded; render(); });
         listEl.appendChild(gh);
       }
-      const drawer = el('div', 'pp-drawer' + (row.item.structural ? ' pp-structural' : ''));
+      const isPage = !!row.item.page;
+      const drawer = el('div', 'pp-drawer' + (row.item.structural ? ' pp-structural' : '') + (isPage ? ' pp-page' : ''));
       if (grouping && row.item.structural && !showStruct) drawer.style.display = 'none';
 
       const head  = el('div', 'pp-drawer-head');
       const caret = el('span', 'pp-caret' + (row.expanded ? ' open' : ''));   // chevron via CSS mask (icons/chevron.svg)
       const name  = el('span', 'pp-el-name');
-      if (row.item.descriptor) name.appendChild(el('span', 'pp-el-desc', `${row.item.descriptor}: `));
+      // The Page row names itself, then the element that actually carries the page's
+      // styles (html or body, whichever paints it). Its descriptor spells that out for
+      // the agent instead of for the head.
+      if (row.item.descriptor && !isPage) name.appendChild(el('span', 'pp-el-desc', `${row.item.descriptor}: `));
       name.appendChild(document.createTextNode(row.item.label));
+      if (isPage) name.appendChild(el('span', 'pp-el-tag', row.item.tag || ''));
       name.title  = row.item.cssSelector || row.item.label;
       const count = el('span', 'pp-el-count', `${countChecked(row)} Selected`);
-      const x     = el('button', 'pp-el-x', '✕'); x.title = 'Remove';
-      head.append(caret, name, count, x);
+      // No ✕ on the Page row — it isn't part of what you selected, so there is nothing
+      // to take out of the selection.
+      const x     = isPage ? null : el('button', 'pp-el-x', '✕');
+      if (x) x.title = 'Remove';
+      head.append(caret, name, count);
+      if (x) head.append(x);
       // Head + per-element states row stick together as ONE unit, so the title never
       // folds under the chips when the drawer's properties scroll.
       const sticky = el('div', 'pp-drawer-sticky');
@@ -7244,9 +7415,11 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         buildBody(row, i, body);
         updateSendCount();
       };
-      const statesRow = buildStatesRow(row, i, rebuildBody);
-      statesRow.style.display = row.expanded ? '' : 'none';
-      sticky.appendChild(statesRow);
+      const statesRow = isPage ? null : buildStatesRow(row, i, rebuildBody);   // :hover on the page means nothing
+      if (statesRow) {
+        statesRow.style.display = row.expanded ? '' : 'none';
+        sticky.appendChild(statesRow);
+      }
       drawer.appendChild(sticky);
 
       const body  = el('div', 'pp-drawer-body');
@@ -7256,21 +7429,25 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       fieldBodies.push({ row, i, body, caret, count, statesRow });
 
       head.addEventListener('click', (e) => {
-        if (e.target === x) return;
+        if (x && e.target === x) return;
         row.expanded = !row.expanded;
         if (row.expanded) buildBody(row, i, body);
         body.style.display = row.expanded ? '' : 'none';
-        statesRow.style.display = row.expanded ? '' : 'none';
+        if (statesRow) statesRow.style.display = row.expanded ? '' : 'none';
         caret.classList.toggle('open', row.expanded);
         pushHighlight();
       });
-      drawer.addEventListener('mouseenter', () => { hovered = i; pushHighlight(); });
-      drawer.addEventListener('mouseleave', () => { if (hovered === i) hovered = null; pushHighlight(); });
-      x.addEventListener('click', (e) => {
+      if (!isPage) {
+        drawer.addEventListener('mouseenter', () => { hovered = i; pushHighlight(); });
+        drawer.addEventListener('mouseleave', () => { if (hovered === i) hovered = null; pushHighlight(); });
+      }
+      x?.addEventListener('click', (e) => {
         e.stopPropagation();
         row.removed = true;
         if (hovered === i) hovered = null;
-        if (!activeIndices().length) { cancel(); return; }
+        // Removing the last picked element closes the panel. The Page row doesn't hold it
+        // open — it rode along with the selection, it isn't part of it.
+        if (!rows.some(r => visible(r) && !r.item.page)) { cancel(); return; }
         pushHighlight();
         render();
       });
@@ -7278,7 +7455,23 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     });
     applyFilter();
     updateSendCount();
+    syncScope();
   }
+
+  // ── scope switch: show everything the scan found, not just its top-ranked ──
+  function syncScope() {
+    const hidden = rows.filter(r => !r.removed && !visible(r)).length;
+    const shown  = rows.filter(r => visible(r) && !r.item.page).length;
+    showAllBtn?.classList.toggle('on', showAllItems);
+    showAllBtn?.setAttribute('aria-checked', showAllItems ? 'true' : 'false');
+    if (scopeCountEl) scopeCountEl.textContent = hidden ? `${hidden} hidden` : (showAllItems ? `${shown} found` : '');
+  }
+  showAllBtn?.addEventListener('click', () => {
+    showAllItems = !showAllItems;
+    try { localStorage.setItem(LS.pickShowAll, showAllItems ? '1' : '0'); } catch (_) {}
+    render();
+    pushHighlight();   // a drawer that was open and is now out of the list stops outlining
+  });
 
   // ── filtering: chip category (AND) + single free-text box ─────
   function applyFilter() {
@@ -7394,23 +7587,39 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     function hide() {
       if (cpEl) cpEl.style.display = 'none';
       if (cpIro) { try { cpIro.off('color:change'); } catch (_) {} }
+      // Forget the row it was editing. A picker can outlive the field it opened from
+      // (the panel re-renders on every new selection), and a stale applyFn writes the
+      // colour into whatever row now sits at that index.
+      applyFn = null; swatchEl = null;
       document.removeEventListener('mousedown', onOutside, true);
     }
     // Anchor the picker's BOTTOM-RIGHT corner at the swatch, i.e. grow up-and-left.
     // These swatches sit at the right edge of the left-hand tool panel, so growing
     // down-and-right runs the panel out over the native browser WebContentsView —
     // which always paints above HTML, silently clipping the picker. Up-left keeps it
-    // inside the panel. Flip back only if there's genuinely no room to the left.
+    // inside the panel.
+    //
+    // The panel's head is a keep-out zone. This thing is fixed-position and paints
+    // above the panel, so anything it covers stops taking clicks — and "New Selection"
+    // lives up there. Opening a swatch near the top of the list used to clamp the
+    // picker against the top of the window, square over that button, and the button
+    // then did nothing for as long as the picker stayed open (clicks landed on the
+    // picker, which is also why it never dismissed itself).
     function place() {
       if (!cpEl || !swatchEl) return;
       const rect = swatchEl.getBoundingClientRect();
       const GAP = 10;
       const pw = cpEl.offsetWidth || 250, ph = cpEl.offsetHeight || 320;   // measured, not guessed
+      const head = swatchEl.closest('.tool-panel')?.querySelector('.tp-head');
+      const minTop = head ? head.getBoundingClientRect().bottom + 6 : 8;
       let left = rect.left - GAP - pw;
-      if (left < 8) left = Math.min(rect.right + GAP, window.innerWidth - pw - 8);
-      let top = rect.bottom - ph;
+      let top  = rect.bottom - ph;
+      // No room to the left (a narrow chat column): drop below the swatch rather than
+      // flipping right, which is what put the picker over the head in the first place —
+      // and past the panel edge it would be under the browser view and invisible anyway.
+      if (left < 8) { left = 8; top = rect.bottom + GAP; }
       cpEl.style.left = Math.max(8, left) + 'px';
-      cpEl.style.top = Math.max(8, Math.min(top, window.innerHeight - ph - 8)) + 'px';
+      cpEl.style.top = Math.max(minTop, Math.min(top, window.innerHeight - ph - 8)) + 'px';
     }
     function open(swatch, value, fn, opts) {
       if (!built) build();
@@ -7454,10 +7663,12 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   // ── open / close / send / cancel ──────────────────────────────
   function open(items, tool) {
     clearPickMode();
+    colorPicker.hide();   // close() does this; a new selection rebuilds the same rows, so it has to as well
     if (tool) titleEl.textContent = tool;
     // checked/mods/stateCSS are keyed by state ('' = the element's resting style).
-    rows = items.map(item => ({ item, removed: false, expanded: items.length === 1, checked: {}, mods: {}, state: BASE, stateCSS: {}, changed: new Set(), userAdded: new Set() }));   // single selection → open by default
-    structuralExpanded = !rows.some(r => !r.item.structural);   // if nothing paint-y was found, show the containers by default
+    const picked = items.filter(it => !it.page).length;   // the Page row rides along with every selection; it is not one of them
+    rows = items.map(item => ({ item, removed: false, expanded: !item.page && picked === 1, checked: {}, mods: {}, state: BASE, stateCSS: {}, changed: new Set(), userAdded: new Set() }));   // single selection → open by default
+    structuralExpanded = !rows.some(r => !r.item.structural && !r.item.page);   // if nothing paint-y was found, show the containers by default
     clearStates();   // drop any pseudo-states forced on a prior selection
     activeChip = null;
     hovered = null;
@@ -7482,7 +7693,9 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     rows = []; listEl.innerHTML = ''; textarea.value = '';
   }
   function resolvedItems() {
-    return rows.filter(r => !r.removed).map(r => {
+    // The Page row is on every selection; it only belongs in the message once it carries
+    // an edit, or every send would hand the agent a stray html/body bullet.
+    return rows.filter(r => visible(r) && !(r.item.page && !countChecked(r))).map(r => {
       const it = r.item;
       // Modified props read as a change ("prop: was → now"); selected-but-unchanged
       // props are marked current-value context so the agent doesn't "apply" them.
@@ -7527,7 +7740,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   // New Selection: re-arm the same draw tool; completing it reopens the panel with the new items.
-  document.getElementById('pick-panel-new')?.addEventListener('click', () => setPickMode(lastDrawMode));
+  document.getElementById('pick-panel-new')?.addEventListener('click', () => { colorPicker.hide(); setPickMode(lastDrawMode); });
   // Hover the link to preview the selection; leaving restores the pinned state.
   // Click pins it shown (or hides it again).
   toggleSelBtn?.addEventListener('mouseenter', () => ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: true }));
@@ -11313,9 +11526,20 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       if (proj && (proj.servers || []).length && confirm('Start ' + res.name + '’s servers now?')) startAll(proj);
     }
 
+    // The project's screenshot, or its branded fallback until one has been captured.
+    // Shared by both cards so the active project is recognisable at a glance too.
+    function previewEl(p) {
+      const prev = document.createElement('div'); prev.className = 'mc-preview';
+      const img = document.createElement('img'); img.src = emptyStateFor(p.id); img.alt = '';   // branded fallback…
+      if (p.hasPreview) ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the screenshot once one has actually been captured for this project
+      prev.appendChild(img);
+      return prev;
+    }
+
     function activeCard(p) {
       const card = document.createElement('div'); card.className = 'mc-card mc-card-active'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, true));
+      card.appendChild(previewEl(p));
       // Project-level memory — the number you actually act on ("what's eating my machine?").
       const ramTotal = document.createElement('div'); ramTotal.className = 'mc-ramtotal';
       ramTotal.innerHTML = '<span class="mc-ramtotal-k">ram</span><span class="mc-ramtotal-v">—</span>';
@@ -11384,11 +11608,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     function idleCard(p) {
       const card = document.createElement('div'); card.className = 'mc-card mc-card-idle'; card.dataset.project = p.id;
       card.appendChild(headerEl(p, false));
-      const prev = document.createElement('div'); prev.className = 'mc-preview';
-      const img = document.createElement('img'); img.src = emptyStateFor(p.id); img.alt = '';   // branded fallback…
-      if (p.hasPreview) ipcRenderer.invoke(IPC.PROJECT_PREVIEW, { projectId: p.id }).then(r => { if (r && r.url) img.src = r.url; }).catch(() => {});   // …swapped for the screenshot once one has actually been captured for this project
-      prev.appendChild(img);
-      card.appendChild(prev);
+      card.appendChild(previewEl(p));
       const meta = document.createElement('div'); meta.className = 'mc-meta';
       const n = (p.servers || []).length;
       const cnt = document.createElement('span'); cnt.className = 'mc-meta-servers'; cnt.textContent = n + ' Server' + (n === 1 ? '' : 's');

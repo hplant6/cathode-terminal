@@ -128,6 +128,7 @@ const IPC = Object.freeze({
   CHECK_PROJECT_FILE: 'check-project-file',   // does <active project cwd>/<name> exist? (handoff brief wait)
   GET_RATE_LIMITS: 'get-rate-limits',
   GET_USAGE: 'get-usage',
+  GET_NOUS_CREDITS: 'get-nous-credits',   // Hermes: Nous Portal credit balance (read through Hermes' own auth)
   LOCAL_MODELS: 'local-models',               // model tags pulled locally (Ollama)
   MARKER_CANCEL: 'marker-cancel',
   MARKER_CLEAR: 'marker-clear',
@@ -237,6 +238,8 @@ const IPC = Object.freeze({
   UPDATE_DOWNLOADING: 'update-downloading',
   UPDATE_ERROR: 'update-error',
   UPDATE_PROGRESS: 'update-progress',
+  DRAG_HOVER_PROBE: 'drag-hover-probe',   // renderer → main: start/stop reporting the cursor over a drag region
+  DRAG_HOVER_POINT: 'drag-hover-point',   // main → renderer: cursor position in page px, or null once it leaves the window
   WINDOW_CLOSE: 'window-close',
   WINDOW_MAXIMIZE_TOGGLE: 'window-maximize-toggle',
   WINDOW_MAXIMIZED_STATE: 'window-maximized-state',

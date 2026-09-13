@@ -10,6 +10,9 @@
 </head>
 <body>
   <div id="app-bar">
+    <!-- Drag cue: one unbroken line across the window's top edge, shown while the pointer
+         is over anything that moves the window (initDragHoverCue). -->
+    <div id="app-bar-grab-line" aria-hidden="true"></div>
     <!-- Left: logo button (logo + settings chevron) — structural seat, bottom-right blob -->
     <div id="app-bar-logo">
       <img src="icons/figma/logo.svg" alt="Cathode Terminal" draggable="false" />
@@ -256,6 +259,13 @@
             <option value="shadow">Shadow</option>
             <option value="letter-spacing">Letter spacing</option>
           </select>
+        </div>
+        <!-- Scope: the scan ranks what it found in the box and keeps the strongest of
+             each kind. This reveals the rest without re-drawing the selection. -->
+        <div id="pick-panel-scope">
+          <span class="pp-scope-label">Show all elements</span>
+          <span class="pp-scope-count" id="pick-panel-scope-count"></span>
+          <button id="pick-panel-showall" class="vt-switch" role="switch" aria-checked="false" title="Show every element the scan found inside the selection, not just the strongest-ranked ones"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button>
         </div>
         <div id="pick-panel-list"></div>
         <div id="pick-panel-foot" class="tp-foot">
