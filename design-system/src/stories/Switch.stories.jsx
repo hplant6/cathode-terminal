@@ -1,7 +1,7 @@
 import { Switch } from '../Switch';
 
 export default {
-  title: 'Cathode Design System / Switch',
+  title: 'Gamut Terminal Design System / Switch',
   component: Switch,
   argTypes: {
     label: { control: 'text' },

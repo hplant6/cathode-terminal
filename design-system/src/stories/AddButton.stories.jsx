@@ -1,7 +1,7 @@
 import { AddButton } from '../AddButton';
 
 export default {
-  title: 'Cathode Design System / Add Button',
+  title: 'Gamut Terminal Design System / Add Button',
   component: AddButton,
   tags: ['autodocs'],
   parameters: {

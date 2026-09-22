@@ -2,7 +2,7 @@ import React from 'react';
 import { Gauge } from '../Gauge';
 
 export default {
-  title: 'Cathode Design System / Gauge',
+  title: 'Gamut Terminal Design System / Gauge',
   component: Gauge,
   argTypes: {
     value: { control: { type: 'range', min: 0, max: 100 } },

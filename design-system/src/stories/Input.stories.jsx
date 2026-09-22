@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from '../Input';
 
 export default {
-  title: 'Cathode Design System / Input',
+  title: 'Gamut Terminal Design System / Input',
   component: Input,
   tags: ['autodocs'],
 };

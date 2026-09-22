@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default {
-  title: 'Cathode Design System / Colors',
+  title: 'Gamut Terminal Design System / Colors',
   parameters: { layout: 'padded' },
 };
 

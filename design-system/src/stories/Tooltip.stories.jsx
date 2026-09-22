@@ -10,7 +10,7 @@ const Demo = ({ label }) => (
 );
 
 export default {
-  title: 'Cathode Design System / Tooltip',
+  title: 'Gamut Terminal Design System / Tooltip',
   component: Tooltip,
   argTypes: {
     text: { control: 'text' },

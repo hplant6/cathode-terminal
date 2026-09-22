@@ -16,7 +16,7 @@ const GitIcon = (
 );
 
 export default {
-  title: 'Cathode Design System / EmptyState',
+  title: 'Gamut Terminal Design System / EmptyState',
   component: EmptyState,
   argTypes: { title: { control: 'text' }, description: { control: 'text' } },
   tags: ['autodocs'],

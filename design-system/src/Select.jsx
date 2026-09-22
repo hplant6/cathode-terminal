@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-// The app's canonical dropdown (.ct-select in styles.css). Every <select> in Cathode
+// The app's canonical dropdown (.ct-select in styles.css). Every <select> in Gamut Terminal
 // is routed through it by enhanceSelect(), so this is the only dropdown type — the
 // `size` prop is the same control on a different surface, not a different component.
 //   md — default, 32px, sits on a panel

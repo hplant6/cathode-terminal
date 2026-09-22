@@ -1,5 +1,5 @@
 // ── Page-overlay z-index registry ─────────────────────────────────
-// Everything Cathode injects into BROWSED pages stacks near the int32 max so
+// Everything Gamut Terminal injects into BROWSED pages stacks near the int32 max so
 // it sits above any site content. The relative order is a contract:
 //
 //   BACKDROP    < SELECTION < ROW_HIGHLIGHT < HOVER_HIGHLIGHT < OVERLAY

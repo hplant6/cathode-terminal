@@ -1,9 +1,9 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/cathode-logo.svg" />
-    <img src="docs/cathode-logo-light.svg" width="360" alt="Cathode Terminal" />
+    <source media="(prefers-color-scheme: dark)" srcset="docs/gamut-logo.svg" />
+    <img src="docs/gamut-logo-light.svg" width="360" alt="Gamut Terminal" />
   </picture>
-  <h1>Cathode Terminal</h1>
+  <h1>Gamut Terminal</h1>
   <p><strong>A split chat + browser dev tool for AI coding agents.</strong></p>
   <p>
     Pair Claude Code, Codex, Gemini, or Hermes with an embedded browser and
@@ -18,13 +18,13 @@
 
 ---
 
-## Why Cathode?
+## Why Gamut Terminal?
 
-I built Cathode Terminal out of sheer frustration with current AI coding tools. Translating visual intuition and HTML structure into endless text prompts was completely draining my creative energy. Cathode is designed to fix that: **it requires less typing while delivering much higher precision to your AI agents.** By eliminating design drift, enforcing strict UI consistency, and offering clear visibility into your daily limits, Cathode accelerates your workflow — helping you ship production-ready code faster while keeping your credit budget intact.
+I built Gamut Terminal out of sheer frustration with current AI coding tools. Translating visual intuition and HTML structure into endless text prompts was completely draining my creative energy. Gamut Terminal is designed to fix that: **it requires less typing while delivering much higher precision to your AI agents.** By eliminating design drift, enforcing strict UI consistency, and offering clear visibility into your daily limits, Gamut Terminal accelerates your workflow — helping you ship production-ready code faster while keeping your credit budget intact.
 
 ## Screenshot
 
-![Cathode Terminal — the Eyedropper tool sampling a color from a live page and sending it to the agent](docs/eyedropper.png)
+![Gamut Terminal — the Eyedropper tool sampling a color from a live page and sending it to the agent](docs/eyedropper.png)
 
 ## Features
 
@@ -39,11 +39,11 @@ I built Cathode Terminal out of sheer frustration with current AI coding tools. 
 - **Audits & code review** — run audits and review changes in-app.
 - **Theming** — a shade-based theme engine with presets.
 
-![Live usage gauges and element context — Cathode captures a live element from the page and hands its exact computed styles to the agent](docs/workspace.png)
+![Live usage gauges and element context — Gamut Terminal captures a live element from the page and hands its exact computed styles to the agent](docs/workspace.png)
 
 ## The tools
 
-Everything Cathode gives you, straight from the in-app **Meet the tools** tour.
+Everything Gamut Terminal gives you, straight from the in-app **Meet the tools** tour.
 
 ### Workspace
 
@@ -82,7 +82,7 @@ Everything Cathode gives you, straight from the in-app **Meet the tools** tour.
 
 - **Windows** — [WSL 2](https://learn.microsoft.com/windows/wsl/install); agents run inside the Linux environment.
 - **macOS / Linux** — agents run in your native login shell.
-- **At least one agent CLI** — Claude Code, Codex, Gemini, or Hermes. Cathode's first-run setup helps install what's missing.
+- **At least one agent CLI** — Claude Code, Codex, Gemini, or Hermes. Gamut Terminal's first-run setup helps install what's missing.
 
 ## Install
 
@@ -94,11 +94,11 @@ Grab the latest build for your platform from the [**Releases**](https://github.c
 | **macOS** | `.dmg` (Apple Silicon + Intel) |
 | **Linux** | `.AppImage`, `.deb`, or `.tar.gz` |
 
-> On first launch, Cathode walks you through installing WSL (on Windows) and your chosen agent.
+> On first launch, Gamut Terminal walks you through installing WSL (on Windows) and your chosen agent.
 
 ## Quick start
 
-1. Launch Cathode and complete setup for your agent.
+1. Launch Gamut Terminal and complete setup for your agent.
 2. Enter a URL or `localhost:3000` in the browser bar to load a site or local dev server.
 3. Use a toolbar tool to select an element, then send it to your agent in the chat.
 4. Toggle a session between **chat** and **terminal**, or open the embedded **DevTools**.

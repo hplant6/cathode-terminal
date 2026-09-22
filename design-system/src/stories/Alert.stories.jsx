@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert } from '../Alert';
 
 export default {
-  title: 'Cathode Design System / Alert',
+  title: 'Gamut Terminal Design System / Alert',
   component: Alert,
   argTypes: {
     variant: { control: 'select', options: ['info', 'success', 'warning', 'danger'] },

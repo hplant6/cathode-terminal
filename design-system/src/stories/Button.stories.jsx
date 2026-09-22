@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../Button';
 
 export default {
-  title: 'Cathode Design System / Button',
+  title: 'Gamut Terminal Design System / Button',
   component: Button,
   argTypes: {
     variant: { control: 'select', options: ['primary', 'secondary', 'ghost', 'danger'] },

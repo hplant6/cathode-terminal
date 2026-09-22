@@ -1,7 +1,7 @@
 // electron-builder `afterPack` hook — ad-hoc code-signs the macOS .app so it will
 // launch on Apple Silicon (an unsigned arm64 app won't run at all). This produces
 // an UNSIGNED-but-runnable build: users still clear the download quarantine once with
-//   xattr -cr "/Applications/Cathode Terminal.app"
+//   xattr -cr "/Applications/Gamut Terminal.app"
 // but no longer have to codesign it themselves.
 //
 // Runs before electron-builder's own signing phase (which is disabled on CI via

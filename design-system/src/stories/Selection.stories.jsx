@@ -1,7 +1,7 @@
 import { Selection } from '../Selection';
 
 export default {
-  title: 'Cathode Design System / Selection',
+  title: 'Gamut Terminal Design System / Selection',
   component: Selection,
   tags: ['autodocs'],
   // Dark backdrop + padding so the label (above the box) and the glow aren't clipped.

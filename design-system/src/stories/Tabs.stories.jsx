@@ -1,7 +1,7 @@
 import { Tabs } from '../Tabs';
 
 export default {
-  title: 'Cathode Design System / Tabs',
+  title: 'Gamut Terminal Design System / Tabs',
   component: Tabs,
   tags: ['autodocs'],
 };

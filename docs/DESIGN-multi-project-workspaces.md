@@ -1,8 +1,8 @@
-# Design: Multi-Project Workspaces for Cathode Terminal
+# Design: Multi-Project Workspaces for Gamut Terminal
 
 **Status:** Proposed · **Author:** design pass w/ hplant6 · **Date:** 2026-07-26
 
-Goal: let Cathode juggle several projects instead of revolving around one — switch
+Goal: let Gamut Terminal juggle several projects instead of revolving around one — switch
 project folders in a click, start/stop each project's localhost servers from one
 place, and **pause a project (freeing its resources) then resume exactly where you
 left off** — all unified in a single surface.

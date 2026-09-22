@@ -1,7 +1,7 @@
-# Cathode Terminal — Roadmap
+# Gamut Terminal — Roadmap
 
 Feature ideas and specs, oriented around the designer / front-end developer workflow.
-Cathode's edge is the intersection of **live page + AI agent + design-system awareness** —
+Gamut Terminal's edge is the intersection of **live page + AI agent + design-system awareness** —
 the strongest features are the ones that need all three.
 
 ---
@@ -12,7 +12,7 @@ the strongest features are the ones that need all three.
 
 **Problem.** Front-end code accretes hard-coded values — a `#3B82F6` that's *almost* the
 brand blue, a magic `13px` that's off the spacing scale, a one-off `border-radius`. This is
-exactly the "design drift" and "UI consistency" Cathode's pitch promises to eliminate. Today
+exactly the "design drift" and "UI consistency" Gamut Terminal's pitch promises to eliminate. Today
 nothing catches it; it's the reviewer's eyeballs.
 
 **What it does.** Scans the live page for CSS values that don't map to the project's design
@@ -125,7 +125,7 @@ From hplan:
   "Show all" toggle. Per row: **Open** in the in-app Browser, **Copy** the URL, or **Kill** the
   process (tree-kill, two-step confirm). Platform layer: `listPorts()` (`lsof` on macOS, `ss` on
   Linux, `Get-NetTCPConnection` on Windows) + `killPid()`.
-- **f) AI spend management** — a mode / set of tools to see and control model spend. Cathode
+- **f) AI spend management** — a mode / set of tools to see and control model spend. Gamut Terminal
   already has the raw signals (context-window fill, 5-hour / weekly usage gauges, per-session
   token totals), so this is largely surfacing + acting on them.
   - ✅ *Built:* **AI Spend** dashboard (per-project / per-day / per-model cost, monthly budget bar).

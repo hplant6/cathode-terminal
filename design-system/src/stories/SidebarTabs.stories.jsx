@@ -1,7 +1,7 @@
 import { SidebarTabs } from '../SidebarTabs';
 
 export default {
-  title: 'Cathode Design System / Sidebar Tabs',
+  title: 'Gamut Terminal Design System / Sidebar Tabs',
   component: SidebarTabs,
   tags: ['autodocs'],
   parameters: {

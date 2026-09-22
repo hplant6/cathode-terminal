@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './Slider.css';
 
-// A range slider on the Cathode design tokens — ProgressBar's filled track with an
+// A range slider on the Gamut Terminal design tokens — ProgressBar's filled track with an
 // accent thumb (Switch's knob). Uncontrolled by default; pass value + onChange to control.
 export function Slider({
   min = 0, max = 100, step = 1, defaultValue, value,

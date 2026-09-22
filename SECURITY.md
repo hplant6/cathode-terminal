@@ -8,7 +8,7 @@ Report privately via [GitHub Security Advisories](https://github.com/hplant6/cat
 
 ## Scope
 
-Cathode Terminal runs local AI coding agents and executes shell commands on your behalf — inside WSL on Windows, or the native shell on macOS/Linux. Areas most relevant to security:
+Gamut Terminal runs local AI coding agents and executes shell commands on your behalf — inside WSL on Windows, or the native shell on macOS/Linux. Areas most relevant to security:
 
 - Command execution and the agent install / setup flows.
 - The scripts injected into browsed pages.

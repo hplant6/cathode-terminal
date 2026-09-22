@@ -1,7 +1,7 @@
 import { PanelFooter } from '../PanelFooter';
 
 export default {
-  title: 'Cathode Design System / Panel Footer',
+  title: 'Gamut Terminal Design System / Panel Footer',
   component: PanelFooter,
   tags: ['autodocs'],
   decorators: [(Story) => (

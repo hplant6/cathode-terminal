@@ -1,5 +1,5 @@
 {
-  "name": "cathode-terminal",
+  "name": "gamut-terminal",
   "version": "1.13.1",
   "description": "Split chat + browser dev tool for AI coding agents",
   "//": "zod has no direct imports — it satisfies @agentclientprotocol/sdk peerDependency. Do not remove.",
@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.cathode.terminal",
-    "productName": "Cathode Terminal",
+    "productName": "Gamut Terminal",
     "copyright": "Copyright © 2025",
     "afterSign": "scripts/notarize.js",
     "afterPack": "scripts/adhoc-sign.js",
@@ -57,8 +57,8 @@
     "fileAssociations": [
       {
         "ext": "cathode",
-        "name": "Cathode Project",
-        "description": "Cathode Project Bundle",
+        "name": "Gamut Terminal Project",
+        "description": "Gamut Terminal Project Bundle",
         "role": "Editor"
       }
     ],

@@ -3,7 +3,7 @@ import {
 } from '../BoxSelect';
 
 export default {
-  title: 'Cathode Design System / Box Select',
+  title: 'Gamut Terminal Design System / Box Select',
   parameters: { backgrounds: { default: 'dark' } },
   decorators: [(Story) => (
     <div style={{ background: 'var(--spec-toolbar-bg)', padding: 24, width: 460 }}><Story /></div>

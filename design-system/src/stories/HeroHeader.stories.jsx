@@ -2,7 +2,7 @@ import React from 'react';
 import { HeroHeader } from '../HeroHeader';
 
 export default {
-  title: 'Cathode Design System / Hero Header',
+  title: 'Gamut Terminal Design System / Hero Header',
   component: HeroHeader,
   parameters: { layout: 'fullscreen' },
   argTypes: {
@@ -30,7 +30,7 @@ export const LeftAligned = {
 export const CustomWords = {
   name: 'Custom Words',
   args: {
-    subHeading: 'Cathode Terminal',
+    subHeading: 'Gamut Terminal',
     headingPrefix: 'Built for',
     words: ['developers', 'tinkerers', 'power users', 'the terminal'],
     align: 'center',

@@ -39,7 +39,7 @@ const BTN = { primary: 'ob-btn-primary', secondary: 'ob-btn-secondary' };
  * steps: [{ label, sub?, state: 'pending'|'running'|'done'|'error'|'action', time?, actionLabel? }]
  */
 export function Onboarding({
-  title = 'Setting up Cathode Terminal',
+  title = 'Setting up Gamut Terminal',
   subtitle = 'Installing the environment your agents run in — sit back.',
   steps = [],
   primaryLabel = 'Cancel',

@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default {
-  title: 'Cathode Design System / Typography',
+  title: 'Gamut Terminal Design System / Typography',
   parameters: { layout: 'padded' },
 };
 

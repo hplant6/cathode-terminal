@@ -1,7 +1,7 @@
 import { Textarea } from '../Textarea';
 
 export default {
-  title: 'Cathode Design System / Textarea',
+  title: 'Gamut Terminal Design System / Textarea',
   component: Textarea,
   tags: ['autodocs'],
   parameters: {

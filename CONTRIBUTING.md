@@ -1,11 +1,11 @@
-# Contributing to Cathode Terminal
+# Contributing to Gamut Terminal
 
-Thanks for your interest! This guide covers running Cathode from source, the codebase layout, and the dev workflow.
+Thanks for your interest! This guide covers running Gamut Terminal from source, the codebase layout, and the dev workflow.
 
 ## Prerequisites
 
 - **Node.js 20+**
-- **Windows only:** [WSL 2](https://learn.microsoft.com/windows/wsl/install) — Cathode runs AI agents inside the Linux environment. macOS/Linux use the native shell.
+- **Windows only:** [WSL 2](https://learn.microsoft.com/windows/wsl/install) — Gamut Terminal runs AI agents inside the Linux environment. macOS/Linux use the native shell.
 - **An agent CLI** (optional, for exercising a real session) — e.g. Claude Code.
 
 ## Getting started
