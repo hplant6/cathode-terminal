@@ -562,9 +562,30 @@ html, body {
 .mc-menu-item:hover { background: var(--spec-structural); color: #fff; }
 .mc-menu-item-danger:hover { background: var(--danger-dim); color: var(--danger); }
 
-/* Running-but-untracked localhost servers */
-/* Untracked-servers panel — rendered as a card in the grid's first slot; the
-   .mc-card .mc-card-idle base gives it the same width/shell as the other cards. */
+/* Running-but-untracked localhost servers — a dropdown in the opposite (bottom-left)
+   corner from the Import/Create/Open FABs, rather than a grid card, so it never costs
+   a project card's worth of space. Row styling (.mc-untracked-*) is shared with the
+   dropdown's contents. */
+.mc-running-wrap { position: absolute; left: 40px; bottom: 24px; z-index: 5; }
+.mc-running-wrap[hidden] { display: none; }
+.mc-running-btn {
+  display: flex; align-items: center; gap: 8px; padding: 14px 26px;   /* same padding as .mc-open-fab → same height */
+  background: var(--spec-dropdown-bg); border: 1px solid var(--spec-structural); border-radius: 6px;
+  color: var(--spec-text); font-family: var(--font-title); font-weight: 600; font-size: 13px;
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: background 0.12s;
+}
+.mc-running-btn:hover { background: var(--spec-structural); }
+.mc-running-wrap.open .mc-running-btn { background: var(--spec-structural); }
+.mc-running-count { font-family: var(--font-mono); font-weight: 700; font-size: 11px; color: var(--spec-text-dim); }
+.mc-running-caret { opacity: 0.6; transition: transform 0.15s; }
+.mc-running-wrap.open .mc-running-caret { transform: rotate(180deg); }
+.mc-running-menu {
+  display: none; position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 20;
+  width: 360px; max-height: 320px; overflow-y: auto; padding: 8px 12px;
+  background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+.mc-running-wrap.open .mc-running-menu { display: block; }
 .mc-untracked-label { font-family: var(--font-mono); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mc-amber); margin-bottom: 4px; }
 .mc-untracked-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }   /* fills the card and scrolls when many servers are running */
 .mc-untracked-item { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px solid #1A191C; }   /* tabular rows like .mc-row */
@@ -3026,9 +3047,11 @@ html, body {
   flex: 1; min-height: 0; display: flex; flex-direction: column;
   background: var(--spec-toolbar-bg); border-radius: var(--r-blob); overflow: hidden;   /* shade 5 card */
 }
-/* Header: 16px title, sentence-case subtitle; row layout when there's a header button */
-.tp-framed .tp-head:has(.pp-head-text) { flex-direction: row; align-items: center; gap: 12px; }
-.tp-head > button:last-child { margin-left: auto; }   /* trailing header button → right edge */
+/* Header: 16px title, sentence-case subtitle. Icon/title/header-button(s) share a row
+   (.pp-head-top); the subtitle drops to its own full-width row beneath, rather than
+   stacking under the title inside that row. Same shape across every framed tool panel. */
+.tp-framed .tp-head:has(.pp-head-top) { flex-direction: column; align-items: stretch; gap: 6px; }
+.pp-head-top { display: flex; align-items: center; gap: 12px; }
 .tp-framed .tp-title { font-size: 16px; }
 .tp-framed .tp-sub { font-size: 11px; text-transform: none; font-weight: 400; letter-spacing: 0.02em; }
 
@@ -3146,33 +3169,61 @@ html, body {
 .tp-inner .pp-btns .pp-btn-primary { background: var(--spec-accent-dark); color: var(--spec-text-dim); border-radius: 0 0 var(--r-blob) 0; }
 .tp-inner .pp-btns .pp-btn-primary:hover { background: var(--spec-accent); color: #fff; }
 
-/* Box-select header: 16px title, sentence-case subtitle, no divider above the filter row */
-#pick-panel-head { border-bottom: none; flex-direction: row; align-items: center; gap: 12px; }
-.pp-head-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-/* tool icon in the menu header — shade 3, spans the title+sub height, pushes the text in */
-.tp-head-icon { align-self: stretch; flex-shrink: 0; display: flex; align-items: center; color: var(--spec-structural); }
-.tp-head-icon svg { height: 100%; width: auto; display: block; }
+/* Box-select header: no divider above the filter row (every other tool head keeps one). */
+#pick-panel-head { border-bottom: none; }
+/* Tool icon in the menu header — shade 3. Fixed 18px box (rather than stretching to the
+   row's height, which varies panel to panel) so the subtitle below can indent by exactly
+   icon width + .pp-head-top's 12px gap and land flush under the title, not the icon. */
+.tp-head-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; color: var(--spec-structural); }
+.tp-head-icon svg { width: 100%; height: 100%; display: block; }
+.tp-framed .tp-head > .tp-sub { margin-left: 30px; }   /* 18px icon + 12px gap */
+/* Secondary chrome — background+border+text recipe from .modal-btn-cancel, this app's
+   implementation of the Storybook Button's "secondary" variant. Reserves the filled-accent
+   "primary" look (.pp-add-sel, below) for the one action that actually stays inside the
+   current selection. Hover goes to --spec-structural (shade 3) rather than --btn-active —
+   --btn-active resolves to the same shade-2 value as the base --btn-hover fill app-wide,
+   so it never actually changed color; this states it explicitly, one shade darker. */
 .pp-new-sel {
-  flex-shrink: 0; width: auto; height: auto; box-shadow: none;
-  padding: 9px 16px; background: var(--spec-accent); border: none; border-radius: 5px;
-  color: #fff; cursor: pointer;
+  flex-shrink: 0; width: auto; height: 28px; box-shadow: none;
+  display: flex; align-items: center;
+  padding: 0 16px; background: var(--btn-hover); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); cursor: pointer;
   font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px;
   letter-spacing: 0.06em; text-transform: uppercase;
   transition: background 0.12s, color 0.12s;
 }
-.pp-new-sel:hover { background: #E64A1C; color: #fff; }
+.pp-new-sel:hover { background: var(--spec-structural); }
 
-.pp-new-wrap { margin-left: auto; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.pp-new-wrap { margin-left: auto; flex-shrink: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }   /* matches .pp-states chip spacing */
 .pp-toggle-sel {
-  width: auto; height: auto; min-width: 0; padding: 0; background: none; border: none; box-shadow: none;
-  white-space: nowrap;   /* stay on one line; the subtitle yields the width */
-  font-family: var(--font-mono); font-size: 11px; color: var(--spec-text-dim);
-  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
-  transition: color 0.12s;
+  width: 28px; height: 28px; min-width: 0; padding: 0; box-shadow: none;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: var(--btn-hover); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
-.pp-toggle-sel:hover { color: var(--spec-accent); }   /* shade-1 → orange on hover */
-#pick-panel .tp-title { font-size: 16px; }
-#pick-panel .tp-sub { font-size: 11px; text-transform: none; font-weight: 400; letter-spacing: 0.02em; }
+.pp-toggle-sel svg { display: block; }
+.pp-toggle-sel:hover { background: var(--spec-structural); }
+/* Primary chrome — the same recipe as .modal-btn-confirm (accent fill, hover → accent-dark),
+   this app's implementation of the Storybook Button's "primary" variant. While armed
+   (.adding — the draw tool is live, waiting on the next selection) it reuses the floating
+   toolbar's pulse-pick ring (.pick-btn.active) so "still drawing" reads the same everywhere. */
+.pp-add-sel {
+  flex-shrink: 0; width: auto; height: 28px; box-shadow: none;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 14px; background: var(--spec-accent); border: none; border-radius: 5px;
+  color: var(--text-on-accent); cursor: pointer;
+  font-family: var(--font-title); font-weight: 600; font-stretch: 112.5%; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  transition: background 0.12s, color 0.12s;
+}
+.pp-add-sel svg { flex-shrink: 0; }
+.pp-add-sel:hover { background: var(--spec-accent-dark); }
+.pp-add-sel.adding, .pp-add-sel.adding:hover {
+  background: var(--spec-accent-dark);
+  box-shadow: inset 0 0 0 1px var(--spec-accent);
+  animation: pulse-pick 1.5s ease-in-out infinite;
+}
 
 /* Filter dropdown (replaces the old category chips) — shows "Filter: <value>" */
 .ct-select.pp-filter-ct { flex: 1 1 0; width: auto; min-width: 0; }   /* 50% of the row (override .ct-select width:100%) */
@@ -3551,10 +3602,9 @@ html, body {
 }
 .pp-sel-chip .pp-chip-x svg { display: block; }
 .pp-sel-chip .pp-chip-x:hover { color: var(--spec-text); background: var(--spec-structural); }
-/* Add Selection in the composer toolbar — a .tp-persona-btn like its neighbour; only its
-   armed state is its own, in the accent the persona button uses for "on". */
-.tp-add-sel svg { flex-shrink: 0; }
-.tp-add-sel.adding, .tp-add-sel.adding:hover { color: var(--spec-accent); }
+/* Screenshot toggle — the shared .view-toggle/.vt-switch component (same as Usage/System/
+   DevTools) dropped into the tool bar; just needs to not shrink among the other buttons. */
+.tp-shot-toggle { flex-shrink: 0; }
 /* Custom resize handle, upper-right of the input (replaces the native grip) */
 .tp-resize {
   position: absolute; top: 16px; right: 12px; z-index: 2;   /* sits in the composer bar, top-right (like the main input) */
@@ -4719,6 +4769,15 @@ button:active { background: var(--btn-active); }
   transition: background 0.12s, color 0.12s;
 }
 .sb-bar-btn:hover { background: var(--spec-dropdown-bg); color: var(--spec-text); }   /* pin shade-4 fill (override global button:hover); only the icon goes white */
+/* Agent-link toggle — the shared .view-toggle/.vt-switch component (same as Usage/
+   System/DevTools, and the Box/Lasso Screenshot toggle) dropped into the instance bar. */
+#sb-bar-ai-link-wrap { flex-shrink: 0; margin-right: 4px; }
+/* Storybook view-tab dot — mirrors .vt-badge (Changes tab's count bubble) but as a plain
+   dot, since this is a boolean state rather than a count. */
+.vt-dot {
+  display: inline-block; width: 7px; height: 7px; margin-left: 4px;
+  border-radius: 50%; background: var(--spec-accent); flex-shrink: 0;
+}
 
 #sb-connected { display: none; flex-direction: column; padding: 20px; gap: 16px; }
 .sb-conn-header {
@@ -5003,6 +5062,7 @@ button:active { background: var(--btn-active); }
 .api-key-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .api-key-label  { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .api-key-masked { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); letter-spacing: 0.04em; }
+.api-key-masked.warn { color: var(--danger, #f87171); }   /* saved Claude account whose refresh token has also expired */
 .api-key-use {
   width: auto; height: 24px; padding: 0 10px;   /* width:auto escapes the global 28px icon-button default */
   background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);

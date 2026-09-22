@@ -59,7 +59,10 @@ const LS = {
   projects:       'cathode-projects',               // project registry [{id,name,rootDir,lastActiveAt}]
   activeProject:  'cathode-active-project',          // id of the active project
   pickShowAll:    'cathode-pick-show-all',           // Box/Lasso: show the elements the scan ranked out
+  pickIncludeShot: 'cathode-pick-include-shot',      // Box/Lasso: attach a screenshot of the selection (default on)
   lastSeenVersion: 'cathode-last-seen-version',      // What's New: the app version this user last launched
+  sbAgentLinkOff:  'cathode-sb-agent-link-off',      // Storybook: don't write the CLAUDE.md/AGENTS.md "check it" block
+  claudeAccounts:  'cathode-claude-accounts',        // saved Claude OAuth credential snapshots, switchable without re-login
 };
 
 // First-run UI defaults — seeded once, before the panels below read these keys,
@@ -1463,6 +1466,10 @@ const FOLDER_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" hei
 // attach files and pick a persona lens. Each bar keeps its own attachment list;
 // the persona dropdown drives the shared activePersona.
 const TOOL_ATTACH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773" stroke-width="1.25"></path></g></svg>`;
+// Box/Lasso "Show/Hide Selection" — eye / eye-slash, swapped in place of the button's icon
+// so the icon itself reads as the click's result (open eye while hidden = click to reveal).
+const EYE_SHOW_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="currentColor"/><path d="m1.125,12S4.989,4,12,4s10.875,8,10.875,8c0,0-3.865,8-10.875,8S1.125,12,1.125,12Z"/></svg>`;
+const EYE_HIDE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6.07,17.93c-3.226-2.37-4.945-5.93-4.945-5.93,0,0,3.864-8,10.875-8,2.334,0,4.32.887,5.93,2.07"/><path d="m20.804,8.853c1.362,1.678,2.071,3.147,2.071,3.147,0,0-3.865,8-10.875,8-.734,0-1.434-.088-2.098-.245"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="currentColor"/><line x1="22" y1="2" x2="2" y2="22"/></svg>`;
 
 // Clone the main persona dropdown (reuses its glyph SVG) as a class-styled copy.
 // ── "Intent" lens — tool panels only ─────────────────────────────
@@ -1656,18 +1663,42 @@ function makeToolComposerBar(foot) {
   chips.className = 'tp-attach-chips';
 
   bar.append(attachBtn, persona.wrap);
-  // Box/Lasso: Add Selection sits with the other things you put into the message. What you
-  // draw lands as a chip at the cursor in the instruction (initPickPanel wires it by id).
+  // Box/Lasso: Add Selection now lives in the panel header, beside New Selection
+  // (index.html #pick-panel-add) — initPickPanel wires it by id regardless of where it
+  // sits in the DOM. This composer toolbar just gets the Screenshot toggle.
   if (foot.id === 'pick-panel-foot') {
-    const addSel = document.createElement('button');
-    addSel.type = 'button';
-    addSel.id = 'pick-panel-add';
-    addSel.className = 'tp-persona-btn tp-add-sel';   // the toolbar's button style — same as the persona dropdown beside it
-    addSel.title = 'Draw another selection — it is inserted at the cursor in your instruction';
-    // viewBox cropped to the drawn plus (caps included): the uncropped 18-unit box left ~2px of
-    // empty icon inside the left padding, so the button looked padded more on that side.
-    addSel.innerHTML = '<svg viewBox="2.75 2.75 12.5 12.5" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11"/></svg><span class="tp-persona-label">Add Selection</span>';
-    bar.append(addSel);
+    // Screenshot toggle: each selection normally ships with a captured PNG of the outlined
+    // elements (captureSelectionShot in main). That costs image tokens the agent doesn't
+    // always need — text-only selections still carry CSS/DOM detail — so it's a toggle
+    // rather than always-on, persisted like the other pick-panel preferences. Same
+    // label+switch component as the Usage/System/DevTools toggles (.view-toggle/.vt-switch).
+    const shotWrap = document.createElement('div');
+    shotWrap.className = 'view-toggle tp-shot-toggle';
+    const shotLabel = document.createElement('span');
+    shotLabel.className = 'vt-label';
+    shotLabel.textContent = 'Screenshot';
+    const shotSwitch = document.createElement('button');
+    shotSwitch.type = 'button';
+    shotSwitch.id = 'pick-panel-shot-toggle';
+    shotSwitch.className = 'vt-switch';
+    shotSwitch.setAttribute('role', 'switch');
+    shotSwitch.innerHTML = '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span>';
+    const shotOn = () => localStorage.getItem(LS.pickIncludeShot) !== '0';
+    const paintShot = () => {
+      const on = shotOn();
+      shotSwitch.classList.toggle('on', on);
+      shotSwitch.setAttribute('aria-checked', String(on));
+      shotSwitch.title = on
+        ? 'Screenshot included — click to send this selection as text only'
+        : 'Screenshot off — click to include a screenshot of the selection';
+    };
+    shotSwitch.addEventListener('click', () => {
+      localStorage.setItem(LS.pickIncludeShot, shotOn() ? '0' : '1');
+      paintShot();
+    });
+    paintShot();
+    shotWrap.append(shotLabel, shotSwitch);
+    bar.append(shotWrap);
   }
   bar.append(chips);
   foot.insertBefore(bar, foot.firstChild);
@@ -2013,7 +2044,11 @@ function addAttachChips(paths, kind) {
   let added = false;
   paths.forEach(p => {
     if (!p || attachChips.some(c => c.path === p)) return;   // skip blanks + dupes
-    attachChips.push({ kind, path: p });
+    // Drop-in downscale: the chip (and the agent, which reads this path itself) gets
+    // the resized copy — the original file on disk is never touched.
+    const finalPath = (kind === 'file' && isChatImage(p)) ? maybeDownscaleForChat(p) : p;
+    if (attachChips.some(c => c.path === finalPath)) return;   // the resized copy may already be attached
+    attachChips.push({ kind, path: finalPath });
     added = true;
   });
   if (added) renderFigmaChips();
@@ -3639,6 +3674,39 @@ const COPY_ICON = '<svg viewBox="0 0 18 18" width="13" height="13" fill="none" s
 // ── Image attachments (chat thumbnails + lightbox) ────────────────
 const CHAT_IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 function isChatImage(p) { return CHAT_IMG_EXT.test(p || ''); }
+
+// Claude's vision pipeline resizes any image down to ~1568px on its long edge before
+// it ever reaches the model — tokens are billed on what it actually looks at, roughly
+// (w*h)/750. A 4K screenshot (3840x2160) is ~5x that, so sending it full-size only pays
+// for pixels the model never sees. Downscale a copy to that same cap before attaching;
+// the agent (which reads the path itself) then gets exactly what the API would've
+// resized it to anyway, at a fraction of the upload/encode cost. SVGs (vector, already
+// cheap) and GIFs (nativeImage only grabs frame 1 — not worth the surprise) pass through.
+const CHAT_IMG_MAX_DIM = 1568;
+function maybeDownscaleForChat(filePath) {
+  try {
+    const ext = (String(filePath).split('.').pop() || '').toLowerCase();
+    if (ext === 'svg' || ext === 'gif') return filePath;
+    const { nativeImage } = require('electron');
+    const img = nativeImage.createFromPath(filePath);
+    if (img.isEmpty()) return filePath;
+    const { width, height } = img.getSize();
+    if (!width || !height || Math.max(width, height) <= CHAT_IMG_MAX_DIM) return filePath;   // already small enough
+    const scale = CHAT_IMG_MAX_DIM / Math.max(width, height);
+    const resized = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'best' });
+    const isJpeg = ext === 'jpg' || ext === 'jpeg';
+    const buf = isJpeg ? resized.toJPEG(88) : resized.toPNG();
+    const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto');
+    const dir = path.join(os.tmpdir(), 'cathode-chat-img-cache');
+    fs.mkdirSync(dir, { recursive: true });
+    // Content-addressed by source path + its original dimensions: a re-drop of the same
+    // file resizes once, but an edited-in-place file (same path, new pixels) gets redone.
+    const hash = crypto.createHash('sha1').update(filePath + ':' + width + 'x' + height).digest('hex').slice(0, 16);
+    const outPath = path.join(dir, hash + (isJpeg ? '.jpg' : '.png'));
+    if (!fs.existsSync(outPath)) fs.writeFileSync(outPath, buf);
+    return outPath;
+  } catch (_) { return filePath; }   // best-effort — never block sending on a resize failure
+}
 function chatImgMime(p) {
   const ext = (String(p).split('.').pop() || '').toLowerCase();
   if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
@@ -5283,10 +5351,103 @@ async function renderAuthAccountSection() {
   });
 }
 
+// ── Saved Claude accounts — OAuth credential snapshots you can switch to
+// instantly (writes straight into ~/.claude/.credentials.json), instead of
+// running `claude auth login`'s browser round-trip every time. The obvious use:
+// log into a personal and a work email once each, save both, then flip between
+// them. Sealed at rest the same way API keys are (secureGet/secureSet → safeStorage).
+const CLAUDE_ACCOUNTS_STORE = LS.claudeAccounts;
+function loadClaudeAccounts() {
+  try { const r = secureGet(CLAUDE_ACCOUNTS_STORE); if (r) return JSON.parse(r); } catch (_) {}
+  return [];
+}
+function persistClaudeAccounts(accounts) { secureSet(CLAUDE_ACCOUNTS_STORE, JSON.stringify(accounts)); }
+
+// A saved snapshot's access token stops working on its own after expiresAt, but the
+// CLI silently refreshes it via refreshToken on next use — only refreshTokenExpiresAt
+// passing actually means "log in again for this one."
+function claudeAccountStatusLabel(oauth) {
+  if (!oauth?.accessToken) return { text: '', warn: false };
+  const now = Date.now();
+  if (oauth.refreshTokenExpiresAt && now > oauth.refreshTokenExpiresAt) return { text: 'Expired — needs a fresh login', warn: true };
+  if (oauth.expiresAt && now > oauth.expiresAt) return { text: 'Refreshes automatically on use', warn: false };
+  return { text: '', warn: false };
+}
+
+async function renderClaudeAccountsList() {
+  const listEl = document.getElementById('claude-accounts-list');
+  if (!listEl) return;
+  const accounts = loadClaudeAccounts();
+  listEl.innerHTML = '';
+  if (!accounts.length) return;   // nothing saved yet — stay quiet rather than add another empty-state line
+  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
+  const liveToken = (creds?.claudeAiOauth ?? creds)?.accessToken || '';
+  accounts.forEach(a => {
+    const isLive = !!liveToken && a.oauth?.accessToken === liveToken;
+    const status = claudeAccountStatusLabel(a.oauth);
+    const item = document.createElement('div');
+    item.className = 'api-key-item' + (isLive ? ' active' : '');
+    item.innerHTML = `
+      <div class="api-key-dot"></div>
+      <div class="api-key-info">
+        <span class="api-key-label">${escHtml(a.name)}</span>
+        ${status.text ? `<span class="api-key-masked${status.warn ? ' warn' : ''}">${escHtml(status.text)}</span>` : ''}
+      </div>
+      <button class="api-key-use" ${isLive ? 'disabled' : ''}>${isLive ? 'Active' : 'Use'}</button>
+      <button class="api-key-del" title="Remove">✕</button>
+    `;
+    item.querySelector('.api-key-use').addEventListener('click', async () => {
+      const btn = item.querySelector('.api-key-use');
+      btn.disabled = true; btn.textContent = 'Switching…';
+      const r = await ipcRenderer.invoke(IPC.AUTH_STATUS_WRITE, { oauth: a.oauth }).catch(() => null);
+      if (!r || !r.ok) { showToast("Couldn't switch accounts", { duration: 4000 }); btn.disabled = false; btn.textContent = 'Use'; return; }
+      await renderAuthAccountSection();
+      await renderClaudeAccountsList();
+    });
+    item.querySelector('.api-key-del').addEventListener('click', () => {
+      persistClaudeAccounts(loadClaudeAccounts().filter(x => x.id !== a.id));
+      renderClaudeAccountsList();
+    });
+    listEl.appendChild(item);
+  });
+}
+
+const claudeAccountSaveForm = document.getElementById('claude-account-save-form');
+document.getElementById('claude-account-save-open')?.addEventListener('click', () => {
+  if (!claudeAccountSaveForm) return;
+  const open = claudeAccountSaveForm.style.display === 'none';
+  claudeAccountSaveForm.style.display = open ? '' : 'none';
+  if (open) {
+    const nameEl = document.getElementById('claude-account-save-name');
+    nameEl.value = ''; nameEl.focus();
+  }
+});
+async function commitClaudeAccountSave() {
+  const nameEl = document.getElementById('claude-account-save-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
+  const oauth = creds?.claudeAiOauth ?? creds;
+  if (!oauth?.accessToken) { showToast('Not logged in — nothing to save yet', { duration: 4000 }); return; }
+  const accounts = loadClaudeAccounts();
+  accounts.push({ id: `a${Date.now()}`, name, oauth, savedAt: Date.now() });
+  persistClaudeAccounts(accounts);
+  claudeAccountSaveForm.style.display = 'none';
+  renderClaudeAccountsList();
+}
+document.getElementById('claude-account-save-commit')?.addEventListener('click', commitClaudeAccountSave);
+document.getElementById('claude-account-save-cancel')?.addEventListener('click', () => { if (claudeAccountSaveForm) claudeAccountSaveForm.style.display = 'none'; });
+document.getElementById('claude-account-save-name')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitClaudeAccountSave();
+  if (e.key === 'Escape') { if (claudeAccountSaveForm) claudeAccountSaveForm.style.display = 'none'; }
+});
+
 const authModalCtl = wireModal(authModal);
 
 async function openAuthModal() {
   renderAuthAccountSection();
+  renderClaudeAccountsList();
+  if (claudeAccountSaveForm) claudeAccountSaveForm.style.display = 'none';
   renderApiKeysList();
   apiKeyNewForm.style.display = 'none';
   authModalCtl.open();
@@ -5782,7 +5943,7 @@ function renderViewTabs() {
     btn.addEventListener('click', () => activateViewTab(tab.id));
     container.appendChild(btn);
   });
-  requestAnimationFrame(() => { alignTabIconGaps(); equalizeTabWidths(); updateViewTabThumb(); window.__diffRefreshTabDeco?.(); });
+  requestAnimationFrame(() => { alignTabIconGaps(); equalizeTabWidths(); updateViewTabThumb(); window.__diffRefreshTabDeco?.(); window.__sbRefreshTabDeco?.(); });
 }
 
 renderViewTabs();
@@ -6450,7 +6611,25 @@ function setPickMode(mode, opts) {
 document.getElementById('btn-pick-box')?.addEventListener('click',   () => setPickMode('box'));
 document.getElementById('btn-pick-lasso')?.addEventListener('click', () => setPickMode('lasso'));
 document.getElementById('btn-pick-aidev')?.addEventListener('click', () => setPickMode('aidev'));
-document.getElementById('extract-panel-new')?.addEventListener('click', () => setPickMode('aidev'));
+document.getElementById('extract-panel-new')?.addEventListener('click', () => {
+  paintExtractAdding(false);
+  setPickMode('aidev');
+});
+// Extract's Add Selection — same tool, appended: the new element joins the list
+// (initExtractPanel merges on EXTRACT_PANEL_OPEN's base) instead of replacing it.
+function paintExtractAdding(on) {
+  const btn = document.getElementById('extract-panel-add');
+  if (!btn) return;
+  btn.classList.toggle('adding', !!on);
+  const label = btn.querySelector('.tp-persona-label');
+  if (label) label.textContent = on ? 'Adding Selection' : 'Add Selection';
+}
+document.getElementById('extract-panel-add')?.addEventListener('click', () => {
+  const arming = !document.getElementById('extract-panel-add')?.classList.contains('adding');   // a second click disarms (setPickMode toggles off)
+  setPickMode('aidev', { append: true });
+  paintExtractAdding(arming);
+});
+ipcRenderer.on(IPC.PICK_CANCELLED, () => paintExtractAdding(false));
 document.getElementById('btn-screenshot')?.addEventListener('click', () => {
   if (pickMode === 'screenshot') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
   clearPickMode();
@@ -6522,11 +6701,31 @@ document.getElementById('btn-pick-animate')?.addEventListener('click', () => {
 });
 // Animation panel's "New Selection" → re-arm the tool to pick a new element.
 document.getElementById('animation-panel-new')?.addEventListener('click', () => {
+  paintAnimAdding(false);
   clearPickMode();
   pickMode = 'animate';
   applyPickCursor('animate');
   ipcRenderer.send(IPC.PICK_ANIMATE);
 });
+function paintAnimAdding(on) {
+  const btn = document.getElementById('animation-panel-add');
+  if (!btn) return;
+  btn.classList.toggle('adding', !!on);
+  const label = btn.querySelector('.tp-persona-label');
+  if (label) label.textContent = on ? 'Adding Selection' : 'Add Selection';
+}
+// Animation panel's Add Selection — same tool, appended: the new target joins the
+// spec's target list (initAnimationPanel merges on ANIM_PANEL_OPEN's base) instead of
+// replacing the session, so one spec previews/sends against all of them. Mirrors New
+// Selection's re-arm (no toggle-off — Escape is how an armed pick gets cancelled).
+document.getElementById('animation-panel-add')?.addEventListener('click', () => {
+  clearPickMode();
+  pickMode = 'animate';
+  applyPickCursor('animate');
+  ipcRenderer.send(IPC.PICK_ANIMATE, { append: true });
+  paintAnimAdding(true);
+});
+ipcRenderer.on(IPC.PICK_CANCELLED, () => paintAnimAdding(false));
 
 function clearPickMode() {
   pickMode = null;
@@ -6592,6 +6791,13 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const footEl      = document.getElementById('pick-panel-foot');
   let selVisible = false;   // pinned state; selection is hidden by default and previewed on hover of the Show/Hide selection link
   if (!panel) return;
+
+  function paintToggleSel(visible) {
+    if (!toggleSelBtn) return;
+    toggleSelBtn.innerHTML = visible ? EYE_HIDE_SVG : EYE_SHOW_SVG;
+    toggleSelBtn.title = visible ? 'Hide selection outline on the page' : 'Show selection outline on the page';
+    toggleSelBtn.setAttribute('aria-label', toggleSelBtn.title);
+  }
 
   // ── States: a sticky row inside each element's drawer. Each drawer forces
   // :hover/:focus/:active/:disabled on its OWN element (via CDP). ──
@@ -7895,8 +8101,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     render();
     pushHighlight();         // nothing highlighted until hover/open
     panel.hidden = false;
-    selVisible = false;   // hidden by default — hover the Show Selection link to preview it
-    if (toggleSelBtn) toggleSelBtn.textContent = 'Show Selection';
+    selVisible = false;   // hidden by default — hover the Show Selection button to preview it
+    paintToggleSel(false);
     ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: false });
     document.getElementById('toolbar')?.classList.add('hidden-by-pick');   // hide the floating tool palette while the menu is open
     setTimeout(() => { insertChip(id); syncChipActive(); }, 0);   // the first selection is the first thing in your instruction
@@ -7975,7 +8181,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function send() {
     const _foot = editor.closest('.tp-foot');
     const instruction = editorText(selNumbers()).trim();
-    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(instruction, _foot), items: resolvedItems() });
+    const includeShot = localStorage.getItem(LS.pickIncludeShot) !== '0';
+    ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(instruction, _foot), items: resolvedItems(), includeShot });
     _foot?._composerBar?.clear();
     close();
   }
@@ -8003,7 +8210,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   toggleSelBtn?.addEventListener('mouseleave', () => ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible }));
   toggleSelBtn?.addEventListener('click', () => {
     selVisible = !selVisible;
-    toggleSelBtn.textContent = selVisible ? 'Hide Selection' : 'Show Selection';
+    paintToggleSel(selVisible);
     ipcRenderer.send(IPC.TOGGLE_PAGE_SELECTION, { visible: selVisible });
   });
   editor.addEventListener('keydown', (e) => {
@@ -8117,12 +8324,16 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const cancelBtn = $('animation-cancel'), sendBtn = $('animation-send');
   const typeSel = $('anim-type'), easingSel = $('anim-easing'), dirSel = $('anim-direction');
   const repeatSel = $('anim-repeat'), triggerSel = $('anim-trigger');
+  const originSel = $('anim-origin'), playDirSel = $('anim-play-direction'), fillSel = $('anim-fill');
+  const fromXNum = $('anim-from-x'), fromYNum = $('anim-from-y'), toXNum = $('anim-to-x'), toYNum = $('anim-to-y');
+  const staggerSlider = $('anim-stagger-slider'), staggerNum = $('anim-stagger');
   const durSlider = $('anim-duration-slider'), durNum = $('anim-duration'), delayNum = $('anim-delay');
   const distSlider = $('anim-distance-slider'), distNum = $('anim-distance');
   const amtSlider = $('anim-amount-slider'), amtNum = $('anim-amount'), amtLabel = $('anim-amount-label');
   const colorSwatch = $('anim-color'), replayBtn = $('anim-replay'), loopBtn = $('anim-loop');
   let targetColor = '#ff5720';
   const rowDir = $('anim-row-direction'), rowDist = $('anim-row-distance'), rowAmt = $('anim-row-amount'), rowColor = $('anim-row-color');
+  const rowPosFrom = $('anim-row-position-from'), rowPosTo = $('anim-row-position-to'), rowOrigin = $('anim-row-origin');
   const bezierRow = $('anim-row-bezier');
   // Cubic-bézier curve editor: two draggable handles. SVG maps time x∈[0,1]→[20,180]
   // and progress y∈[0,1]→[150,50] (with vertical room for overshoot easings).
@@ -8163,7 +8374,10 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   dirSel.innerHTML = opts(ANIM.DIRECTIONS);
   repeatSel.innerHTML = opts([['1', 'Once'], ['2', '2×'], ['3', '3×'], ['5', '5×'], ['infinite', 'Loop']]);
   triggerSel.innerHTML = opts(ANIM.TRIGGERS);
-  [typeSel, easingSel, dirSel, repeatSel, triggerSel].forEach(sel => { enhanceSelect(sel); sel.parentNode.classList.add('pp-ct'); });   // pp-ct on the wrap → lasso-panel dropdown styling
+  originSel.innerHTML = opts(ANIM.ORIGINS);
+  playDirSel.innerHTML = opts(ANIM.PLAY_DIRECTIONS);
+  fillSel.innerHTML = opts(ANIM.FILLS);
+  [typeSel, easingSel, dirSel, repeatSel, triggerSel, originSel, playDirSel, fillSel].forEach(sel => { enhanceSelect(sel); sel.parentNode.classList.add('pp-ct'); });   // pp-ct on the wrap → lasso-panel dropdown styling
 
   // ── Framework code output: pick a target library, see its code live ──
   const fwToggle = $('anim-fw-toggle'), fwNote = $('anim-fw-note');
@@ -8172,7 +8386,8 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   const dampSlider = $('anim-spring-damping-slider'), dampNum = $('anim-spring-damping');
   const massSlider = $('anim-spring-mass-slider'), massNum = $('anim-spring-mass');
   const fwLabelFor = (fw) => { const f = ANIM.ANIM_FRAMEWORKS.find(x => x[0] === fw); return f ? f[1] : fw; };
-  let selectedFw = 'css', currentSelector = '';
+  let selectedFw = 'css';
+  let targets = [];   // { selector, tag, label, snippet } — one spec previews/sends against all of them
   const fwThumb = fwToggle.querySelector('.anim-fw-thumb');
   function positionThumb() {   // design-system sliding thumb → slide it under the active segment
     const active = fwToggle.querySelector('.anim-fw-chip.on');
@@ -8211,11 +8426,17 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   function currentSpec() {
     const type = typeSel.value, f = ANIM.fieldsFor(type);
-    const spec = { type, easing: easingValue(), duration: +durNum.value || 0, delay: +delayNum.value || 0, repeat: repeatSel.value, trigger: triggerSel.value };
+    const spec = {
+      type, easing: easingValue(), duration: +durNum.value || 0, delay: +delayNum.value || 0,
+      repeat: repeatSel.value, trigger: triggerSel.value, fill: fillSel.value, playDirection: playDirSel.value,
+    };
+    if (staggerNum.value && +staggerNum.value > 0) spec.stagger = +staggerNum.value;
     if (f.direction) spec.direction = dirSel.value;
     if (f.distance) spec.distance = +distNum.value || 0;
     if (f.amount) spec.amount = +amtNum.value;
     if (f.color) spec.targetColor = targetColor;
+    if (f.position) { spec.fromX = +fromXNum.value || 0; spec.fromY = +fromYNum.value || 0; spec.toX = +toXNum.value || 0; spec.toY = +toYNum.value || 0; }
+    if (f.origin) spec.transformOrigin = originSel.value;
     if (easingSel.value === 'spring') spec.spring = { stiffness: +stiffNum.value || 100, damping: +dampNum.value || 10, mass: +massNum.value || 1 };
     return spec;
   }
@@ -8231,6 +8452,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function syncFields(resetAmount) {
     const type = typeSel.value, f = ANIM.fieldsFor(type);
     rowDir.hidden = !f.direction; rowDist.hidden = !f.distance; rowAmt.hidden = !f.amount; rowColor.hidden = !f.color;
+    rowPosFrom.hidden = rowPosTo.hidden = !f.position; rowOrigin.hidden = !f.origin;
     if (f.amount) {
       const m = ANIM.amountMeta(type);
       amtLabel.textContent = m.label;
@@ -8245,37 +8467,61 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   }
   wirePair(durSlider, durNum); wirePair(distSlider, distNum); wirePair(amtSlider, amtNum);
   wirePair(stiffSlider, stiffNum); wirePair(dampSlider, dampNum); wirePair(massSlider, massNum);
+  wirePair(staggerSlider, staggerNum);
   // Custom number spinner: click the top/bottom half of the icon zone to step.
-  [durNum, distNum, amtNum, delayNum, stiffNum, dampNum, massNum].forEach(num => num.addEventListener('click', (e) => {
+  [durNum, distNum, amtNum, delayNum, stiffNum, dampNum, massNum, fromXNum, fromYNum, toXNum, toYNum, staggerNum].forEach(num => num.addEventListener('click', (e) => {
     const rect = num.getBoundingClientRect();
     if (e.clientX < rect.right - 16) return;   // only the right-edge icon zone steps
     (e.clientY < rect.top + rect.height / 2) ? num.stepUp() : num.stepDown();
     num.dispatchEvent(new Event('input', { bubbles: true }));
   }));
   delayNum.addEventListener('input', schedulePreview);
+  [fromXNum, fromYNum, toXNum, toYNum].forEach(n => n.addEventListener('input', schedulePreview));
   colorSwatch.addEventListener('click', () => sharedColorPicker && sharedColorPicker.open(colorSwatch, targetColor, (hex) => { targetColor = hex; schedulePreview(); }));
-  [dirSel, repeatSel, triggerSel].forEach(s => s.addEventListener('change', schedulePreview));
+  [dirSel, repeatSel, triggerSel, originSel, playDirSel, fillSel].forEach(s => s.addEventListener('change', schedulePreview));
   easingSel.addEventListener('change', () => { bezierRow.hidden = easingSel.value !== 'custom'; springRow.hidden = easingSel.value !== 'spring'; if (!bezierRow.hidden) bzRender(); schedulePreview(); });
   typeSel.addEventListener('change', () => { syncFields(true); schedulePreview(); });
   replayBtn?.addEventListener('click', () => ipcRenderer.send(IPC.ANIM_PANEL_PREVIEW, { spec: previewSpec() }));
   loopBtn?.addEventListener('click', () => { loopPreview = !loopPreview; loopBtn.classList.toggle('on', loopPreview); schedulePreview(); });
 
-  function open({ label, selector } = {}) {
+  function targetName(it) { return it.label || it.selector || it.tag || ''; }
+  function renderTargets() {
+    if (!subEl) return;
+    if (!targets.length) { subEl.textContent = 'Configure the animation.'; return; }
+    subEl.textContent = targets.length === 1
+      ? `Target: ${targetName(targets[0])}`
+      : `Targets (${targets.length}): ${targets.map(targetName).join(', ')}`;
+  }
+  function open({ items } = {}) {
     clearPickMode();
-    currentSelector = selector || '';
-    if (subEl) subEl.textContent = label ? `Target: ${label}` : 'Configure the animation.';
+    paintAnimAdding(false);
+    targets = items || [];
+    renderTargets();
     typeSel.value = 'fade-in'; easingSel.value = 'ease'; bezierRow.hidden = true; springRow.hidden = true;
     loopPreview = false; loopBtn?.classList.remove('on');
     BZ.x1 = 0.4; BZ.y1 = 0; BZ.x2 = 0.2; BZ.y2 = 1; bzRender();
     durSlider.value = durNum.value = 1000; delayNum.value = 0;
     repeatSel.value = '1'; triggerSel.value = 'load'; targetColor = '#ff5720'; colorSwatch.style.background = targetColor;
+    originSel.value = 'center'; playDirSel.value = 'normal'; fillSel.value = 'both';
+    staggerSlider.value = staggerNum.value = 0;
+    const posD = ANIM.positionDefaults();
+    fromXNum.value = posD.fromX; fromYNum.value = posD.fromY; toXNum.value = posD.toX; toYNum.value = posD.toY;
     syncFields(true);
     textarea.value = '';
     panel.hidden = false;
     requestAnimationFrame(positionThumb);   // offsets are only real once the panel is visible
     schedulePreview();
   }
-  function close()  { panel.hidden = true; textarea.value = ''; clearTimeout(previewTimer); }
+  // Add Selection: the new target(s) join the set — the spec/instruction the user has
+  // already configured stays put, unlike open() which resets the whole form.
+  function appendTargets(items) {
+    clearPickMode();
+    paintAnimAdding(false);
+    targets = targets.concat(items || []);
+    renderTargets();
+    schedulePreview();   // re-preview against the now-larger target set
+  }
+  function close()  { panel.hidden = true; textarea.value = ''; targets = []; clearTimeout(previewTimer); }
   function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: decorateToolInstruction(textarea.value.trim(), f), framework: selectedFw }); f?._composerBar?.clear(); close(); }
   function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
 
@@ -8287,7 +8533,10 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   });
   addPanelEscClose(panel, cancel, el => el === textarea);
 
-  ipcRenderer.on(IPC.ANIM_PANEL_OPEN, (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.ANIM_PANEL_OPEN, (_, { items, base } = {}) => {
+    if (base > 0 && !panel.hidden && base === targets.length) appendTargets(items || []);
+    else open({ items });
+  });
 })();
 
 // ── Extract tool panel (overtakes the chat column) ───────────────
@@ -8399,6 +8648,15 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     render();
     panel.hidden = false;
   }
+  // Add Selection: the new element(s) join the list — existing rows keep their checked
+  // boxes, expanded state and dest choice, unlike a fresh open() which rebuilds rows[].
+  function appendItems(items) {
+    clearPickMode();
+    paintExtractAdding(false);
+    const start = rows.length;
+    (items || []).forEach((it, i) => rows.push({ item: it, index: start + i, expanded: false, media: new Set(), data: new Set(), dest: 'chat' }));
+    render();
+  }
   function close() { panel.hidden = true; instr.value = ''; rows = []; }
   function send() {
     const perElement = rows.filter(r => countOf(r) > 0).map(r => ({
@@ -8420,7 +8678,10 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   instr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
   addPanelEscClose(panel, cancel, el => el === instr);
 
-  ipcRenderer.on(IPC.EXTRACT_PANEL_OPEN, (_, data) => open(data || {}));
+  ipcRenderer.on(IPC.EXTRACT_PANEL_OPEN, (_, { items, base } = {}) => {
+    if (base > 0 && !panel.hidden && base === rows.length) appendItems(items || []);
+    else open({ items });
+  });
 })();
 
 // ── Eyedropper tool panel (overtakes the chat column) ────────────
@@ -10699,7 +10960,7 @@ function sendUiMessage() {
     : raw;
   if (shownAttachText) display = (display.trim() ? display + '\n' : '') + shownAttachText;
 
-  let text = (sbConfig && sbConfig.autoInject)
+  let text = (sbConfig && sbConfig.autoInject && !sbAgentLinkOff())
     ? sbContextText(sbConfig) + '\n\n' + body
     : body;
   // Response lenses (persona framing + caveman terseness): prepend to the agent-facing
@@ -10781,6 +11042,38 @@ let updateComponentPickerBtn = null; // set by component picker IIFE
 
 // ── Storybook panel ──────────────────────────────────────────────
 let sbConfig = safeParse(localStorage.getItem(LS.storybook), null);
+
+// Agent-link toggle: when on, the Storybook instruction is never written into this
+// project's CLAUDE.md/AGENTS.md. Some non-Claude agents were burning session tokens
+// re-checking, or repeatedly trying to relaunch, a Storybook just because the managed
+// block told them to reference one before every UI change — this opts a project out
+// of that instruction while leaving the Storybook tab/servers themselves untouched.
+function sbAgentLinkOff() { return localStorage.getItem(LS.sbAgentLinkOff) === '1'; }
+function writeSbMemoryIfLinked(url) {
+  if (sbAgentLinkOff()) return Promise.resolve();
+  return ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url }).catch(() => {});
+}
+function sbTabBtn() {
+  const t = tabsConfig.find(x => x.type === 'storybook'); if (!t) return null;
+  const id = (window.CSS && CSS.escape) ? CSS.escape(t.id) : t.id;
+  return document.querySelector('.view-tab[data-view="' + id + '"]');
+}
+// Dot on the Storybook view-tab — mirrors the Changes tab's __diffRefreshTabDeco hook,
+// so the state reads at a glance even when another tab (or the setup view) is active.
+function updateSbTabDot() {
+  const btn = sbTabBtn(); if (!btn) return;
+  let d = btn.querySelector('.vt-dot');
+  if (!sbAgentLinkOff()) { if (d) d.remove(); return; }
+  if (!d) { d = document.createElement('span'); d.className = 'vt-dot'; d.title = 'Hidden from agents'; btn.appendChild(d); }
+}
+window.__sbRefreshTabDeco = updateSbTabDot;
+function paintSbAiLink() {
+  const sw = document.getElementById('sb-bar-ai-link');
+  const linked = !sbAgentLinkOff();   // switch reads naturally: on = linkage active (the default)
+  if (sw) { sw.classList.toggle('on', linked); sw.setAttribute('aria-checked', String(linked)); }
+  updateSbTabDot();
+}
+paintSbAiLink();
 
 function sbContextText(cfg) {
   return `[Design System] Before making any UI changes, reference the Storybook at ${cfg.value}. Use its design tokens, component APIs, and visual styles to ensure consistency with the existing design system.`;
@@ -11188,6 +11481,7 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
     const mc = wireModal(mcModal, { onClose: () => {
       clearInterval(statusTimer); clearInterval(ramTimer); statusTimer = ramTimer = null; addFormProject = null;
       closeFootMenu();
+      closeRunningMenu();
       // Closing is the moment the Browser pane comes back, so it's the reliable
       // place to refresh the active project's preview. The native view is only
       // restored after the modal-overlay round-trip through main, so give it a
@@ -11458,26 +11752,34 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
       }
     });
 
-    // Update the cache and (re)insert the untracked panel as the first grid card.
+    // Update the cache and re-render the Running dropdown (mc-fabs, not the grid).
     function renderUntracked(items) {
       untrackedItems = items || [];
-      insertUntrackedCard();
+      renderRunningMenu();
     }
 
-    // Prepend the untracked-servers card into the grid (removing any prior one),
-    // so it occupies the first card slot at the same width as the project cards.
-    // Uses the cached items so it can run synchronously after renderMC rebuilds
-    // the grid, without waiting on a re-probe.
-    function insertUntrackedCard() {
-      if (!mcGrid) return;
-      mcGrid.querySelector('.mc-untracked-card')?.remove();
-      mcGrid.querySelector('.mc-empty')?.remove();   // stray servers count as content
-      if (!untrackedItems.length) return;
-      const card = document.createElement('div');
-      card.className = 'mc-card mc-card-idle mc-untracked-card';
-      const label = document.createElement('div'); label.className = 'mc-untracked-label';
-      label.textContent = 'Running on localhost — not in a project';
-      card.appendChild(label);
+    const mcRunningWrap  = document.getElementById('mc-running-wrap');
+    const mcRunningBtn   = document.getElementById('mc-running-btn');
+    const mcRunningMenu  = document.getElementById('mc-running-menu');
+    const mcRunningCount = document.getElementById('mc-running-count');
+    function closeRunningMenu() { mcRunningWrap?.classList.remove('open'); }
+    function openRunningMenu()  { mcRunningWrap?.classList.add('open'); }
+    mcRunningBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mcRunningWrap?.classList.contains('open') ? closeRunningMenu() : openRunningMenu();
+    });
+    document.addEventListener('click', (e) => { if (mcRunningWrap && !mcRunningWrap.contains(e.target)) closeRunningMenu(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeRunningMenu(); });
+
+    // Rebuild the Running button + its dropdown list from the cached items, so it can
+    // run synchronously after renderMC(), without waiting on a re-probe. Hidden entirely
+    // (no dead space in mc-fabs) when nothing untracked is running.
+    function renderRunningMenu() {
+      if (!mcRunningWrap || !mcRunningMenu) return;
+      mcRunningWrap.hidden = !untrackedItems.length;
+      if (!untrackedItems.length) { closeRunningMenu(); return; }
+      if (mcRunningCount) mcRunningCount.textContent = String(untrackedItems.length);
+      mcRunningMenu.innerHTML = '';
       const list = document.createElement('div'); list.className = 'mc-untracked-list';
       untrackedItems.forEach(({ port, name }) => {
         const row = document.createElement('div'); row.className = 'mc-untracked-item';
@@ -11495,13 +11797,13 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
           await seedServers(getProject(getActiveId()));
           const p = getProject(getActiveId());   // ensure the running port is tracked so the new card shows it active
           if (p && !(p.servers || []).some(s => +s.port === port)) addServer(p.id, { name: 'dev', cmd: '', port });
+          closeRunningMenu();
           renderMC(); refreshUntracked();
         });
         acts.append(open, adopt);
         list.appendChild(row);
       });
-      card.appendChild(list);
-      mcGrid.insertBefore(card, mcGrid.firstChild);
+      mcRunningMenu.appendChild(list);
     }
 
     // Start every stopped server in a project.
@@ -11894,14 +12196,14 @@ if (sbConfig && sbConfig.projectDir) { const sf = document.getElementById('sb-fo
         return (b.lastActiveAt || 0) - (a.lastActiveAt || 0);
       });
       mcGrid.innerHTML = '';
-      if (!list.length && !untrackedItems.length) {
+      renderRunningMenu();   // independent of the grid now — lives in mc-fabs, not a card
+      if (!list.length) {
         const e = document.createElement('div'); e.className = 'mc-empty';
         e.textContent = 'No projects yet — open one to get started.';
         mcGrid.appendChild(e);
         return;
       }
       list.forEach(p => mcGrid.appendChild(p.id === activeId ? activeCard(p) : idleCard(p)));
-      insertUntrackedCard();   // prepend the untracked-servers card into the first slot (uses the cache, so no flicker)
       if (list.length) refreshStatus();
     }
 
@@ -12036,7 +12338,7 @@ sbDetectLink?.addEventListener('click', async () => {
   sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: false };
   try { localStorage.setItem(LS.storybook, JSON.stringify(sbConfig)); } catch (_) {}
   if (dir) ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
-  ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url }).catch(() => {});   // agents resolve STORYBOOK_URL from this
+  writeSbMemoryIfLinked(url);   // agents resolve STORYBOOK_URL from this, unless the agent-link toggle is off
   renderSbConnected();
   updateComponentPickerBtn?.();
 });
@@ -12056,7 +12358,7 @@ document.getElementById('sb-connect')?.addEventListener('click', async () => {
   // Point future sessions at the project dir, then write the memory files there
   ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
   try {
-    await ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url });
+    await writeSbMemoryIfLinked(url);
     const m = /:(\d+)/.exec(url);
     if (m) await ipcRenderer.invoke(IPC.STORYBOOK_ADOPT, { port: +m[1], dir });   // adopt into the registry → bar/view
   } catch (_) { /* memory/adopt are best-effort — the UI must still reflect the connection */ }
@@ -12118,7 +12420,7 @@ ipcRenderer.on(IPC.STORYBOOK_SERVER_STATUS, (_, { state, url, message, log } = {
     sbConfig = { value: url, autoInject: document.getElementById('sb-auto')?.checked ?? true, projectDir: dir, managed: true };
     localStorage.setItem(LS.storybook, JSON.stringify(sbConfig));
     ipcRenderer.send(IPC.SET_PROJECT_DIR, { dir });
-    ipcRenderer.invoke(IPC.STORYBOOK_WRITE_MEMORY, { url }).catch(() => {});
+    writeSbMemoryIfLinked(url);
     renderSbConnected();
     updateComponentPickerBtn?.();
   }
@@ -12286,6 +12588,14 @@ enhanceSelect(document.getElementById('sb-framework'));   // canonical dropdown 
 
 // ── Storybook instance bar ──
 document.getElementById('sb-bar-switch')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_OPEN_SWITCHER));
+document.getElementById('sb-bar-ai-link')?.addEventListener('click', async () => {
+  const next = !sbAgentLinkOff();
+  localStorage.setItem(LS.sbAgentLinkOff, next ? '1' : '0');
+  paintSbAiLink();
+  if (!sbConfig?.value) return;   // nothing connected yet — nothing to write/clear
+  if (next) { try { await ipcRenderer.invoke(IPC.STORYBOOK_CLEAR_MEMORY); } catch (_) {} }
+  else await writeSbMemoryIfLinked(sbConfig.value);
+});
 document.getElementById('sb-bar-new')?.addEventListener('click', () => { sbSetupOpen = true; renderSbTab(); detectStorybook(); });
 document.getElementById('sb-bar-reload')?.addEventListener('click', () => ipcRenderer.invoke(IPC.STORYBOOK_RELOAD));
 document.getElementById('sb-bar-kebab')?.addEventListener('click', (e) => {

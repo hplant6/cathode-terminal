@@ -66,6 +66,7 @@ const IPC = Object.freeze({
   RELEASE_NOTES: 'release-notes',   // What's New: bundled changelog entries between two versions
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
+  AUTH_STATUS_WRITE: 'auth-status-write',   // switch the live ~/.claude/.credentials.json to a saved account
   BROWSER_BACK: 'browser-back',         // step back through the browser view's own history
   BROWSER_NAV_STATE: 'browser-nav-state',   // main → renderer: { canGoBack } so the Back button can disable itself
   BROWSER_DID_NAVIGATE: 'browser-did-navigate',

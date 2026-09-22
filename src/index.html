@@ -240,15 +240,16 @@
       <div id="pick-panel" class="tool-panel" hidden>
         <div id="pick-panel-inner">
         <div id="pick-panel-head" class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="currentColor"><path d="m6.75,2h-2c-1.5166,0-2.75,1.2334-2.75,2.75v1.5c0,.4141.3359.75.75.75s.75-.3359.75-.75v-1.5c0-.6895.5605-1.25,1.25-1.25h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m15.25,11c-.4141,0-.75.3359-.75.75v1.5c0,.6895-.5605,1.25-1.25,1.25h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2c1.5166,0,2.75-1.2334,2.75-2.75v-1.5c0-.4141-.3359-.75-.75-.75Z"/><path d="m6.75,14.5h-2c-.6895,0-1.25-.5605-1.25-1.25v-1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v1.5c0,1.5166,1.2334,2.75,2.75,2.75h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/><path d="m16.5,3.5h-2V1.5c0-.4141-.3359-.75-.75-.75s-.75.3359-.75.75v2h-2c-.4141,0-.75.3359-.75.75s.3359.75.75.75h2v2c0,.4141.3359.75.75.75s.75-.3359.75-.75v-2h2c.4141,0,.75-.3359.75-.75s-.3359-.75-.75-.75Z"/></g></svg></span>
             <span id="pick-panel-title" class="tp-title">Box Select</span>
-            <span id="pick-panel-sub" class="tp-sub">Pass selected CSS elements to chat, or assign changes</span>
+            <div class="pp-new-wrap">
+              <button id="pick-panel-toggle-sel" type="button" class="pp-toggle-sel" title="Show selection outline on the page" aria-label="Show selection outline on the page"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="currentColor"/><path d="m1.125,12S4.989,4,12,4s10.875,8,10.875,8c0,0-3.865,8-10.875,8S1.125,12,1.125,12Z"/></svg></button>
+              <button id="pick-panel-new" class="pp-new-sel">New Selection</button>
+              <button id="pick-panel-add" type="button" class="pp-add-sel" title="Draw another selection — it is inserted at the cursor in your instruction"><svg viewBox="2.75 2.75 12.5 12.5" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11"/></svg><span class="tp-persona-label">Add Selection</span></button>
+            </div>
           </div>
-          <div class="pp-new-wrap">
-            <button id="pick-panel-toggle-sel" type="button" class="pp-toggle-sel">Hide Selection</button>
-            <button id="pick-panel-new" class="pp-new-sel">New Selection</button>
-          </div>
+          <span id="pick-panel-sub" class="tp-sub">Pass selected CSS elements to chat, or assign changes</span>
         </div>
         <div id="pick-panel-filter-wrap">
           <input id="pick-panel-filter" class="pp-filter" type="text" placeholder="filter properties…" spellcheck="false" autocomplete="off" />
@@ -284,12 +285,14 @@
       <div id="resize-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div id="resize-panel-head" class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z" fill="currentColor" fill-opacity="0.3" stroke="none"></path><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"></path><path d="M6.75 4L9 1.75L11.25 4"></path><path d="M6.75 14L9 16.25L11.25 14"></path><path d="M4 11.25L1.75 9L4 6.75"></path><path d="M14 11.25L16.25 9L14 6.75"></path></g></svg></span>
             <span id="resize-panel-title" class="tp-title">Resize Tool</span>
-            <span id="resize-panel-sub" class="tp-sub">Drag the handles on the page to resize.</span>
+            <div class="pp-new-wrap">
+              <button id="resize-panel-new" class="pp-new-sel">New Selection</button>
+            </div>
           </div>
-          <button id="resize-panel-new" class="pp-new-sel">New Selection</button>
+          <span id="resize-panel-sub" class="tp-sub">Drag the handles on the page to resize.</span>
         </div>
         <div id="resize-panel-body">
           <div class="rz-drawer">
@@ -335,12 +338,15 @@
       <div id="animation-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div id="animation-panel-head" class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none"><path d="M15.5498 9C15.5498 5.38253 12.6175 2.4502 9 2.4502C5.38253 2.4502 2.4502 5.38253 2.4502 9C2.4502 12.6175 5.38253 15.5498 9 15.5498C12.6175 15.5498 15.5498 12.6175 15.5498 9ZM16.9502 9C16.9502 13.3907 13.3907 16.9502 9 16.9502C4.60934 16.9502 1.0498 13.3907 1.0498 9C1.0498 4.60934 4.60934 1.0498 9 1.0498C13.3907 1.0498 16.9502 4.60934 16.9502 9Z" fill="currentColor"/><path d="M16.25 15.5498C16.6366 15.5498 16.9502 15.8634 16.9502 16.25C16.9502 16.6366 16.6366 16.9502 16.25 16.9502H9C8.6134 16.9502 8.2998 16.6366 8.2998 16.25C8.2998 15.8634 8.6134 15.5498 9 15.5498H16.25Z" fill="currentColor"/><path d="M9 7C9.82843 7 10.5 6.32843 10.5 5.5C10.5 4.67157 9.82843 4 9 4C8.17157 4 7.5 4.67157 7.5 5.5C7.5 6.32843 8.17157 7 9 7Z" fill="currentColor"/><path d="M12.5 10.5C13.3284 10.5 14 9.82843 14 9C14 8.17157 13.3284 7.5 12.5 7.5C11.6716 7.5 11 8.17157 11 9C11 9.82843 11.6716 10.5 12.5 10.5Z" fill="currentColor"/><path d="M9 14C9.82843 14 10.5 13.3284 10.5 12.5C10.5 11.6716 9.82843 11 9 11C8.17157 11 7.5 11.6716 7.5 12.5C7.5 13.3284 8.17157 14 9 14Z" fill="currentColor"/><path d="M5.5 10.5C6.32843 10.5 7 9.82843 7 9C7 8.17157 6.32843 7.5 5.5 7.5C4.67157 7.5 4 8.17157 4 9C4 9.82843 4.67157 10.5 5.5 10.5Z" fill="currentColor"/></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none"><path d="M15.5498 9C15.5498 5.38253 12.6175 2.4502 9 2.4502C5.38253 2.4502 2.4502 5.38253 2.4502 9C2.4502 12.6175 5.38253 15.5498 9 15.5498C12.6175 15.5498 15.5498 12.6175 15.5498 9ZM16.9502 9C16.9502 13.3907 13.3907 16.9502 9 16.9502C4.60934 16.9502 1.0498 13.3907 1.0498 9C1.0498 4.60934 4.60934 1.0498 9 1.0498C13.3907 1.0498 16.9502 4.60934 16.9502 9Z" fill="currentColor"/><path d="M16.25 15.5498C16.6366 15.5498 16.9502 15.8634 16.9502 16.25C16.9502 16.6366 16.6366 16.9502 16.25 16.9502H9C8.6134 16.9502 8.2998 16.6366 8.2998 16.25C8.2998 15.8634 8.6134 15.5498 9 15.5498H16.25Z" fill="currentColor"/><path d="M9 7C9.82843 7 10.5 6.32843 10.5 5.5C10.5 4.67157 9.82843 4 9 4C8.17157 4 7.5 4.67157 7.5 5.5C7.5 6.32843 8.17157 7 9 7Z" fill="currentColor"/><path d="M12.5 10.5C13.3284 10.5 14 9.82843 14 9C14 8.17157 13.3284 7.5 12.5 7.5C11.6716 7.5 11 8.17157 11 9C11 9.82843 11.6716 10.5 12.5 10.5Z" fill="currentColor"/><path d="M9 14C9.82843 14 10.5 13.3284 10.5 12.5C10.5 11.6716 9.82843 11 9 11C8.17157 11 7.5 11.6716 7.5 12.5C7.5 13.3284 8.17157 14 9 14Z" fill="currentColor"/><path d="M5.5 10.5C6.32843 10.5 7 9.82843 7 9C7 8.17157 6.32843 7.5 5.5 7.5C4.67157 7.5 4 8.17157 4 9C4 9.82843 4.67157 10.5 5.5 10.5Z" fill="currentColor"/></svg></span>
             <span id="animation-panel-title" class="tp-title">Animation Tool</span>
-            <span id="animation-panel-sub" class="tp-sub">Describe the animation to build.</span>
+            <div class="pp-new-wrap">
+              <button id="animation-panel-new" class="pp-new-sel">New Selection</button>
+              <button id="animation-panel-add" type="button" class="pp-add-sel" title="Pick another element — the same animation previews and sends against all of them"><svg viewBox="2.75 2.75 12.5 12.5" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11"/></svg><span class="tp-persona-label">Add Selection</span></button>
+            </div>
           </div>
-          <button id="animation-panel-new" class="pp-new-sel">New Selection</button>
+          <span id="animation-panel-sub" class="tp-sub">Describe the animation to build.</span>
         </div>
         <div id="animation-panel-body">
           <div id="anim-fw-section">
@@ -374,7 +380,13 @@
           <div class="pp-field" id="anim-row-distance" hidden><span class="pp-field-label">Distance</span><div class="pp-field-ctrl"><input id="anim-distance-slider" class="rz-slider" type="range" min="0" max="800" step="10" value="40" /><input id="anim-distance" class="pp-ctrl-input anim-num" type="number" min="0" step="10" value="40" /></div></div>
           <div class="pp-field" id="anim-row-amount" hidden><span class="pp-field-label" id="anim-amount-label">Amount</span><div class="pp-field-ctrl"><input id="anim-amount-slider" class="rz-slider" type="range" value="1" /><input id="anim-amount" class="pp-ctrl-input anim-num" type="number" value="1" /></div></div>
           <div class="pp-field" id="anim-row-color" hidden><span class="pp-field-label">Target color</span><div class="pp-field-ctrl"><button id="anim-color" class="anim-swatch" type="button" title="Pick the target color"></button></div></div>
+          <div class="pp-field" id="anim-row-position-from" hidden><span class="pp-field-label">Start Position</span><div class="pp-field-ctrl anim-pos-ctrl"><input id="anim-from-x" class="pp-ctrl-input anim-num anim-pos-num" type="number" step="5" value="-40" title="X offset (px)" placeholder="X" /><input id="anim-from-y" class="pp-ctrl-input anim-num anim-pos-num" type="number" step="5" value="0" title="Y offset (px)" placeholder="Y" /></div></div>
+          <div class="pp-field" id="anim-row-position-to" hidden><span class="pp-field-label">End Position</span><div class="pp-field-ctrl anim-pos-ctrl"><input id="anim-to-x" class="pp-ctrl-input anim-num anim-pos-num" type="number" step="5" value="0" title="X offset (px)" placeholder="X" /><input id="anim-to-y" class="pp-ctrl-input anim-num anim-pos-num" type="number" step="5" value="0" title="Y offset (px)" placeholder="Y" /></div></div>
+          <div class="pp-field" id="anim-row-origin" hidden><span class="pp-field-label">Pivot</span><div class="pp-field-ctrl"><select id="anim-origin" class="anim-select pp-ct"></select></div></div>
           <div class="pp-field"><span class="pp-field-label">Repeat</span><div class="pp-field-ctrl"><select id="anim-repeat" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Playback</span><div class="pp-field-ctrl"><select id="anim-play-direction" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Fill mode</span><div class="pp-field-ctrl"><select id="anim-fill" class="anim-select pp-ct"></select></div></div>
+          <div class="pp-field"><span class="pp-field-label">Stagger</span><div class="pp-field-ctrl"><input id="anim-stagger-slider" class="rz-slider" type="range" min="0" max="500" step="10" value="0" /><input id="anim-stagger" class="pp-ctrl-input anim-num" type="number" min="0" max="5000" step="10" value="0" /></div></div>
           <div class="pp-field"><span class="pp-field-label">Trigger</span><div class="pp-field-ctrl"><select id="anim-trigger" class="anim-select pp-ct"></select></div></div>
           <div class="anim-replay-row">
             <label id="anim-loop" class="ct-checkbox" title="Loop the preview so you can tune it while it plays (doesn't change the Repeat value sent to chat)"><span class="ct-checkbox-box"><svg class="ct-checkbox-check" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3" /></svg></span>Loop</label>
@@ -396,12 +408,14 @@
       <div id="component-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div id="comp-panel-head" class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="currentColor"><path d="M13.25,17.5h-3.25c-.965,0-1.75-.785-1.75-1.75v-4c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v4c0,.965-.785,1.75-1.75,1.75Zm-3.5-5v3.25c0,.138,.112,.25,.25,.25h3.25c.138,0,.25-.112,.25-.25v-3.25h-3.75Z" opacity=".6"/><path d="M9,12.5H4.75c-.965,0-1.75-.785-1.75-1.75V6.25c0-.414,.336-.75,.75-.75h5.25c.414,0,.75,.336,.75,.75v5.5c0,.414-.336,.75-.75,.75ZM4.5,7v3.75c0,.138,.112,.25,.25,.25h3.5V7h-3.75Z" opacity=".6"/><path d="M13.25,5.5h-3.5V2.25c0-.965-.785-1.75-1.75-1.75h-3.25c-.965,0-1.75,.785-1.75,1.75V6.25c0,.414,.336,.75,.75,.75h4.5v4.75c0,.414,.336,.75,.75,.75h5.25c.414,0,.75-.336,.75-.75V7.25c0-.965-.785-1.75-1.75-1.75Z"/></svg></span>
             <span id="comp-panel-title" class="tp-title">Storybook Tool</span>
-            <span id="comp-panel-sub" class="tp-sub">description goes here</span>
+            <div class="pp-new-wrap">
+              <button id="comp-panel-new" class="pp-new-sel">New Selection</button>
+            </div>
           </div>
-          <button id="comp-panel-new" class="pp-new-sel">New Selection</button>
+          <span id="comp-panel-sub" class="tp-sub">description goes here</span>
         </div>
         <div id="comp-insert-at">
           <span class="comp-insert-label">Insert at:</span>
@@ -433,12 +447,15 @@
       <div id="extract-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div id="extract-panel-head" class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" fill="none"><path d="M20.1329 12.4801C20.5733 12.0397 21.2878 12.0397 21.7282 12.4801C22.1687 12.9205 22.1687 13.635 21.7282 14.0755L17.2977 18.506C17.0862 18.7175 16.7991 18.8364 16.5 18.8364C16.2009 18.8364 15.9138 18.7175 15.7023 18.506L11.2718 14.0755C10.8313 13.635 10.8313 12.9205 11.2718 12.4801C11.7122 12.0397 12.4267 12.0397 12.8671 12.4801L16.5 16.1129L20.1329 12.4801Z" fill="currentColor"/><path d="M15.3719 17.7083V6.43055C15.3719 5.8077 15.8771 5.30246 16.5 5.30246C17.1228 5.30246 17.6281 5.8077 17.6281 6.43055V17.7083C17.6281 18.3312 17.1228 18.8364 16.5 18.8364C15.8771 18.8364 15.3719 18.3312 15.3719 17.7083Z" fill="currentColor"/><path d="M16.5 25.4413C17.8641 25.4413 19.8295 25.5923 22.0744 26.2988C22.6684 26.4858 22.999 27.1193 22.8123 27.7133C22.6253 28.3072 21.9918 28.6379 21.3978 28.4512C19.4249 27.8302 17.6975 27.6975 16.5 27.6975C14.4329 27.6975 12.7456 28.0912 11.6037 28.4512C11.0099 28.6384 10.3752 28.3086 10.1877 27.7148C10.0005 27.121 10.3303 26.4863 10.924 26.2988C12.2246 25.8888 14.1465 25.4413 16.5 25.4413Z" fill="currentColor"/><path d="M16.5 22.5417V26.5694" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.69135 19.3194V9.65277C3.69135 7.24964 5.63853 5.30246 8.04166 5.30246H11.6667C12.2895 5.30246 12.7948 5.8077 12.7948 6.43055C12.7948 7.05341 12.2895 7.55864 11.6667 7.55864H8.04166C6.88424 7.55864 5.94753 8.49535 5.94753 9.65277V19.3194C5.94753 20.4769 6.88424 21.4136 8.04166 21.4136H24.9583C26.1158 21.4136 27.0525 20.4769 27.0525 19.3194V9.65277C27.0525 8.49535 26.1158 7.55864 24.9583 7.55864H21.3333C20.7105 7.55864 20.2052 7.05341 20.2052 6.43055C20.2052 5.8077 20.7105 5.30246 21.3333 5.30246H24.9583C27.3615 5.30246 29.3086 7.24964 29.3086 9.65277V19.3194C29.3086 21.7226 27.3615 23.6698 24.9583 23.6698H8.04166C5.63853 23.6698 3.69135 21.7226 3.69135 19.3194Z" fill="currentColor"/></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" fill="none"><path d="M20.1329 12.4801C20.5733 12.0397 21.2878 12.0397 21.7282 12.4801C22.1687 12.9205 22.1687 13.635 21.7282 14.0755L17.2977 18.506C17.0862 18.7175 16.7991 18.8364 16.5 18.8364C16.2009 18.8364 15.9138 18.7175 15.7023 18.506L11.2718 14.0755C10.8313 13.635 10.8313 12.9205 11.2718 12.4801C11.7122 12.0397 12.4267 12.0397 12.8671 12.4801L16.5 16.1129L20.1329 12.4801Z" fill="currentColor"/><path d="M15.3719 17.7083V6.43055C15.3719 5.8077 15.8771 5.30246 16.5 5.30246C17.1228 5.30246 17.6281 5.8077 17.6281 6.43055V17.7083C17.6281 18.3312 17.1228 18.8364 16.5 18.8364C15.8771 18.8364 15.3719 18.3312 15.3719 17.7083Z" fill="currentColor"/><path d="M16.5 25.4413C17.8641 25.4413 19.8295 25.5923 22.0744 26.2988C22.6684 26.4858 22.999 27.1193 22.8123 27.7133C22.6253 28.3072 21.9918 28.6379 21.3978 28.4512C19.4249 27.8302 17.6975 27.6975 16.5 27.6975C14.4329 27.6975 12.7456 28.0912 11.6037 28.4512C11.0099 28.6384 10.3752 28.3086 10.1877 27.7148C10.0005 27.121 10.3303 26.4863 10.924 26.2988C12.2246 25.8888 14.1465 25.4413 16.5 25.4413Z" fill="currentColor"/><path d="M16.5 22.5417V26.5694" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.69135 19.3194V9.65277C3.69135 7.24964 5.63853 5.30246 8.04166 5.30246H11.6667C12.2895 5.30246 12.7948 5.8077 12.7948 6.43055C12.7948 7.05341 12.2895 7.55864 11.6667 7.55864H8.04166C6.88424 7.55864 5.94753 8.49535 5.94753 9.65277V19.3194C5.94753 20.4769 6.88424 21.4136 8.04166 21.4136H24.9583C26.1158 21.4136 27.0525 20.4769 27.0525 19.3194V9.65277C27.0525 8.49535 26.1158 7.55864 24.9583 7.55864H21.3333C20.7105 7.55864 20.2052 7.05341 20.2052 6.43055C20.2052 5.8077 20.7105 5.30246 21.3333 5.30246H24.9583C27.3615 5.30246 29.3086 7.24964 29.3086 9.65277V19.3194C29.3086 21.7226 27.3615 23.6698 24.9583 23.6698H8.04166C5.63853 23.6698 3.69135 21.7226 3.69135 19.3194Z" fill="currentColor"/></svg></span>
             <span id="extract-panel-title" class="tp-title">Extract Tool</span>
-            <span class="tp-sub">Pull or download elements from the working window</span>
+            <div class="pp-new-wrap">
+              <button id="extract-panel-new" class="pp-new-sel">New Selection</button>
+              <button id="extract-panel-add" type="button" class="pp-add-sel" title="Pick another element — it joins the list above"><svg viewBox="2.75 2.75 12.5 12.5" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M9 3.5v11M3.5 9h11"/></svg><span class="tp-persona-label">Add Selection</span></button>
+            </div>
           </div>
-          <button id="extract-panel-new" class="pp-new-sel">New Selection</button>
+          <span class="tp-sub">Pull or download elements from the working window</span>
         </div>
         <div id="extract-panel-body">
           <div id="extract-els"></div>
@@ -458,12 +475,14 @@
       <div id="eyedropper-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M9.235,5.735L3.128,11.842c-.837,.837-.837,2.194,0,3.03,.837,.837,2.194,.837,3.03,0l6.107-6.107"></path><line x1="3.128" y1="14.872" x2="1.75" y2="16.25"></line><path d="M12.265,8.765l2.857-2.857c.837-.837,.837-2.194,0-3.03-.837-.837-2.194-.837-3.03,0l-2.857,2.857"></path><line x1="7.75" y1="4.25" x2="13.75" y2="10.25"></line></g></svg></span>
             <span id="ed-panel-title" class="tp-title">Eyedropper</span>
-            <span class="tp-sub">Send a color to chat or request a color change</span>
+            <div class="pp-new-wrap">
+              <button id="ed-new" class="pp-new-sel">Select New Color</button>
+            </div>
           </div>
-          <button id="ed-new" class="pp-new-sel">Select New Color</button>
+          <span class="tp-sub">Send a color to chat or request a color change</span>
         </div>
         <div id="ed-loc-bar">
           <span class="ed-loc-label">Color selected at:</span>
@@ -507,11 +526,11 @@
       <div id="drift-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none"><path d="M15.5499 9.01395C15.5499 5.35898 12.5562 2.40341 8.88684 2.46513C5.48837 2.52238 2.59784 5.33807 2.45617 8.7327C2.30898 12.264 4.95798 15.2092 8.37023 15.5345C8.53596 15.5501 8.73936 15.4691 8.88879 15.2825C9.05565 15.074 9.08182 14.7852 8.95519 14.5501L8.71789 14.1097C7.97664 12.7332 8.97396 11.0638 10.5372 11.0638H13.5001C14.6323 11.0637 15.5499 10.1461 15.5499 9.01395ZM16.9503 9.01395C16.9503 10.9193 15.4055 12.4641 13.5001 12.4641H10.5372C10.0334 12.4641 9.71162 13.0019 9.95031 13.4456L10.1886 13.887C10.581 14.6162 10.4999 15.5096 9.98254 16.1565C9.58498 16.6535 8.9434 16.9951 8.23742 16.928C4.09462 16.5331 0.878395 12.9598 1.05676 8.67509C1.22922 4.53822 4.72479 1.13437 8.8634 1.06473C13.3164 0.989845 16.9503 4.57792 16.9503 9.01395Z" fill="currentColor"></path><path d="M9.00009 6.0139C9.55238 6.0139 10.0001 5.56619 10.0001 5.0139C10.0001 4.46162 9.55238 4.0139 9.00009 4.0139C8.44781 4.0139 8.00009 4.46162 8.00009 5.0139C8.00009 5.56619 8.44781 6.0139 9.00009 6.0139Z" fill="currentColor"></path><path d="M6.17169 7.1855C6.72398 7.1855 7.17169 6.73779 7.17169 6.1855C7.17169 5.63322 6.72398 5.1855 6.17169 5.1855C5.61941 5.1855 5.17169 5.63322 5.17169 6.1855C5.17169 6.73779 5.61941 7.1855 6.17169 7.1855Z" fill="currentColor"></path><path d="M11.8285 7.1855C12.3808 7.1855 12.8285 6.73779 12.8285 6.1855C12.8285 5.63322 12.3808 5.1855 11.8285 5.1855C11.2762 5.1855 10.8285 5.63322 10.8285 6.1855C10.8285 6.73779 11.2762 7.1855 11.8285 7.1855Z" fill="currentColor"></path><path d="M5.00009 10.0139C5.55238 10.0139 6.00009 9.56619 6.00009 9.0139C6.00009 8.46162 5.55238 8.0139 5.00009 8.0139C4.44781 8.0139 4.00009 8.46162 4.00009 9.0139C4.00009 9.56619 4.44781 10.0139 5.00009 10.0139Z" fill="currentColor"></path></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" fill="none"><path d="M15.5499 9.01395C15.5499 5.35898 12.5562 2.40341 8.88684 2.46513C5.48837 2.52238 2.59784 5.33807 2.45617 8.7327C2.30898 12.264 4.95798 15.2092 8.37023 15.5345C8.53596 15.5501 8.73936 15.4691 8.88879 15.2825C9.05565 15.074 9.08182 14.7852 8.95519 14.5501L8.71789 14.1097C7.97664 12.7332 8.97396 11.0638 10.5372 11.0638H13.5001C14.6323 11.0637 15.5499 10.1461 15.5499 9.01395ZM16.9503 9.01395C16.9503 10.9193 15.4055 12.4641 13.5001 12.4641H10.5372C10.0334 12.4641 9.71162 13.0019 9.95031 13.4456L10.1886 13.887C10.581 14.6162 10.4999 15.5096 9.98254 16.1565C9.58498 16.6535 8.9434 16.9951 8.23742 16.928C4.09462 16.5331 0.878395 12.9598 1.05676 8.67509C1.22922 4.53822 4.72479 1.13437 8.8634 1.06473C13.3164 0.989845 16.9503 4.57792 16.9503 9.01395Z" fill="currentColor"></path><path d="M9.00009 6.0139C9.55238 6.0139 10.0001 5.56619 10.0001 5.0139C10.0001 4.46162 9.55238 4.0139 9.00009 4.0139C8.44781 4.0139 8.00009 4.46162 8.00009 5.0139C8.00009 5.56619 8.44781 6.0139 9.00009 6.0139Z" fill="currentColor"></path><path d="M6.17169 7.1855C6.72398 7.1855 7.17169 6.73779 7.17169 6.1855C7.17169 5.63322 6.72398 5.1855 6.17169 5.1855C5.61941 5.1855 5.17169 5.63322 5.17169 6.1855C5.17169 6.73779 5.61941 7.1855 6.17169 7.1855Z" fill="currentColor"></path><path d="M11.8285 7.1855C12.3808 7.1855 12.8285 6.73779 12.8285 6.1855C12.8285 5.63322 12.3808 5.1855 11.8285 5.1855C11.2762 5.1855 10.8285 5.63322 10.8285 6.1855C10.8285 6.73779 11.2762 7.1855 11.8285 7.1855Z" fill="currentColor"></path><path d="M5.00009 10.0139C5.55238 10.0139 6.00009 9.56619 6.00009 9.0139C6.00009 8.46162 5.55238 8.0139 5.00009 8.0139C4.44781 8.0139 4.00009 8.46162 4.00009 9.0139C4.00009 9.56619 4.44781 10.0139 5.00009 10.0139Z" fill="currentColor"></path></svg></span>
             <span class="tp-title">Design Drift</span>
-            <span class="tp-sub">Values that should use a design token</span>
           </div>
+          <span class="tp-sub">Values that should use a design token</span>
         </div>
         <div id="drift-bar" class="a11y-bar">
           <span id="drift-count"></span>
@@ -532,11 +551,11 @@
       <div id="a11y-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><circle cx="9" cy="9" r="7.25"></circle><path d="M9,4V14c2.761,0,5-2.239,5-5s-2.239-5-5-5Z" fill="currentColor" stroke="none"></path></g></svg></span>
             <span class="tp-title">WCAG Accessibility Tool</span>
-            <span class="tp-sub">Check for a11y</span>
           </div>
+          <span class="tp-sub">Check for a11y</span>
         </div>
         <div id="a11y-bar">
           <span id="a11y-count"></span>
@@ -558,12 +577,14 @@
       <div id="screenshot-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M14.25,3.75h-2.25l-.507-1.351c-.146-.39-.519-.649-.936-.649h-3.114c-.417,0-.79,.259-.936,.649l-.507,1.351H3.75c-1.105,0-2,.895-2,2v6.5c0,1.105,.895,2,2,2H14.25c1.105,0,2-.895,2-2V5.75c0-1.105-.895-2-2-2Z"/><circle cx="9" cy="9" r="2.75"/></g><circle cx="4.25" cy="6.25" r=".75" fill="currentColor" stroke="none"/></svg></span>
             <span class="tp-title">Screenshot Tool</span>
-            <span class="tp-sub">Pass a screenshot to chat</span>
+            <div class="pp-new-wrap">
+              <button id="ss-new" class="pp-new-sel">New Screenshot</button>
+            </div>
           </div>
-          <button id="ss-new" class="pp-new-sel">New Screenshot</button>
+          <span class="tp-sub">Pass a screenshot to chat</span>
         </div>
         <div id="ss-panel-body">
           <div id="ss-canvas-wrap">
@@ -600,12 +621,14 @@
       <div id="draw-panel" class="tool-panel tp-framed" hidden>
         <div class="tp-inner">
         <div class="tp-head">
-          <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></span>
-          <div class="pp-head-text">
+          <div class="pp-head-top">
+            <span class="tp-head-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="m5.3813,15.1196l-2-2c-.1953-.1953-.5117-.1953-.707,0l-1.5269,1.5269c-.123.123-.1733.3018-.1323.4712.041.1689.167.3052.333.3584l3.0269.9731c.0498.0161.1016.0239.1528.0239.1304,0,.2583-.0513.3535-.1465l.5-.5c.1953-.1953.1953-.5117,0-.707Z" fill="currentColor" stroke-width="0" opacity=".6"/><path d="m14.56,3.941l-4.118,4.118"/><path d="m11.1408,2.6519l-4.2955,4.2957c-.3075.3075-.5064.7069-.5665,1.1376l-.1508,1.0799-1.4708,1.4708c-.1952.1952-.1953.5118,0,.707l2.5012,2.5022c.1953.1953.5119.1954.7072,0l1.4648-1.4649,1.09-.1558c.4284-.0612.8254-.2597,1.1313-.5657l4.2975-4.2978c.5857-.5857.5857-1.5353.0001-2.1211l-2.5873-2.588c-.5857-.5859-1.5354-.5859-2.1212-.0001Z"/></g></svg></span>
             <span class="tp-title">Marker Tool</span>
-            <span class="tp-sub">Draw marker annotations on screen</span>
+            <div class="pp-new-wrap">
+              <button id="draw-clear" class="pp-new-sel">Clear Marker</button>
+            </div>
           </div>
-          <button id="draw-clear" class="pp-new-sel">Clear Marker</button>
+          <span class="tp-sub">Draw marker annotations on screen</span>
         </div>
         <div id="draw-panel-body">
           <div class="dr-controls">
@@ -701,6 +724,10 @@
           <span class="ui-chev sb-bar-caret"></span>
         </button>
         <div class="sb-bar-spacer"></div>
+        <div class="view-toggle" id="sb-bar-ai-link-wrap" title="When on, agents are told to check this project's Storybook before UI changes. Turn off to stop (saves session tokens) — some agents were burning tokens re-checking or trying to relaunch one every turn.">
+          <span class="vt-label">Storybook Linkage</span>
+          <button id="sb-bar-ai-link" class="vt-switch" role="switch"><span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span></button>
+        </div>
         <button id="sb-bar-new" class="sb-bar-btn" title="Add / build a Storybook"><svg viewBox="0 0 18 18" width="15" height="15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.2002 14.75V3.25C8.2002 2.80817 8.55817 2.4502 9 2.4502C9.44183 2.4502 9.7998 2.80817 9.7998 3.25V14.75C9.7998 15.1918 9.44183 15.5498 9 15.5498C8.55817 15.5498 8.2002 15.1918 8.2002 14.75Z"/><path d="M14.75 8.2002C15.1918 8.2002 15.5498 8.55817 15.5498 9C15.5498 9.44183 15.1918 9.7998 14.75 9.7998H3.25C2.80817 9.7998 2.4502 9.44183 2.4502 9C2.4502 8.55817 2.80817 8.2002 3.25 8.2002H14.75Z"/></svg></button>
         <button id="sb-bar-reload" class="sb-bar-btn" title="Reload"><svg viewBox="0 0 18 18" width="15" height="15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M15.4848 9C15.4848 5.3826 12.5524 2.4502 8.93496 2.4502C6.19775 2.45021 3.85143 4.12921 2.87246 6.51562C2.72573 6.87329 2.31704 7.04419 1.95937 6.89746C1.60171 6.75073 1.43081 6.34204 1.57754 5.98438C2.76456 3.09083 5.6102 1.04982 8.93496 1.0498C13.3256 1.0498 16.8852 4.6094 16.8852 9C16.8852 13.3906 13.3256 16.9502 8.93496 16.9502C6.19864 16.9502 3.7847 15.5674 2.35586 13.4648C2.13862 13.1451 2.2218 12.7095 2.5414 12.4922C2.86117 12.2749 3.29678 12.358 3.51406 12.6777C4.69323 14.4129 6.68147 15.5498 8.93496 15.5498C12.5524 15.5498 15.4848 12.6174 15.4848 9Z"/><path d="M1.7193 2.61163C2.10211 2.55879 2.45533 2.82646 2.50836 3.20929L2.81989 5.46027L5.07086 5.14972C5.45382 5.09678 5.80698 5.36442 5.85993 5.74738C5.91275 6.13014 5.64595 6.48333 5.26325 6.53644L2.31891 6.94367C1.93603 6.9966 1.58289 6.72887 1.52985 6.34601L1.12164 3.4007C1.0688 3.01789 1.33647 2.66467 1.7193 2.61163Z"/></svg></button>
         <button id="sb-bar-kebab" class="sb-bar-btn" title="More actions"><svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor"><circle cx="9" cy="3.6" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="9" cy="14.4" r="1.5"/></svg></button>
@@ -1123,6 +1150,15 @@
         <button id="mc-close" class="mc-topbar-close" title="Close" aria-label="Close"><svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M13.4345 3.43451C13.7469 3.12209 14.253 3.12209 14.5654 3.43451C14.8778 3.74693 14.8778 4.25295 14.5654 4.56537L4.56537 14.5654C4.25295 14.8778 3.74693 14.8778 3.43451 14.5654C3.12209 14.253 3.12209 13.7469 3.43451 13.4345L13.4345 3.43451Z" fill="currentColor"/><path d="M3.43451 3.43451C3.74693 3.12209 4.25295 3.12209 4.56537 3.43451L14.5654 13.4345C14.8778 13.7469 14.8778 14.253 14.5654 14.5654C14.253 14.8778 13.7469 14.8778 13.4345 14.5654L3.43451 4.56537C3.12209 4.25295 3.12209 3.74693 3.43451 3.43451Z" fill="currentColor"/></svg></button>
       </div>
       <div id="mc-grid" class="mc-grid"></div>
+      <div id="mc-running-wrap" class="mc-running-wrap" hidden>
+        <button id="mc-running-btn" class="mc-running-btn" title="Localhost dev servers running outside any tracked project">
+          <span class="mc-untracked-dot"></span>
+          Running
+          <span id="mc-running-count" class="mc-running-count"></span>
+          <span class="ui-chev mc-running-caret"></span>
+        </button>
+        <div id="mc-running-menu" class="mc-running-menu"></div>
+      </div>
       <div id="mc-fabs">
         <button id="mc-import" class="mc-open-fab mc-import-fab">Import Project</button>
         <button id="mc-create" class="mc-open-fab mc-import-fab">Create New Project</button>
@@ -1311,6 +1347,16 @@
       <div class="auth-section">
         <div class="auth-section-label">Claude Account</div>
         <div id="auth-account-status"></div>
+        <p class="modal-desc" style="margin:10px 0 8px">Saved logins — switch instantly, no browser round-trip.</p>
+        <div id="claude-accounts-list"></div>
+        <div id="claude-account-save-form" style="display:none">
+          <input id="claude-account-save-name" class="modal-input" placeholder="Label (e.g. Work)" autocomplete="off" />
+          <div class="api-key-form-actions">
+            <button id="claude-account-save-cancel" class="modal-btn-cancel">Cancel</button>
+            <button id="claude-account-save-commit" class="modal-btn-confirm">Save</button>
+          </div>
+        </div>
+        <button id="claude-account-save-open" class="api-key-use" style="margin-top:6px">+ Save current login as…</button>
       </div>
 
       <div class="auth-section">

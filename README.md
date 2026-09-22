@@ -39,7 +39,7 @@ I built Gamut Terminal out of sheer frustration with current AI coding tools. Tr
 - **Audits & code review** — run audits and review changes in-app.
 - **Theming** — a shade-based theme engine with presets.
 
-![Live usage gauges and element context — Gamut Terminal captures a live element from the page and hands its exact computed styles to the agent](docs/workspace.png)
+![Box Select — Gamut Terminal scans a page element's computed styles (padding, position, and more) and hands them to the agent as a targeted selection](docs/workspace.png)
 
 ## The tools
 
@@ -76,7 +76,7 @@ Everything Gamut Terminal gives you, straight from the in-app **Meet the tools**
 | **Chat / Terminal** | Toggle a Claude session between chat view and the raw terminal. |
 | **Inspect (DevTools)** | Open the embedded DevTools panel for the page. |
 
-![The Console panel capturing page errors, with "Send errors to agent" — and the slash-command palette in the chat](docs/console.png)
+![The Console panel capturing page errors and warnings, with "Send errors to agent" — alongside live usage gauges for the connected agent](docs/console.png)
 
 ## Requirements
 

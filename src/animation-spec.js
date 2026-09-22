@@ -9,25 +9,40 @@ const ANIM_TYPES = [
   { group: 'Entrance', items: [['fade-in','Fade In'],['slide-in','Slide In'],['zoom-in','Zoom In'],['rotate-in','Rotate In'],['flip-in','Flip In'],['bounce-in','Bounce In'],['blur-in','Blur In']] },
   { group: 'Exit',     items: [['fade-out','Fade Out'],['slide-out','Slide Out'],['zoom-out','Zoom Out'],['rotate-out','Rotate Out'],['flip-out','Flip Out'],['blur-out','Blur Out']] },
   { group: 'Emphasis', items: [['pulse','Pulse'],['bounce','Bounce'],['shake','Shake'],['wobble','Wobble'],['swing','Swing'],['tada','Tada'],['jello','Jello'],['flash','Flash'],['heartbeat','Heartbeat'],['rubber-band','Rubber Band'],['spin','Spin']] },
-  { group: 'Property',  items: [['color','Color'],['background','Background'],['size','Size / Scale'],['rotate','Rotate'],['skew','Skew'],['blur','Blur'],['opacity','Opacity']] },
+  { group: 'Property',  items: [['color','Color'],['background','Background'],['size','Size / Scale'],['rotate','Rotate'],['skew','Skew'],['blur','Blur'],['opacity','Opacity'],['move','Move']] },
 ];
 const EASINGS = [
   ['ease','Default (ease)'],['linear','Linear'],['ease-in','Ease In'],['ease-out','Ease Out'],['ease-in-out','Ease In-Out'],
   ['cubic-bezier(0.68,-0.55,0.265,1.55)','Back'],['cubic-bezier(0.34,1.56,0.64,1)','Overshoot'],['cubic-bezier(0.68,-0.6,0.32,1.6)','Elastic'],['steps(6,end)','Steps'],
 ];
-const DIRECTIONS = [['up','Up'],['down','Down'],['left','Left'],['right','Right']];
+// 8-way — the diagonals matter most for bounce/shake, where "toward the corner" reads
+// differently than a straight edge.
+const DIRECTIONS = [['up','Up'],['down','Down'],['left','Left'],['right','Right'],['up-left','Up-Left'],['up-right','Up-Right'],['down-left','Down-Left'],['down-right','Down-Right']];
 const TRIGGERS   = [['load','On load'],['scroll','On scroll into view'],['hover','On hover'],['click','On click']];
+// Where a scale/rotate/skew pivots from — matters a lot for e.g. a menu that should
+// grow from its trigger button's corner rather than its own center.
+const ORIGINS = [['center','Center'],['top','Top'],['bottom','Bottom'],['left','Left'],['right','Right'],['top left','Top-Left'],['top right','Top-Right'],['bottom left','Bottom-Left'],['bottom right','Bottom-Right']];
+// WAAPI/CSS playback direction — mainly meaningful once Repeat > 1 (alternate = ping-pong
+// instead of snapping back to the start every loop).
+const PLAY_DIRECTIONS = [['normal','Normal'],['reverse','Reverse'],['alternate','Alternate (ping-pong)'],['alternate-reverse','Alternate, reversed']];
+const FILLS = [['both','Both (default)'],['forwards','Forwards'],['backwards','Backwards'],['none','None']];
 
 // Which conditional controls a given type exposes, and the amount slider's meaning.
 function fieldsFor(type) {
-  const s = { direction: false, distance: false, amount: false, color: false };
+  const s = { direction: false, distance: false, amount: false, color: false, position: false, origin: false };
   if (type === 'slide-in' || type === 'slide-out') { s.direction = true; s.distance = true; }
-  if (type === 'flip-in' || type === 'flip-out') s.direction = true;
-  if (['zoom-in','zoom-out','rotate-in','rotate-out','rotate','blur-in','blur-out','blur','size','skew','opacity','pulse'].indexOf(type) !== -1) s.amount = true;
+  if (type === 'flip-in' || type === 'flip-out') { s.direction = true; s.origin = true; }
+  if (type === 'bounce' || type === 'shake') s.direction = true;
   if (type === 'bounce') s.distance = true;
+  if (['zoom-in','zoom-out','rotate-in','rotate-out','rotate','blur-in','blur-out','blur','size','skew','opacity','pulse'].indexOf(type) !== -1) s.amount = true;
+  if (['zoom-in','zoom-out','size','rotate-in','rotate-out','rotate','skew','spin'].indexOf(type) !== -1) s.origin = true;
   if (type === 'color' || type === 'background') s.color = true;
+  if (type === 'move') s.position = true;
   return s;
 }
+// Default start/end (px) for the Move type — mirrors slide-in's default distance so
+// picking Move isn't a no-op until you touch the fields.
+function positionDefaults() { return { fromX: -40, fromY: 0, toX: 0, toY: 0 }; }
 function amountMeta(type) {
   switch (type) {
     case 'zoom-in': case 'zoom-out': return { label: 'Start scale', min: 0, max: 2, step: 0.05, def: 0.3 };
@@ -56,14 +71,29 @@ function animKeyframes(spec) {
   var color = spec.targetColor || '#ff5720';
   var iters = spec.repeat === 'infinite' ? Infinity : (spec.repeat ? Number(spec.repeat) : 1);
   var fill  = spec.fill || 'both';
+  var playDir = spec.playDirection || 'normal';
+  var origin  = spec.transformOrigin || 'center';
+  var fromX = spec.fromX != null ? Number(spec.fromX) : -40;
+  var fromY = spec.fromY != null ? Number(spec.fromY) : 0;
+  var toX   = spec.toX   != null ? Number(spec.toX)   : 0;
+  var toY   = spec.toY   != null ? Number(spec.toY)   : 0;
 
-  function slideFrom() {
-    if (dir === 'left')  return 'translateX(-' + dist + 'px)';
-    if (dir === 'right') return 'translateX(' + dist + 'px)';
-    if (dir === 'down')  return 'translateY(' + dist + 'px)';
-    return 'translateY(-' + dist + 'px)';
+  // 8-way direction → a unit-ish [dx, dy]; diagonals are normalized so the total
+  // travel distance roughly matches a straight direction at the same `dist`.
+  function vec(d) {
+    var m = {
+      up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
+      'up-left': [-0.7071, -0.7071], 'up-right': [0.7071, -0.7071],
+      'down-left': [-0.7071, 0.7071], 'down-right': [0.7071, 0.7071],
+    };
+    return m[d] || m.up;
   }
-  function flipAxis() { return (dir === 'left' || dir === 'right') ? 'Y' : 'X'; }
+  // Always both axes (never omit a zero one): CSS/WAAPI only interpolates smoothly
+  // between transform lists with matching functions — translateX(-40px) → translateY(0px)
+  // as two *different* keyframes' transform can fail to tween at all.
+  function translateOf(dx, dy) { return 'translate(' + dx + 'px, ' + dy + 'px)'; }
+  function slideFrom() { var v = vec(dir); return translateOf(Math.round(v[0] * dist), Math.round(v[1] * dist)); }
+  function flipAxis() { return (dir === 'left' || dir === 'right' || dir === 'up-left' || dir === 'up-right' || dir === 'down-left' || dir === 'down-right') ? 'Y' : 'X'; }
   function A(fallback) { return amt != null ? amt : fallback; }
 
   var kf;
@@ -82,8 +112,18 @@ function animKeyframes(spec) {
     case 'blur-out':  kf = [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(' + A(8) + 'px)' }]; break;
     case 'bounce-in': kf = [{ offset: 0, opacity: 0, transform: 'scale(0.3)' }, { offset: 0.5, opacity: 1, transform: 'scale(1.05)' }, { offset: 0.7, transform: 'scale(0.9)' }, { offset: 1, opacity: 1, transform: 'scale(1)' }]; break;
     case 'pulse':     kf = [{ transform: 'scale(1)' }, { transform: 'scale(' + A(1.06) + ')' }, { transform: 'scale(1)' }]; break;
-    case 'bounce':    { var b = dist || 20; kf = [{ offset: 0, transform: 'translateY(0)' }, { offset: 0.4, transform: 'translateY(-' + b + 'px)' }, { offset: 0.6, transform: 'translateY(-' + (b / 2) + 'px)' }, { offset: 0.8, transform: 'translateY(0)' }, { offset: 1, transform: 'translateY(0)' }]; } break;
-    case 'shake':     kf = [{ offset: 0, transform: 'translateX(0)' }, { offset: 0.1, transform: 'translateX(-10px)' }, { offset: 0.2, transform: 'translateX(10px)' }, { offset: 0.3, transform: 'translateX(-10px)' }, { offset: 0.4, transform: 'translateX(10px)' }, { offset: 0.5, transform: 'translateX(-10px)' }, { offset: 0.6, transform: 'translateX(10px)' }, { offset: 0.7, transform: 'translateX(-10px)' }, { offset: 0.8, transform: 'translateX(10px)' }, { offset: 0.9, transform: 'translateX(-10px)' }, { offset: 1, transform: 'translateX(0)' }]; break;
+    case 'bounce': {
+      var bv = vec(dir), bd = dist || 20;
+      var b1 = translateOf(Math.round(bv[0] * bd), Math.round(bv[1] * bd));
+      var b2 = translateOf(Math.round(bv[0] * bd / 2), Math.round(bv[1] * bd / 2));
+      var bz = translateOf(0, 0);
+      kf = [{ offset: 0, transform: bz }, { offset: 0.4, transform: b1 }, { offset: 0.6, transform: b2 }, { offset: 0.8, transform: bz }, { offset: 1, transform: bz }];
+    } break;
+    case 'shake': {
+      var sv = vec(dir), sa = 10;
+      function shakeAt(mult) { return translateOf(Math.round(sv[0] * sa * mult), Math.round(sv[1] * sa * mult)); }
+      kf = [0, -1, 1, -1, 1, -1, 1, -1, 1, -1, 0].map(function (m, i) { return { offset: i / 10, transform: shakeAt(m) }; });
+    } break;
     case 'wobble':    kf = [{ offset: 0, transform: 'none' }, { offset: 0.15, transform: 'translateX(-25%) rotate(-5deg)' }, { offset: 0.3, transform: 'translateX(20%) rotate(3deg)' }, { offset: 0.45, transform: 'translateX(-15%) rotate(-3deg)' }, { offset: 0.6, transform: 'translateX(10%) rotate(2deg)' }, { offset: 0.75, transform: 'translateX(-5%) rotate(-1deg)' }, { offset: 1, transform: 'none' }]; break;
     case 'swing':     kf = [{ offset: 0, transform: 'rotate(0deg)' }, { offset: 0.2, transform: 'rotate(15deg)' }, { offset: 0.4, transform: 'rotate(-10deg)' }, { offset: 0.6, transform: 'rotate(5deg)' }, { offset: 0.8, transform: 'rotate(-5deg)' }, { offset: 1, transform: 'rotate(0deg)' }]; break;
     case 'tada':      kf = [{ offset: 0, transform: 'scale(1)' }, { offset: 0.1, transform: 'scale(0.9) rotate(-3deg)' }, { offset: 0.3, transform: 'scale(1.1) rotate(3deg)' }, { offset: 0.4, transform: 'scale(1.1) rotate(-3deg)' }, { offset: 0.5, transform: 'scale(1.1) rotate(3deg)' }, { offset: 0.6, transform: 'scale(1.1) rotate(-3deg)' }, { offset: 0.7, transform: 'scale(1.1) rotate(3deg)' }, { offset: 0.8, transform: 'scale(1.1) rotate(-3deg)' }, { offset: 0.9, transform: 'scale(1.1) rotate(3deg)' }, { offset: 1, transform: 'scale(1)' }]; break;
@@ -99,9 +139,16 @@ function animKeyframes(spec) {
     case 'skew':       kf = [{ transform: 'skewX(' + A(12) + 'deg)' }]; break;
     case 'blur':       kf = [{ filter: 'blur(' + A(4) + 'px)' }]; break;
     case 'opacity':    kf = [{ opacity: A(0.5) }]; break;
+    case 'move':       kf = [{ transform: translateOf(fromX, fromY) }, { transform: translateOf(toX, toY) }]; break;
     default:           kf = [{ opacity: 0 }, { opacity: 1 }];
   }
-  return { keyframes: kf, options: { duration: dur, delay: delay, easing: ease, iterations: iters, fill: fill } };
+  return {
+    keyframes: kf,
+    // playDirection/transformOrigin aren't WAAPI keyframe options — the caller (preview,
+    // or a snippet emitter) applies them its own way: `direction` on .animate()'s options
+    // object, `style.transformOrigin` set separately (WAAPI has no keyframe-option for it).
+    options: { duration: dur, delay: delay, easing: ease, iterations: iters, fill: fill, playDirection: playDir, transformOrigin: origin },
+  };
 }
 
 // ── Snippet generation (renderer/main side) ────────────────────────────────
@@ -131,29 +178,34 @@ function cssSnippet(spec, selector) {
     return '  ' + pct + '% { ' + decls + '; }';
   }).join('\n');
   const iters = o.iterations === Infinity ? 'infinite' : o.iterations;
+  const extraDecls = (o.playDirection && o.playDirection !== 'normal' ? '\n  animation-direction: ' + o.playDirection + ';' : '')
+    + (o.transformOrigin && o.transformOrigin !== 'center' ? '\n  transform-origin: ' + o.transformOrigin + ';' : '');
   if (spec.stagger) {   // CSS has no native stagger — animate children with a per-index delay
     const st = spec.stagger;
     const delayCalc = 'calc(var(--i, 0) * ' + st + 'ms' + (o.delay ? ' + ' + o.delay + 'ms' : '') + ')';
-    const srule = selector + ' > * {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + iters + ' ' + o.fill + ';\n  animation-delay: ' + delayCalc + ';\n}';
+    const srule = selector + ' > * {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + iters + ' ' + o.fill + ';\n  animation-delay: ' + delayCalc + ';' + extraDecls + '\n}';
     return '@keyframes ' + name + ' {\n' + body + '\n}\n' + srule + '\n/* stagger: give each child an incrementing --i (0, 1, 2 …), e.g. style="--i:0" or set it in a small loop */' + triggerCss(spec, selector + ' > *');
   }
-  const rule = selector + ' {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + o.delay + 'ms ' + iters + ' ' + o.fill + ';\n}';
+  const rule = selector + ' {\n  animation: ' + name + ' ' + o.duration + 'ms ' + o.easing + ' ' + o.delay + 'ms ' + iters + ' ' + o.fill + ';' + extraDecls + '\n}';
   return '@keyframes ' + name + ' {\n' + body + '\n}\n' + rule + triggerCss(spec, selector);
 }
 function jsSnippet(spec, selector) {
   const r = animKeyframes(spec), o = r.options;
   const iters = o.iterations === Infinity ? 'Infinity' : o.iterations;
   const q = String(selector).replace(/'/g, "\\'");
+  const dirField = o.playDirection && o.playDirection !== 'normal' ? ", direction: '" + o.playDirection + "'" : '';
+  const originLine = o.transformOrigin && o.transformOrigin !== 'center' ? "el.style.transformOrigin = '" + o.transformOrigin + "';\n" : '';
   if (spec.stagger) {   // WAAPI: loop the children, offset each element's delay by its index
-    const opts = '{ duration: ' + o.duration + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "', delay: " + (o.delay || 0) + ' + i * ' + spec.stagger + ' }';
-    const loop = "document.querySelectorAll('" + q + " > *').forEach((el, i) => {\n  el.animate(" + JSON.stringify(r.keyframes) + ', ' + opts + ');\n});';
+    const opts = '{ duration: ' + o.duration + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "', delay: " + (o.delay || 0) + ' + i * ' + spec.stagger + dirField + ' }';
+    const originSet = o.transformOrigin && o.transformOrigin !== 'center' ? "  el.style.transformOrigin = '" + o.transformOrigin + "';\n" : '';
+    const loop = "document.querySelectorAll('" + q + " > *').forEach((el, i) => {\n" + originSet + "  el.animate(" + JSON.stringify(r.keyframes) + ', ' + opts + ');\n});';
     const t = spec.trigger || 'load';
     if (t === 'scroll') return "new IntersectionObserver((es, ob) => es.forEach(e => { if (e.isIntersecting) {\n  " + loop.split('\n').join('\n  ') + "\n  ob.unobserve(e.target);\n} })).observe(document.querySelector('" + q + "'));";
     if (t === 'hover' || t === 'click') return "document.querySelector('" + q + "').addEventListener('" + (t === 'hover' ? 'mouseenter' : 'click') + "', () => {\n  " + loop.split('\n').join('\n  ') + "\n});";
     return loop;
   }
-  const opts = '{ duration: ' + o.duration + ', delay: ' + o.delay + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "' }";
-  const play = 'el.animate(' + JSON.stringify(r.keyframes) + ', ' + opts + ');';
+  const opts = '{ duration: ' + o.duration + ', delay: ' + o.delay + ", easing: '" + o.easing + "', iterations: " + iters + ", fill: '" + o.fill + "'" + dirField + ' }';
+  const play = originLine + 'el.animate(' + JSON.stringify(r.keyframes) + ', ' + opts + ');';
   return "const el = document.querySelector('" + q + "');\n" + triggerJs(spec, play);
 }
 
@@ -166,18 +218,22 @@ function _num(v) { var n = parseFloat(v); return isNaN(n) ? v : n; }
 function parseTransform(str) {
   var out = {};
   if (!str || str === 'none') return out;
-  var re = /(translateX|translateY|scale|scaleX|scaleY|rotate|rotateZ|skewX|skewY)\(([^)]+)\)/g, m;
+  var re = /(translate|translateX|translateY|scale|scaleX|scaleY|rotate|rotateZ|skewX|skewY)\(([^)]+)\)/g, m;
   while ((m = re.exec(str))) {
-    var v = _num(m[2]);
     switch (m[1]) {
-      case 'translateX': out.x = v; break;
-      case 'translateY': out.y = v; break;
-      case 'scale': out.scale = v; break;
-      case 'scaleX': out.scaleX = v; break;
-      case 'scaleY': out.scaleY = v; break;
-      case 'rotate': case 'rotateZ': out.rotate = v; break;
-      case 'skewX': out.skewX = v; break;
-      case 'skewY': out.skewY = v; break;
+      case 'translate': {   // translate(x[, y]) shorthand — split into the same x/y vars translateX/Y produce
+        var parts = m[2].split(',').map(function (s) { return _num(s.trim()); });
+        out.x = parts[0]; out.y = parts.length > 1 ? parts[1] : 0;
+        break;
+      }
+      case 'translateX': out.x = _num(m[2]); break;
+      case 'translateY': out.y = _num(m[2]); break;
+      case 'scale': out.scale = _num(m[2]); break;
+      case 'scaleX': out.scaleX = _num(m[2]); break;
+      case 'scaleY': out.scaleY = _num(m[2]); break;
+      case 'rotate': case 'rotateZ': out.rotate = _num(m[2]); break;
+      case 'skewX': out.skewX = _num(m[2]); break;
+      case 'skewY': out.skewY = _num(m[2]); break;
     }
   }
   return out;
@@ -231,6 +287,8 @@ function gsapSnippet(spec, selector) {
   var isSpring = spec.easing === 'spring';
   var ez = isSpring ? 'elastic.out(1, 0.5)' : gsapEase(o.easing);   // GSAP core has no spring — elastic is the closest built-in
   var opt = 'duration: ' + +(o.duration / 1000).toFixed(3) + ", ease: '" + ez + "'" + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+  if (rep && (o.playDirection === 'alternate' || o.playDirection === 'alternate-reverse')) opt += ', yoyo: true';   // GSAP's ping-pong — needs an actual repeat to be visible
+  if (o.transformOrigin && o.transformOrigin !== 'center') opt += ", transformOrigin: '" + o.transformOrigin + "'";
   var stag = spec.stagger ? +(spec.stagger / 1000).toFixed(3) : 0;   // GSAP has native stagger
   if (stag) opt += ', stagger: ' + stag;
   var sel = stag ? selector + ' > *' : selector;   // stagger animates the children
@@ -263,9 +321,10 @@ function motionOneSnippet(spec, selector) {
   var delayStr = stag
     ? ', delay: stagger(' + stag + (o.delay ? ', { startDelay: ' + dSec + ' }' : '') + ')'
     : (o.delay ? ', delay: ' + dSec : '');
+  var dirStr = o.playDirection && o.playDirection !== 'normal' ? ", direction: '" + o.playDirection + "'" : '';
   var opt = spec.easing === 'spring'
-    ? "type: 'spring', " + _spring(spec) + delayStr + (rep ? ', repeat: ' + rep : '')
-    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ", easing: '" + o.easing + "'" + delayStr + (rep ? ', repeat: ' + rep : '');
+    ? "type: 'spring', " + _spring(spec) + delayStr + (rep ? ', repeat: ' + rep : '') + dirStr
+    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ", easing: '" + o.easing + "'" + delayStr + (rep ? ', repeat: ' + rep : '') + dirStr;
   var sel = stag ? selector + ' > *' : selector;
   var imp = stag ? 'animate, stagger' : 'animate';
   var play = 'animate(' + _q(sel) + ', { ' + kfStr + ' }, { ' + opt + ' });';
@@ -277,12 +336,14 @@ function motionOneSnippet(spec, selector) {
 function framerSnippet(spec, selector) {
   var r = animKeyframes(spec), o = r.options, kfs = r.keyframes;
   var rep = _repeat(o.iterations, 'framer');
+  var repeatType = rep && (o.playDirection === 'alternate' || o.playDirection === 'alternate-reverse') ? ", repeatType: 'reverse'" : '';   // Framer's ping-pong — needs an actual repeat to be visible
   var trans = spec.easing === 'spring'
-    ? "type: 'spring', " + _spring(spec) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '')
-    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ', ease: ' + framerEase(o.easing) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '');
+    ? "type: 'spring', " + _spring(spec) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '') + repeatType
+    : 'duration: ' + +(o.duration / 1000).toFixed(3) + ', ease: ' + framerEase(o.easing) + (o.delay ? ', delay: ' + +(o.delay / 1000).toFixed(3) : '') + (rep ? ', repeat: ' + rep : '') + repeatType;
   var head = "import { motion } from 'framer-motion';\n\n";
   var t = spec.trigger || 'load';
   var animProp = t === 'scroll' ? 'whileInView' : t === 'hover' ? 'whileHover' : t === 'click' ? 'whileTap' : 'animate';
+  var styleAttr = o.transformOrigin && o.transformOrigin !== 'center' ? "\n  style={{ transformOrigin: '" + o.transformOrigin + "' }}" : '';
   var stag = spec.stagger ? +(spec.stagger / 1000).toFixed(3) : 0;
   if (stag) {   // Framer staggers via parent/child variants + staggerChildren
     var hiddenVars = '', showVars = '';
@@ -305,13 +366,13 @@ function framerSnippet(spec, selector) {
   if (kfs.length > 2) {
     var pa = perPropArrays(kfs, 'framer');
     var animObj = Object.keys(pa).map(function (k) { return k + ': ' + serArr(pa[k]); }).join(', ');
-    return head + '<motion.div\n  ' + animProp + '={{ ' + animObj + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+    return head + '<motion.div\n  ' + animProp + '={{ ' + animObj + ' }}\n  transition={{ ' + trans + ' }}' + styleAttr + '\n>\n  {/* your content */}\n</motion.div>';
   }
   if (kfs.length === 2) {
     var ff = kfToVars(kfs[0], 'framer'), ft = kfToVars(kfs[kfs.length - 1], 'framer'); balance(ff, ft);
-    return head + '<motion.div\n  initial={{ ' + serVars(ff) + ' }}\n  ' + animProp + '={{ ' + serVars(ft) + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+    return head + '<motion.div\n  initial={{ ' + serVars(ff) + ' }}\n  ' + animProp + '={{ ' + serVars(ft) + ' }}\n  transition={{ ' + trans + ' }}' + styleAttr + '\n>\n  {/* your content */}\n</motion.div>';
   }
-  return head + '<motion.div\n  ' + animProp + '={{ ' + serVars(kfToVars(kfs[kfs.length - 1], 'framer')) + ' }}\n  transition={{ ' + trans + ' }}\n>\n  {/* your content */}\n</motion.div>';
+  return head + '<motion.div\n  ' + animProp + '={{ ' + serVars(kfToVars(kfs[kfs.length - 1], 'framer')) + ' }}\n  transition={{ ' + trans + ' }}' + styleAttr + '\n>\n  {/* your content */}\n</motion.div>';
 }
 // framework key → { label, lang (for highlighting), emit }
 var ANIM_FRAMEWORKS = [
@@ -339,17 +400,28 @@ function summaryFor(spec) {
   if (f.distance && spec.distance != null) p.push(spec.distance + 'px');
   if (f.amount && spec.amount != null) p.push(amountMeta(spec.type).label.toLowerCase() + ' ' + spec.amount);
   if (f.color && spec.targetColor) p.push('→ ' + spec.targetColor);
+  if (f.position) {
+    const d = positionDefaults();
+    const fx = spec.fromX != null ? spec.fromX : d.fromX, fy = spec.fromY != null ? spec.fromY : d.fromY;
+    const tx = spec.toX != null ? spec.toX : d.toX, ty = spec.toY != null ? spec.toY : d.toY;
+    p.push('(' + fx + ',' + fy + ')px → (' + tx + ',' + ty + ')px');
+  }
+  if (f.origin && spec.transformOrigin && spec.transformOrigin !== 'center') p.push('from ' + spec.transformOrigin);
   let tail = (spec.duration != null ? spec.duration : 1000) + 'ms';
   if (spec.delay) tail += ', ' + spec.delay + 'ms delay';
   tail += ', ' + (spec.easing || 'ease');
   if (spec.repeat === 'infinite') tail += ', loop';
   else if (spec.repeat && Number(spec.repeat) > 1) tail += ', ×' + spec.repeat;
+  if (spec.playDirection && spec.playDirection !== 'normal') tail += ', ' + spec.playDirection;
+  if (spec.fill && spec.fill !== 'both') tail += ', fill ' + spec.fill;
+  if (spec.stagger) tail += ', ' + spec.stagger + 'ms stagger';
   tail += ', on ' + (spec.trigger || 'load');
   return p.join(' ') + ' — ' + tail;
 }
 
 module.exports = {
-  ANIM_TYPES, EASINGS, DIRECTIONS, TRIGGERS, fieldsFor, amountMeta, labelForType, summaryFor,
+  ANIM_TYPES, EASINGS, DIRECTIONS, TRIGGERS, ORIGINS, PLAY_DIRECTIONS, FILLS,
+  fieldsFor, amountMeta, positionDefaults, labelForType, summaryFor,
   animKeyframes, cssSnippet, jsSnippet,
   gsapSnippet, framerSnippet, motionOneSnippet, ANIM_FRAMEWORKS, emitCode, ANIM_SPRING_NATIVE,
   KEYFRAMES_FN_SRC: animKeyframes.toString(),

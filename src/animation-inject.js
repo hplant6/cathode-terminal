@@ -10,18 +10,22 @@ const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 16 16, crossha
 
 // Phase 1: hover + click to target an element; the script resolves with its
 // selector/label. Animation controls, live preview, and the composed request live
-// in the left-column panel. window.__cathodeAnim exposes result() (the picked
-// element's selector + snippet) and clear() (teardown). Preview lands in Phase 2.
-function getAnimationScript() {
+// in the left-column panel. window.__cathodeAnim exposes result() (the target(s)'
+// selector + snippet) and clear() (teardown). Preview lands in Phase 2.
+// append: Add Selection — the new target joins window.__cathodeAnim.targets instead
+// of replacing the session, so one spec (built in Phase 2) previews/sends against all
+// of them.
+function getAnimationScript(append) {
   return `(function() {
   ${MARCH_KEYFRAMES_JS}
   var __animKeyframes = ${KEYFRAMES_FN_SRC};   // inlined spec→WAAPI generator (shared with the panel)
+  var __prev = (${append ? 'true' : 'false'} && window.__cathodeAnim) ? window.__cathodeAnim : null;
+  if (__prev) { try { __prev.cancelAnims(); } catch(e){} }   // drop any live preview, keep targets/overlay state
+  else if (window.__cathodeAnim) { try { window.__cathodeAnim.clear(); } catch(e){} }
   ['__ca_ov','__ca_hv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
-  if (window.__cathodeAnim) { try { window.__cathodeAnim.clear(); } catch(e){} }
 
   return new Promise(function(resolve) {
     var phase = 'hover';
-    var selEl = null;
     var curAnims = [];
     function cancelAll(){ curAnims.forEach(function(a){ try{a.cancel();}catch(e){} }); curAnims = []; }
     function finiteRevert(a, o){ if (o.iterations !== Infinity && a.finished) { a.finished.then(function(){ var i = curAnims.indexOf(a); if (i>=0) { try{a.cancel();}catch(e){} curAnims.splice(i,1); } }).catch(function(){}); } }
@@ -70,39 +74,61 @@ function getAnimationScript() {
       selectEl(el);
     });
 
-    function onKey(e){ if (e.key === 'Escape' && phase === 'hover') { resolveOnce(null); teardown(); } }
+    function onKey(e) {
+      if (e.key !== 'Escape' || phase !== 'hover') return;
+      resolveOnce(null);
+      if (__prev) {
+        // Cancelling an appended pick leaves the existing target(s)' session alone —
+        // only this pick's own overlay needs cleaning up.
+        document.removeEventListener('keydown', onKey, true);
+        ['__ca_ov','__ca_hv'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
+      } else {
+        teardown();
+      }
+    }
     document.addEventListener('keydown', onKey, true);
+
+    function itemInfo(t) {
+      var snip = t.outerHTML.replace(/\\n/g,' ').replace(/\\s{2,}/g,' ').slice(0,160);
+      return { selector: getSelector(t), tag: t.tagName.toLowerCase(), label: labelFor(t), snippet: snip };
+    }
 
     function selectEl(el) {
       phase = 'selected';
-      selEl = el;
       if (ov) ov.remove();
       if (hv) hv.remove();
+      var targets = __prev ? __prev.targets.slice() : [];
+      var base = targets.length;
+      if (targets.indexOf(el) === -1) targets.push(el);   // picking the same element twice adds nothing new
       window.__cathodeAnim = {
-        result: function() {
-          var snip = selEl.outerHTML.replace(/\\n/g,' ').replace(/\\s{2,}/g,' ').slice(0,160);
-          return { selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl), snippet: snip };
-        },
+        targets: targets,
+        result: function() { return targets.map(itemInfo); },
+        cancelAnims: function() { try { cancelAll(); } catch(e){} },   // drop a live preview without tearing the session down
         preview: function(spec) {
           try { cancelAll(); } catch(e){}
-          try {
-            var r = __animKeyframes(spec), o = r.options;
-            // Stagger previews the target's children cascading; otherwise the element itself.
-            // Finite previews revert when done so nothing gets stuck faded-out mid-tweak.
-            if (spec.stagger && selEl.children && selEl.children.length) {
-              for (var i = 0; i < selEl.children.length; i++) {
-                var ca = selEl.children[i].animate(r.keyframes, { duration: o.duration, delay: o.delay + i * spec.stagger, easing: o.easing, iterations: o.iterations, fill: o.fill });
-                curAnims.push(ca); finiteRevert(ca, o);
+          targets.forEach(function(t) {
+            try {
+              var r = __animKeyframes(spec), o = r.options;
+              var waOpts = { duration: o.duration, easing: o.easing, iterations: o.iterations, fill: o.fill, direction: o.playDirection };
+              // Stagger previews the target's children cascading; otherwise the element itself.
+              // Finite previews revert when done so nothing gets stuck faded-out mid-tweak.
+              if (spec.stagger && t.children && t.children.length) {
+                for (var i = 0; i < t.children.length; i++) {
+                  if (o.transformOrigin !== 'center') t.children[i].style.transformOrigin = o.transformOrigin;
+                  var ca = t.children[i].animate(r.keyframes, Object.assign({}, waOpts, { delay: o.delay + i * spec.stagger }));
+                  curAnims.push(ca); finiteRevert(ca, o);
+                }
+              } else {
+                if (o.transformOrigin !== 'center') t.style.transformOrigin = o.transformOrigin;
+                var a = t.animate(r.keyframes, Object.assign({}, waOpts, { delay: o.delay }));
+                curAnims.push(a); finiteRevert(a, o);
               }
-            } else {
-              var a = selEl.animate(r.keyframes, { duration: o.duration, delay: o.delay, easing: o.easing, iterations: o.iterations, fill: o.fill });
-              curAnims.push(a); finiteRevert(a, o);
-            }
-          } catch(e) { curAnims = []; }
+            } catch(e) {}
+          });
         },
         clear: function(){ teardown(); },
       };
-      resolveOnce({ selector: getSelector(selEl), tag: selEl.tagName.toLowerCase(), label: labelFor(selEl) });
+      resolveOnce({ items: targets.slice(base).map(itemInfo), base: base });
     }
 
     function labelFor(el) {

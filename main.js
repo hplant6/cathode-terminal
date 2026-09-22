@@ -4390,6 +4390,23 @@ ipcMain.handle(IPC.AUTH_STATUS_READ, async () => {
   } catch (_) { return null; }
 });
 
+// Switch accounts without a fresh OAuth login: overwrite ~/.claude/.credentials.json
+// with a previously-saved snapshot (the renderer captures one after a successful
+// `claude auth login`, keyed by a user-given label — see the Authentication modal's
+// saved-accounts list). Takes effect for new Claude Code sessions; a session already
+// running keeps whatever credentials it started with.
+ipcMain.handle(IPC.AUTH_STATUS_WRITE, async (_, { oauth } = {}) => {
+  if (!oauth || typeof oauth !== 'object') return { ok: false, error: 'missing oauth' };
+  try {
+    const content = JSON.stringify({ claudeAiOauth: oauth }, null, 2) + '\n';
+    const ok = await wslExecInput(
+      ['-e', 'sh', '-c', 'mkdir -p ~/.claude && cat > ~/.claude/.credentials.json && chmod 600 ~/.claude/.credentials.json'],
+      content, 5000
+    );
+    return { ok: !!ok };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
 // ── Per-agent memory file ─────────────────────────────────────────
 // Each agent reads its own instructions file from its config dir; resolve the
 // file + how to reach it (WSL for WSL-installed agents, Windows fs for Windows
@@ -4524,9 +4541,11 @@ let panelSelSeq = 0;   // Box/Lasso selection ids — one per pick, shared by it
 ipcMain.on(IPC.PICK_START, async (_, mode, opts) => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
-  // Add to Selection only means something while a Box/Lasso panel is live on this view.
-  const append = !!(opts && opts.append) && (mode === 'box' || mode === 'lasso')
-    && !!pendingPanelPick && pendingPanelPick.view === view;
+  // Add to Selection only means something while a Box/Lasso or Extract panel is live on this view.
+  const append = !!(opts && opts.append) && (
+    ((mode === 'box' || mode === 'lasso') && !!pendingPanelPick && pendingPanelPick.view === view) ||
+    (mode === 'aidev' && !!pendingExtract && pendingExtract.view === view)
+  );
   const selId = (mode === 'box' || mode === 'lasso') ? ++panelSelSeq : 0;
   try {
     // Phase 1: user draws selection
@@ -4564,8 +4583,12 @@ ipcMain.on(IPC.PICK_START, async (_, mode, opts) => {
         return;
       }
       if (mode === 'aidev') {
-        pendingExtract = { view, items: result.items };
-        uiSend(IPC.EXTRACT_PANEL_OPEN, { tool: 'Extract', items: result.items });
+        if (append && result.base > 0 && pendingExtract) {
+          pendingExtract = { view, items: pendingExtract.items.concat(result.items) };
+        } else {
+          pendingExtract = { view, items: result.items };
+        }
+        uiSend(IPC.EXTRACT_PANEL_OPEN, { tool: 'Extract', items: result.items, base: result.base || 0 });
         return;   // finalized via extract-panel-send / -cancel
       }
       // CSS source refs now (project view only — source maps only meaningful for local dev)
@@ -4755,14 +4778,15 @@ async function captureSelectionShot(view, items) {
   }
 }
 
-ipcMain.on(IPC.PICK_PANEL_SEND, async (_, { instruction = '', items = [] } = {}) => {
+ipcMain.on(IPC.PICK_PANEL_SEND, async (_, { instruction = '', items = [], includeShot = true } = {}) => {
   const p = pendingPanelPick;
   pendingPanelPick = null;
   if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
   await clearPanelHighlight(p.view);
   // Shoot before the picker tears down, while the page is still laid out exactly as it
-  // was when the rects were measured.
-  const shot = items.length ? await captureSelectionShot(p.view, items) : null;
+  // was when the rects were measured. Skipped when the user has toggled screenshots off
+  // (the composer's Screenshot toggle) — the CSS/DOM detail still goes through either way.
+  const shot = (items.length && includeShot) ? await captureSelectionShot(p.view, items) : null;
   uiSend(IPC.PICK_CANCELLED);
   if (!items.length && !instruction.trim()) return;
   const note = localAssetNote(items);
@@ -5108,14 +5132,19 @@ async function clearAnim(view) {
   if (!wc || wc.isDestroyed()) return;
   try { await wc.executeJavaScript('window.__cathodeAnim && window.__cathodeAnim.clear()'); } catch (_) {}
 }
-ipcMain.on(IPC.PICK_ANIMATE, async () => {
+ipcMain.on(IPC.PICK_ANIMATE, async (_, opts) => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
+  const append = !!(opts && opts.append) && !!pendingAnim && pendingAnim.view === view;
   try {
-    const sel = await view.webContents.executeJavaScript(getAnimationScript());
-    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled before selecting
-    pendingAnim = { view };
-    uiSend(IPC.ANIM_PANEL_OPEN, { label: sel.label, selector: sel.selector });
+    const sel = await view.webContents.executeJavaScript(getAnimationScript(append));
+    // Cancelled before selecting (fresh pick), or an appended pick that named an
+    // element already in the set — either way leave any existing session untouched.
+    if (!sel || !sel.items || !sel.items.length) { uiSend(IPC.PICK_CANCELLED); return; }
+    pendingAnim = (append && sel.base > 0 && pendingAnim)
+      ? { view, items: pendingAnim.items.concat(sel.items) }
+      : { view, items: sel.items };
+    uiSend(IPC.ANIM_PANEL_OPEN, { items: sel.items, base: sel.base || 0 });
   } catch (err) {
     console.error('Animation error:', err);
     uiSend(IPC.PICK_CANCELLED);
@@ -5183,17 +5212,22 @@ ipcMain.on(IPC.ANIM_PANEL_SEND, async (_, { spec = {}, instruction = '', framewo
   try { res = await p.view.webContents.executeJavaScript('window.__cathodeAnim && window.__cathodeAnim.result()'); } catch (_) {}
   await clearAnim(p.view);   // revert the preview — the animation is a request, not a permanent page change
   uiSend(IPC.PICK_CANCELLED);
-  if (!res) return;
-  const selector = res.selector;
+  if (!res || !res.length) return;
   const instr = (instruction || '').trim();
   const anUrl = activePageUrl();
-  const detailLines = ['───── Animation Request ─────', 'Selector: ' + selector, 'Animation: ' + animSummary(spec)];
+  const multi = res.length > 1;
+  const detailLines = ['───── Animation Request ─────',
+    multi ? `Selectors:\n${res.map(r => '  • ' + r.selector).join('\n')}` : 'Selector: ' + res[0].selector,
+    'Animation: ' + animSummary(spec)];
   const detail = (anUrl ? `From ${pageSource()} — ${anUrl}\n\n` : '') + detailLines.join('\n');
-  let out = { lang: 'css', code: '' };
-  try { out = animEmit(framework, spec, selector); } catch (_) {}
+  const blocks = res.map(r => {
+    let out = { lang: 'css', code: '' };
+    try { out = animEmit(framework, spec, r.selector); } catch (_) {}
+    return (multi ? `\n### ${r.selector}\n\n` : '\n\n') + '```' + out.lang + '\n' + out.code + '\n```';
+  }).join('\n');
   const body = (instr ? instr + '\n\n' : '')
-    + `Add this animation to the element using ${ANIM_FW_LABEL[framework] || framework}:\n\n`
-    + '```' + out.lang + '\n' + out.code + '\n```';
+    + `Add this animation to the element${multi ? 's' : ''} using ${ANIM_FW_LABEL[framework] || framework}:`
+    + blocks;
   uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Animation request' });
 });
 ipcMain.on(IPC.ANIM_PANEL_CANCEL, async () => {
