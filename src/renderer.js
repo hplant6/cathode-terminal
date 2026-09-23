@@ -63,6 +63,8 @@ const LS = {
   lastSeenVersion: 'cathode-last-seen-version',      // What's New: the app version this user last launched
   sbAgentLinkOff:  'cathode-sb-agent-link-off',      // Storybook: don't write the CLAUDE.md/AGENTS.md "check it" block
   claudeAccounts:  'cathode-claude-accounts',        // saved Claude OAuth credential snapshots, switchable without re-login
+  themeGenBase:    'cathode-theme-gen-base',         // Generate-a-theme: the picked background colour
+  themeGenAccent:  'cathode-theme-gen-accent',       // Generate-a-theme: the picked accent colour
 };
 
 // First-run UI defaults — seeded once, before the panels below read these keys,
@@ -141,6 +143,17 @@ const THEME_PRESETS = {
     '--spec-dropdown-bg':'#3C3F51','--spec-toolbar-bg':'#343746','--spec-header-bg':'#282A36','--spec-input-bg':'#21222C','--spec-black':'#191A21',
     '--spec-accent':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
   },
+  glacier: {   // glacier navy — Henry's blue ramp seated one step darker than the
+               // swatches, so it carries the same weight as the other dark themes.
+               // Accent 1 is a lightened tint of #570FBB because --spec-accent is a
+               // text colour in most of its uses; the raw #570FBB is Accent 2, the
+               // fill it reads beautifully as behind white. The tint is pitched to
+               // match the default theme's white-on-accent contrast (3.03 vs 3.16),
+               // since --text-on-accent is fixed white on solid accent buttons.
+    '--spec-text':'#DCE9F2','--spec-text-dim':'#A3BED2','--spec-text-faint':'#557C93','--spec-structural':'#3B5D77',
+    '--spec-dropdown-bg':'#2F4E69','--spec-toolbar-bg':'#223F5A','--spec-header-bg':'#152F4C','--spec-input-bg':'#0D2643','--spec-black':'#08203E',
+    '--spec-accent':'#A77BFF','--spec-accent-dark':'#570FBB','--spec-accent-3':'#2A1D4A','--danger':'#FF6B6B','--success':'#4ECFB0','--warning':'#E0B341','--spec-graph-2':'#DCC2FF','--mc-green':'#7FE3B0','--mc-green-dark':'#17423C',
+  },
   deepocean: {   // deep-ocean slate — teal-tinted darks with a #1DBFA1 accent
     '--spec-text':'#C9D9D7','--spec-text-dim':'#8AA5A3','--spec-text-faint':'#4F6A6D','--spec-structural':'#2A3E42',
     '--spec-dropdown-bg':'#243235','--spec-toolbar-bg':'#202B2E','--spec-header-bg':'#1C2427','--spec-input-bg':'#191E1F','--spec-black':'#12181A',
@@ -150,7 +163,7 @@ const THEME_PRESETS = {
 const BUILTIN_THEMES = [
   ['default','Default'], ['tan','Tan'], ['sky','Sky'],
   ['amber','Amber CRT'], ['dracula','Dracula'],
-  ['deepocean','Deep Ocean'],
+  ['deepocean','Deep Ocean'], ['glacier','Glacier'],
 ];
 
 // Modal display layout — three columns. (--spec-accent appears twice: as Accent 1 and Graph 1.)
@@ -183,8 +196,11 @@ if (!Array.isArray(savedThemes)) savedThemes = [];   // safeParse guards throws,
   } catch (_) {}
 })();
 let draftColors = null, draftName = '';
+let genBase   = normHexSafe(localStorage.getItem(LS.themeGenBase),   '#223F5A');
+let genAccent = normHexSafe(localStorage.getItem(LS.themeGenAccent), '#570FBB');
+function normHexSafe(v, fallback) { return /^#[0-9a-fA-F]{6}$/.test(String(v || '')) ? v.toUpperCase() : fallback; }
 function persistThemes() { localStorage.setItem(LS.themesSaved, JSON.stringify(savedThemes)); }
-function isThemeEditable(name) { return name === 'add' || /^saved:/.test(name); }
+function isThemeEditable(name) { return name === 'add' || name === 'gen' || /^saved:/.test(name); }
 let sharedColorPicker = null;   // the iro picker (assigned by initPickPanel) — reused by the theme swatches
 const IRO_CDN = 'https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js';
 // Lazy-load the iro color-picker library once, shared by the tool panels' swatches.
@@ -258,11 +274,13 @@ function applyTheme(name) {
   const prev = activeThemeName;
   if (/^saved:/.test(name) && !savedThemes[+name.split(':')[1]]) name = 'default';
   // a removed preset may still be stored from a previous version
-  if (name !== 'add' && !/^saved:/.test(name) && !THEME_PRESETS[name]) name = 'default';
+  if (name !== 'add' && name !== 'gen' && !/^saved:/.test(name) && !THEME_PRESETS[name]) name = 'default';
   activeThemeName = name;
   localStorage.setItem(LS.theme, name);
   if (name === 'add') {
     if (!draftColors || prev !== 'add') { draftColors = { ...THEME_PRESETS.default }; draftName = ''; }
+  } else if (name === 'gen') {
+    if (!draftColors || prev !== 'gen') { draftColors = generateThemeFromPair(genBase, genAccent); draftName = ''; }
   } else if (/^saved:/.test(name)) {
     const i = +name.split(':')[1];
     draftColors = { ...savedThemes[i].colors }; draftName = savedThemes[i].name;
@@ -298,6 +316,127 @@ function normHex(c) {
   if (/^#[0-9a-fA-F]{6}$/.test(c)) return c.toUpperCase();
   if (/^#[0-9a-fA-F]{3}$/.test(c)) return ('#' + c.slice(1).split('').map(x => x + x).join('')).toUpperCase();
   return '#000000';
+}
+
+// ── Theme generation from two colours ─────────────────────────────
+// Hand-built themes all follow the same lightness curve; only hue and saturation
+// really distinguish them. So a generated theme takes the picked colour's hue and
+// saturation and walks that proven curve, rather than inventing a ramp.
+const clampNum = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function hexToHsl(hex) {
+  const n = parseInt(normHex(hex).slice(1), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  const l = (mx + mn) / 2;
+  let h = 0, sat = 0;
+  if (d) {
+    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s: sat * 100, l: l * 100 };
+}
+
+function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360; s = clampNum(s, 0, 100) / 100; l = clampNum(l, 0, 100) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  const t = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x]
+          : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + t.map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+function relLum(hex) {
+  const n = parseInt(normHex(hex).slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+function contrastRatio(a, b) {
+  const [hi, lo] = [relLum(a), relLum(b)].sort((p, q) => q - p);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+// Lightness of each shade as a multiple of the picked colour's own, measured off
+// the built-in themes. Shade 5 is 1.0: the colour you pick IS the app background.
+const GEN_L_DARK  = [5.0, 3.6, 2.4, 1.45, 1.22, 1, 0.80, 0.62, 0.45];
+const GEN_L_LIGHT = [0.342, 0.467, 0.60, 0.826, 0.937, 1, 1.06, 1.128, 0.157];
+// Text shades shed most of the tint; the deepest fills carry a little more of it.
+const GEN_SAT = [0.35, 0.55, 0.75, 1, 1, 1, 1.1, 1.2, 1.3];
+const SHADE_VARS = ['--spec-text','--spec-text-dim','--spec-text-faint','--spec-structural',
+  '--spec-dropdown-bg','--spec-toolbar-bg','--spec-header-bg','--spec-input-bg','--spec-black'];
+
+// --spec-accent is a text colour in most of its uses, but also a fill with white on
+// top, so its lightness is balanced between the two rather than kept as picked.
+function tuneAccentForText(accentHex, cardHex) {
+  const a = hexToHsl(accentHex);
+  let best = null, nearest = null;
+  for (let L = 15; L <= 90; L++) {
+    const hex = hslToHex(a.h, a.s, L);
+    const onCard = contrastRatio(hex, cardHex), onWhite = contrastRatio('#FFFFFF', hex);
+    // Anything clearing both bars is good enough, so among those keep the one
+    // closest to what was picked — otherwise a light theme, where both bars pull
+    // the same way, slides the accent to near-black and loses the chosen hue.
+    if (onCard >= 4.5 && onWhite >= 3.2) {
+      const d = Math.abs(L - a.l);
+      if (!nearest || d < nearest.d) nearest = { hex, d };
+    }
+    // Normalised against each target so neither goal can be traded away entirely.
+    const score = Math.min(onCard / 4.5, onWhite / 3.2);
+    if (!best || score > best.score) best = { hex, score };
+  }
+  return (nearest || best).hex;   // no lightness clears both (dark themes often) → best compromise
+}
+
+// Accent 2 is a solid fill with white text on it. A picked colour already dark
+// enough is kept exactly — that is where a deep accent belongs.
+function tuneAccentForFill(accentHex) {
+  const a = hexToHsl(accentHex);
+  for (let L = a.l; L >= 8; L--) {
+    const hex = hslToHex(a.h, a.s, L);
+    if (contrastRatio('#FFFFFF', hex) >= 4.5) return hex;
+  }
+  return hslToHex(a.h, a.s, 8);
+}
+
+// Red means danger whatever the theme, so status colours are not generated from the
+// picked hue — they come from the built-in theme matching the generated mode.
+const GEN_STATUS = ['--danger', '--success', '--warning', '--mc-green', '--mc-green-dark'];
+
+function generateThemeFromPair(baseHex, accentHex) {
+  const base = hexToHsl(baseHex);
+  const dark = relLum(baseHex) <= 0.4;
+  const mult = dark ? GEN_L_DARK : GEN_L_LIGHT;
+  const Lb = clampNum(base.l, dark ? 6 : 62, dark ? 42 : 95);
+
+  const out = {};
+  const shades = mult.map((m, i) => {
+    let L = Lb * m;
+    if (dark) L = i <= 2 ? clampNum(L, [72, 46, 25][i], [95, 70, 50][i]) : clampNum(L, 2, 58);
+    else if (i === 8) L = clampNum(L, 8, 22);            // the "black" stays dark in light themes
+    else L = i <= 2 ? clampNum(L, 16, 58) : clampNum(L, 38, 98);
+    return hslToHex(base.h, clampNum(base.s * GEN_SAT[i], 0, 90), L);
+  });
+  SHADE_VARS.forEach((v, i) => { out[v] = shades[i]; });
+
+  const card = shades[6];
+  out['--spec-accent'] = tuneAccentForText(accentHex, card);
+  out['--spec-accent-dark'] = tuneAccentForFill(accentHex);
+  const acc = hexToHsl(out['--spec-accent']);
+  // Messages: the accent sunk into the background, a tinted fill rather than a colour.
+  out['--spec-accent-3'] = hslToHex(acc.h, clampNum(acc.s * 0.45, 0, 60),
+    clampNum(hexToHsl(card).l + (dark ? 7 : -10), 4, 92));
+  out['--spec-graph-2'] = dark
+    ? hslToHex(acc.h, clampNum(acc.s * 0.85, 0, 95), clampNum(acc.l + 16, 30, 92))
+    : hslToHex(acc.h, clampNum(acc.s * 0.85, 0, 95), clampNum(acc.l - 14, 18, 60));
+
+  const statusSrc = THEME_PRESETS[dark ? 'default' : 'tan'];
+  GEN_STATUS.forEach(v => { out[v] = statusSrc[v]; });
+  return out;
 }
 
 function renderThemeSidebar() {
@@ -346,6 +485,7 @@ function renderThemeSidebar() {
     (isLightFill(fill) ? light : dark).appendChild(mkBtn(name, label));
   });
   const custom = mkGroup('Custom Themes', 'custom');
+  custom.appendChild(mkBtn('gen', 'Generate'));
   custom.appendChild(mkBtn('add', 'Add Custom'));
   savedThemes.forEach((t, i) => custom.appendChild(mkBtn(`saved:${i}`, t.name)));
 }
@@ -362,12 +502,83 @@ function themeGroupClosed(key, set) {
 }
 
 // Colour panel — read-only swatches for the presets; pickers when Custom is active.
+// Re-derive the draft from the two picked colours. Kept separate from the strip's
+// own markup so typing a hex can refresh the swatches below without rebuilding —
+// and blurring — the input being typed into.
+function runThemeGen() {
+  draftColors = generateThemeFromPair(genBase, genAccent);
+  applyThemeColors(draftColors);
+  syncNativeMenuTheme(draftColors['--spec-input-bg']);
+  GRAPH_STOPS = computeGraphStops();
+  redrawGraphs();
+  const cols = document.querySelector('#theme-panel .theme-cols');
+  if (cols) renderThemeCols(cols);
+}
+
+function buildThemeGenStrip() {
+  const wrap = document.createElement('div');
+  wrap.className = 'theme-gen';
+  wrap.innerHTML = `
+    <div class="theme-group-title">Generate from two colors</div>
+    <div class="theme-gen-row">
+      <div class="theme-gen-field">
+        <label>Background</label>
+        <span class="theme-circle theme-gen-sw" data-k="base"></span>
+        <input type="text" class="theme-hex-input" data-k="base" maxlength="6" spellcheck="false">
+      </div>
+      <div class="theme-gen-field">
+        <label>Accent</label>
+        <span class="theme-circle theme-gen-sw" data-k="accent"></span>
+        <input type="text" class="theme-hex-input" data-k="accent" maxlength="6" spellcheck="false">
+      </div>
+      <button class="modal-btn-cancel theme-gen-run">Regenerate</button>
+    </div>
+    <div class="theme-gen-note">The background color becomes the app's own; every shade and accent tone is stepped off the pair. Edit any of them below.</div>
+  `;
+  const get = k => (k === 'base' ? genBase : genAccent);
+  const set = (k, v) => {
+    if (k === 'base') { genBase = v; localStorage.setItem(LS.themeGenBase, v); }
+    else              { genAccent = v; localStorage.setItem(LS.themeGenAccent, v); }
+    runThemeGen();
+  };
+  wrap.querySelectorAll('.theme-gen-sw').forEach(sw => {
+    const k = sw.dataset.k;
+    const input = wrap.querySelector(`input[data-k="${k}"]`);
+    sw.style.background = get(k);
+    input.value = get(k).slice(1);
+    sw.addEventListener('click', () => sharedColorPicker?.open(sw, get(k), h => {
+      const val = normHex(h);
+      sw.style.background = val; input.value = val.slice(1);
+      set(k, val);
+    }));
+    input.addEventListener('input', () => {
+      const raw = input.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6).toUpperCase();
+      input.value = raw;
+      if (raw.length === 6) { const val = '#' + raw; sw.style.background = val; set(k, val); }
+    });
+  });
+  wrap.querySelector('.theme-gen-run').addEventListener('click', runThemeGen);
+  return wrap;
+}
+
 function renderThemePanel() {
   const el = document.getElementById('theme-panel');
   if (!el) return;
+  const gen = activeThemeName === 'gen';
+  el.classList.toggle('gen-mode', gen);
+  el.innerHTML = '';
+  if (!gen) { renderThemeCols(el); return; }
+  el.appendChild(buildThemeGenStrip());
+  const cols = document.createElement('div');
+  cols.className = 'theme-cols';
+  el.appendChild(cols);
+  renderThemeCols(cols);
+}
+
+function renderThemeCols(el) {
   const cur = themeColors(activeThemeName);
   const editable = isThemeEditable(activeThemeName);
-  el.classList.toggle('editable', editable);
+  document.getElementById('theme-panel')?.classList.toggle('editable', editable);
   const byCol = { shades: [], mid: [], status: [] };
   for (const g of THEME_GROUPS) byCol[g.col].push(g);
   el.innerHTML = '';
@@ -436,6 +647,7 @@ function setDraftColor(cssVar, value) {
   redrawGraphs();
 }
 function resetDraft() {
+  if (activeThemeName === 'gen') { runThemeGen(); return; }   // back to the pair, not to Default
   draftColors = { ...THEME_PRESETS.default };
   applyThemeColors(draftColors);
   syncNativeMenuTheme(draftColors['--spec-input-bg']);

@@ -5919,6 +5919,19 @@ select.tabs-add-select-field { display: none; }
   border-radius: var(--radius-lg); padding: 22px 26px; overflow-y: auto;
 }
 .theme-col { flex: 1; display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+/* Generate-a-theme: the two-colour strip sits above the token grid, so the panel
+   stacks instead of being a plain row of columns. */
+#theme-panel.gen-mode { flex-direction: column; gap: 22px; }
+.theme-cols { display: flex; gap: 26px; }
+.theme-gen-row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.theme-gen-field { display: flex; align-items: center; gap: 10px; }
+.theme-gen-field label {
+  font: 11px var(--font-mono); color: var(--spec-text-dim);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.theme-gen .theme-circle { cursor: pointer; }
+.theme-gen-run { margin-left: auto; }
+.theme-gen-note { font: 11px var(--font-ui); color: var(--spec-text-faint); line-height: 1.5; max-width: 62ch; }
 .theme-group-title {
   font: 12px var(--font-mono); color: var(--spec-text-dim);
   text-transform: uppercase; letter-spacing: 0.05em;
