@@ -1347,6 +1347,38 @@
       <div class="auth-section">
         <div class="auth-section-label">Claude Account</div>
         <div id="auth-account-status"></div>
+
+        <!-- Sign-in, driven from here: the CLI's login prints a URL then waits on a
+             pasted code, so both halves get a control instead of a terminal tab. -->
+        <div id="auth-login-panel" style="display:none">
+          <div class="auth-login-step">
+            <span class="auth-login-num">1</span>
+            <div class="auth-login-body">
+              <span class="auth-login-head">Approve in your browser</span>
+              <span class="auth-login-hint" id="auth-login-hint">Starting sign-in…</span>
+              <div class="auth-login-actions">
+                <button id="auth-login-open"  class="api-key-use" disabled>Open sign-in page</button>
+                <button id="auth-login-copy"  class="api-key-use" disabled>Copy link</button>
+              </div>
+            </div>
+          </div>
+          <div class="auth-login-step">
+            <span class="auth-login-num">2</span>
+            <div class="auth-login-body">
+              <span class="auth-login-head">Paste the code it gives you</span>
+              <div class="auth-login-actions">
+                <input id="auth-login-code" class="auth-login-input" placeholder="Paste code…" spellcheck="false" autocomplete="off" />
+                <button id="auth-login-paste"  class="api-key-use">Paste</button>
+                <button id="auth-login-submit" class="api-key-use">Submit</button>
+              </div>
+            </div>
+          </div>
+          <div id="auth-login-status" class="auth-login-status"></div>
+          <div class="api-key-form-actions">
+            <button id="auth-login-cancel" class="modal-btn-cancel">Cancel</button>
+          </div>
+        </div>
+
         <p class="modal-desc" style="margin:10px 0 8px">Saved logins — switch instantly, no browser round-trip.</p>
         <div id="claude-accounts-list"></div>
         <div id="claude-account-save-form" style="display:none">
@@ -1356,7 +1388,7 @@
             <button id="claude-account-save-commit" class="modal-btn-confirm">Save</button>
           </div>
         </div>
-        <button id="claude-account-save-open" class="api-key-use" style="margin-top:6px">+ Save current login as…</button>
+        <button id="claude-account-save-open" class="modal-btn-cancel" style="margin-top:2px; align-self:flex-start">+ Save current login</button>
       </div>
 
       <div class="auth-section">

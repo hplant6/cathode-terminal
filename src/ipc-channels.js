@@ -67,6 +67,13 @@ const IPC = Object.freeze({
   APP_TOAST: 'app-toast',
   AUTH_STATUS_READ: 'auth-status-read',
   AUTH_STATUS_WRITE: 'auth-status-write',   // switch the live ~/.claude/.credentials.json to a saved account
+  AUTH_ACCOUNT_INFO: 'auth-account-info',   // `claude auth status --json` — the only source of the live account's email/org
+  AUTH_TOKEN_CHECK: 'auth-token-check',     // does the live token still work? (a network probe, unlike auth status)
+  AUTH_LOGIN_START: 'auth-login-start',     // drive `claude auth login` from the modal instead of a terminal tab
+  AUTH_LOGIN_CODE: 'auth-login-code',       // paste the authorization code back into the waiting login process
+  AUTH_LOGIN_CANCEL: 'auth-login-cancel',
+  AUTH_LOGIN_OPEN: 'auth-login-open',       // open the pending authorize URL host-side (WSL can't reach the browser)
+  AUTH_LOGIN_EVENT: 'auth-login-event',     // main → renderer: { phase, url, message }
   BROWSER_BACK: 'browser-back',         // step back through the browser view's own history
   BROWSER_NAV_STATE: 'browser-nav-state',   // main → renderer: { canGoBack } so the Back button can disable itself
   BROWSER_DID_NAVIGATE: 'browser-did-navigate',

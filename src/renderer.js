@@ -5318,38 +5318,121 @@ function renderApiKeysList() {
 const authModal     = document.getElementById('auth-modal');
 const apiKeyNewForm = document.getElementById('api-key-new-form');
 
+// Which account is live can only come from `claude auth status --json` — the
+// credentials file holds tokens and a plan name, never an email address.
+let liveAuthInfo = null;
+
+function authSubLabel(info) {
+  const sub = info?.subscriptionType || '';
+  const plan = sub === 'pro' ? 'Claude Pro' : sub === 'max' ? 'Claude Max' : sub || 'claude.ai';
+  const org = info?.orgName && !/'s Organization$/.test(info.orgName) ? ` · ${info.orgName}` : '';
+  return plan + org;
+}
+
 async function renderAuthAccountSection() {
   const el = document.getElementById('auth-account-status');
   el.innerHTML = '<span class="auth-loading">Checking…</span>';
-  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);   // never leave "Checking…" stuck
-  const oauth        = creds?.claudeAiOauth ?? creds;
-  const hasToken     = !!(oauth?.accessToken);
-  const expiresAt    = oauth?.expiresAt;
-  const expired      = expiresAt && Date.now() > expiresAt;
-  const loggedIn     = hasToken && !expired;
-  const subType      = oauth?.subscriptionType || '';
-  const email        = oauth?.account?.emailAddress || oauth?.email || '';
-  const subLabel     = subType === 'pro' ? 'Claude Pro' : subType ? subType : 'claude.ai';
-  const displayName  = email || subLabel;
-  const subLine      = email ? subLabel : '';
+  const info = await ipcRenderer.invoke(IPC.AUTH_ACCOUNT_INFO).catch(() => null);   // never leave "Checking…" stuck
+  liveAuthInfo = info;
+  const loggedIn = !!(info && info.loggedIn);
+  const email    = info?.email || '';
 
   el.innerHTML = `
     <div class="auth-account-row${loggedIn ? ' active' : ''}">
       <div class="auth-dot${loggedIn ? ' on' : ''}"></div>
       <div class="auth-account-info">
-        <span class="auth-account-name">${loggedIn ? escHtml(displayName) : 'Not logged in'}</span>
-        ${loggedIn && subLine ? `<span class="auth-account-sub">${escHtml(subLine)}</span>` : ''}
-        ${expired  ? `<span class="auth-account-sub warn">Session expired — re-authenticate</span>` : ''}
-        ${!hasToken ? `<span class="auth-account-sub">Run claude auth login to connect your account</span>` : ''}
+        <span class="auth-account-name">${loggedIn ? escHtml(email || authSubLabel(info)) : 'Not logged in'}</span>
+        ${loggedIn && email ? `<span class="auth-account-sub">${escHtml(authSubLabel(info))}</span>` : ''}
+        ${loggedIn ? '' : `<span class="auth-account-sub">Sign in to run Claude Code</span>`}
       </div>
-      <button class="api-key-use auth-reauth-btn">${loggedIn ? 'Re-auth' : 'Log in'}</button>
+      <button class="api-key-use auth-reauth-btn">${loggedIn ? 'Switch…' : 'Log in'}</button>
     </div>
   `;
-  el.querySelector('.auth-reauth-btn').addEventListener('click', () => {
-    authModalCtl.close();
-    createSession('Claude Auth', 'claude auth login', false, true);
-  });
+  el.querySelector('.auth-reauth-btn').addEventListener('click', () => startAuthLogin());
 }
+
+// ── Sign-in, in the modal ─────────────────────────────────────────
+// `claude auth login` is a dialogue: it prints an authorize URL, then blocks on a
+// pasted code. Main drives the process; this drives the two controls.
+const authLoginPanel = document.getElementById('auth-login-panel');
+let authLoginUrlSeen = '';
+
+function authLoginSetStatus(text, kind = '') {
+  const el = document.getElementById('auth-login-status');
+  if (!el) return;
+  el.className = 'auth-login-status' + (kind ? ' ' + kind : '');
+  el.textContent = text;
+}
+
+function showAuthLoginPanel(on) {
+  if (!authLoginPanel) return;
+  authLoginPanel.style.display = on ? '' : 'none';
+}
+
+function startAuthLogin(email) {
+  authLoginUrlSeen = '';
+  showAuthLoginPanel(true);
+  document.getElementById('auth-login-hint').textContent = 'Starting sign-in…';
+  document.getElementById('auth-login-open').disabled = true;
+  document.getElementById('auth-login-copy').disabled = true;
+  const codeEl = document.getElementById('auth-login-code');
+  codeEl.value = '';
+  authLoginSetStatus(email ? `Signing in as ${email}…` : '');
+  ipcRenderer.send(IPC.AUTH_LOGIN_START, { email: email || '' });
+}
+
+function submitAuthLoginCode() {
+  const codeEl = document.getElementById('auth-login-code');
+  const code = codeEl.value.trim();
+  if (!code) { codeEl.focus(); return; }
+  ipcRenderer.send(IPC.AUTH_LOGIN_CODE, { code });
+  codeEl.value = '';
+  authLoginSetStatus('Verifying…');
+}
+
+document.getElementById('auth-login-open')?.addEventListener('click', () => ipcRenderer.send(IPC.AUTH_LOGIN_OPEN));
+document.getElementById('auth-login-copy')?.addEventListener('click', e => {
+  if (!authLoginUrlSeen) return;
+  navigator.clipboard.writeText(authLoginUrlSeen).then(() => {
+    e.target.textContent = 'Copied';
+    setTimeout(() => { e.target.textContent = 'Copy link'; }, 1200);
+  }).catch(() => {});
+});
+document.getElementById('auth-login-paste')?.addEventListener('click', async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    if (t) { document.getElementById('auth-login-code').value = t.trim(); submitAuthLoginCode(); }
+  } catch (_) { document.getElementById('auth-login-code').focus(); }
+});
+document.getElementById('auth-login-submit')?.addEventListener('click', submitAuthLoginCode);
+document.getElementById('auth-login-code')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuthLoginCode();
+});
+document.getElementById('auth-login-cancel')?.addEventListener('click', () => {
+  ipcRenderer.send(IPC.AUTH_LOGIN_CANCEL);
+  showAuthLoginPanel(false);
+});
+
+ipcRenderer.on(IPC.AUTH_LOGIN_EVENT, async (_, { phase, url, message } = {}) => {
+  if (phase === 'url') {
+    authLoginUrlSeen = url || '';
+    document.getElementById('auth-login-hint').textContent = 'Browser opened. If it did not, use the buttons below.';
+    document.getElementById('auth-login-open').disabled = false;
+    document.getElementById('auth-login-copy').disabled = false;
+  } else if (phase === 'awaiting-code') {
+    authLoginSetStatus('Waiting for the code from your browser…');
+    document.getElementById('auth-login-code').focus();
+  } else if (phase === 'done') {
+    authLoginSetStatus('Signed in.', 'ok');
+    setTimeout(() => showAuthLoginPanel(false), 900);
+    await renderAuthAccountSection();
+    await captureLiveAccountSnapshot();   // keep the matching saved login fresh
+    await renderClaudeAccountsList();
+    reconnectClaudeSessions('Signed in — reconnecting Claude…');
+  } else if (phase === 'error') {
+    authLoginSetStatus(message || 'Login failed.', 'warn');
+  }
+});
 
 // ── Saved Claude accounts — OAuth credential snapshots you can switch to
 // instantly (writes straight into ~/.claude/.credentials.json), instead of
@@ -5366,12 +5449,91 @@ function persistClaudeAccounts(accounts) { secureSet(CLAUDE_ACCOUNTS_STORE, JSON
 // A saved snapshot's access token stops working on its own after expiresAt, but the
 // CLI silently refreshes it via refreshToken on next use — only refreshTokenExpiresAt
 // passing actually means "log in again for this one."
-function claudeAccountStatusLabel(oauth) {
-  if (!oauth?.accessToken) return { text: '', warn: false };
+function claudeAccountStatusLabel(a) {
+  const oauth = a?.oauth;
   const now = Date.now();
-  if (oauth.refreshTokenExpiresAt && now > oauth.refreshTokenExpiresAt) return { text: 'Expired — needs a fresh login', warn: true };
-  if (oauth.expiresAt && now > oauth.expiresAt) return { text: 'Refreshes automatically on use', warn: false };
-  return { text: '', warn: false };
+  if (a?.dead) return { text: 'Rejected — sign in again', warn: true };
+  if (!oauth?.accessToken) return { text: a?.email || '', warn: false };
+  if (oauth.refreshTokenExpiresAt && now > oauth.refreshTokenExpiresAt) {
+    return { text: `${a.email ? a.email + ' — ' : ''}expired, sign in again`, warn: true };
+  }
+  return { text: a?.email || '', warn: false };
+}
+
+// The CLI rotates an account's refresh token as it uses it, so a snapshot taken
+// weeks ago is a token the server has already retired — restoring it is what
+// produced "OAuth access token has been revoked". Re-capture the live pair into
+// whichever saved login owns it before overwriting, so the account being left
+// behind is always stored at its newest tokens.
+async function captureLiveAccountSnapshot() {
+  const live = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
+  if (!live?.oauth?.accessToken) return null;
+  const email = live.account?.emailAddress || '';
+  const accounts = loadClaudeAccounts();
+  const match = accounts.find(x => x.oauth?.accessToken === live.oauth.accessToken)
+             || (email ? accounts.find(x => x.email === email) : null);
+  if (!match) return live;
+  match.oauth = live.oauth;
+  if (live.account) match.account = live.account;
+  if (email) match.email = email;
+  delete match.dead;
+  persistClaudeAccounts(accounts);
+  return live;
+}
+
+// Credentials are read once at startup by each agent process, so a session that is
+// already running keeps the token it launched with — and keeps failing with it.
+function reconnectClaudeSessions(message) {
+  const live = [...sessions.values()].filter(s => s.type === 'acp' && s.agent === 'claude');
+  if (!live.length) return;
+  live.forEach(s => {
+    acpFinalizeStream(s);
+    s.streamEl = null; s.streamTextEl = null; s.streamMsgId = null;
+    clearTimeout(s._trailingTimer); s._trailingWork = false;
+    if (s.msgsEl) s.msgsEl.innerHTML = '';
+    acpSetStatus(s, 'connecting');
+    if (s.statusTextEl) s.statusTextEl.textContent = 'Reconnecting…';
+    ipcRenderer.send(IPC.ACP_KILL, { id: s.id });
+    ipcRenderer.send(IPC.ACP_SPAWN, { id: s.id, model: s.model, agent: s.agent });
+  });
+  showToast(message, { duration: 2600 });
+}
+
+// Restore a saved login, then prove it took. `claude auth status` only echoes the
+// identity we just wrote, so it confirms the write and nothing more — the token
+// probe is what catches a snapshot the server has retired, here rather than as a
+// 401 in the middle of the next chat turn.
+async function switchClaudeAccount(target) {
+  const prev = await captureLiveAccountSnapshot();
+
+  const w = await ipcRenderer.invoke(IPC.AUTH_STATUS_WRITE,
+    { oauth: target.oauth, account: target.account || null }).catch(() => null);
+  if (!w || !w.ok) return { ok: false, error: w?.error || "Couldn't write credentials" };
+
+  const info = await ipcRenderer.invoke(IPC.AUTH_ACCOUNT_INFO).catch(() => null);
+  const wanted = target.email || target.account?.emailAddress || '';
+  let ok = info?.loggedIn && (!wanted || !info.email || info.email === wanted);
+  // A snapshot whose access token is already past expiry is not necessarily dead —
+  // the CLI refreshes it on first use — and the probe cannot tell those apart, so
+  // only a still-valid token is worth asking the server about.
+  if (ok && target.oauth?.expiresAt > Date.now()) {
+    const probe = await ipcRenderer.invoke(IPC.AUTH_TOKEN_CHECK).catch(() => null);
+    if (probe && !probe.ok) ok = false;
+  }
+  if (!ok) {
+    if (prev?.oauth) {   // put the working account back rather than leave nobody signed in
+      await ipcRenderer.invoke(IPC.AUTH_STATUS_WRITE, { oauth: prev.oauth, account: prev.account || null }).catch(() => null);
+    }
+    const accounts = loadClaudeAccounts();
+    const m = accounts.find(x => x.id === target.id);
+    if (m) { m.dead = true; persistClaudeAccounts(accounts); }
+    return { ok: false, error: 'That saved login is no longer accepted' };
+  }
+
+  const accounts = loadClaudeAccounts();
+  const m = accounts.find(x => x.id === target.id);
+  if (m) { if (info.email) m.email = info.email; delete m.dead; persistClaudeAccounts(accounts); }
+  return { ok: true, info };
 }
 
 async function renderClaudeAccountsList() {
@@ -5380,11 +5542,16 @@ async function renderClaudeAccountsList() {
   const accounts = loadClaudeAccounts();
   listEl.innerHTML = '';
   if (!accounts.length) return;   // nothing saved yet — stay quiet rather than add another empty-state line
-  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
-  const liveToken = (creds?.claudeAiOauth ?? creds)?.accessToken || '';
+  const live = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
+  const liveToken = live?.oauth?.accessToken || '';
+  const liveEmail = live?.account?.emailAddress || '';
   accounts.forEach(a => {
-    const isLive = !!liveToken && a.oauth?.accessToken === liveToken;
-    const status = claudeAccountStatusLabel(a.oauth);
+    // Token equality alone goes stale the moment the CLI refreshes behind our back,
+    // which would offer "Use" on the account already in use — and restore an older
+    // token than the live one. The address is the stable identity.
+    const isLive = (!!liveToken && a.oauth?.accessToken === liveToken)
+                || (!!liveEmail && a.email === liveEmail);
+    const status = claudeAccountStatusLabel(a);
     const item = document.createElement('div');
     item.className = 'api-key-item' + (isLive ? ' active' : '');
     item.innerHTML = `
@@ -5393,16 +5560,24 @@ async function renderClaudeAccountsList() {
         <span class="api-key-label">${escHtml(a.name)}</span>
         ${status.text ? `<span class="api-key-masked${status.warn ? ' warn' : ''}">${escHtml(status.text)}</span>` : ''}
       </div>
-      <button class="api-key-use" ${isLive ? 'disabled' : ''}>${isLive ? 'Active' : 'Use'}</button>
+      <button class="api-key-use" ${isLive ? 'disabled' : ''}>${isLive ? 'Active' : a.dead ? 'Sign in' : 'Use'}</button>
       <button class="api-key-del" title="Remove">✕</button>
     `;
     item.querySelector('.api-key-use').addEventListener('click', async () => {
       const btn = item.querySelector('.api-key-use');
+      // A snapshot already known to be refused: go straight to a real login,
+      // with the address filled in so the browser lands on the right account.
+      if (a.dead) { startAuthLogin(a.email || ''); return; }
       btn.disabled = true; btn.textContent = 'Switching…';
-      const r = await ipcRenderer.invoke(IPC.AUTH_STATUS_WRITE, { oauth: a.oauth }).catch(() => null);
-      if (!r || !r.ok) { showToast("Couldn't switch accounts", { duration: 4000 }); btn.disabled = false; btn.textContent = 'Use'; return; }
+      const r = await switchClaudeAccount(a);
       await renderAuthAccountSection();
       await renderClaudeAccountsList();
+      if (!r.ok) {
+        showToast(r.error + ' — sign in again', { duration: 5000 });
+        startAuthLogin(a.email || '');
+        return;
+      }
+      reconnectClaudeSessions(`Switched to ${r.info?.email || a.name}`);
     });
     item.querySelector('.api-key-del').addEventListener('click', () => {
       persistClaudeAccounts(loadClaudeAccounts().filter(x => x.id !== a.id));
@@ -5426,11 +5601,15 @@ async function commitClaudeAccountSave() {
   const nameEl = document.getElementById('claude-account-save-name');
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
-  const creds = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
-  const oauth = creds?.claudeAiOauth ?? creds;
-  if (!oauth?.accessToken) { showToast('Not logged in — nothing to save yet', { duration: 4000 }); return; }
+  const live = await ipcRenderer.invoke(IPC.AUTH_STATUS_READ).catch(() => null);
+  if (!live?.oauth?.accessToken) { showToast('Not logged in — nothing to save yet', { duration: 4000 }); return; }
+  // Save the identity alongside the tokens: restoring one without the other leaves
+  // the CLI reporting the wrong account.
   const accounts = loadClaudeAccounts();
-  accounts.push({ id: `a${Date.now()}`, name, oauth, savedAt: Date.now() });
+  accounts.push({
+    id: `a${Date.now()}`, name, oauth: live.oauth, account: live.account || null,
+    email: live.account?.emailAddress || '', savedAt: Date.now(),
+  });
   persistClaudeAccounts(accounts);
   claudeAccountSaveForm.style.display = 'none';
   renderClaudeAccountsList();
@@ -5445,6 +5624,8 @@ document.getElementById('claude-account-save-name')?.addEventListener('keydown',
 const authModalCtl = wireModal(authModal);
 
 async function openAuthModal() {
+  ipcRenderer.send(IPC.AUTH_LOGIN_CANCEL);   // a login left half-finished last time holds a dead PKCE challenge
+  showAuthLoginPanel(false);
   renderAuthAccountSection();
   renderClaudeAccountsList();
   if (claudeAccountSaveForm) claudeAccountSaveForm.style.display = 'none';

@@ -4381,21 +4381,36 @@ ipcMain.on(IPC.SHOW_SB_BAR_MENU, (_, { x, y } = {}) => {
   menu.popup({ window: mainWindow, x: Math.round(x), y: Math.round(y) });
 });
 
+// An account is TWO files: ~/.claude/.credentials.json holds the tokens, and
+// ~/.claude.json's `oauthAccount` holds the identity (email, org, uuid) that the
+// CLI reports and caches. Swapping only the tokens leaves the two disagreeing —
+// account B's tokens under account A's identity — which is what made switching
+// fail authentication. Read and write them as one unit.
 ipcMain.handle(IPC.AUTH_STATUS_READ, async () => {
   try {
     // wslExecFile inside the try too — a WSL failure must resolve null, not
     // reject the invoke (the auth modal showed "Checking…" forever).
     const raw = await wslExecFile(['-e', 'sh', '-c', 'cat ~/.claude/.credentials.json 2>/dev/null'], 5000);
-    return JSON.parse(raw);
+    const creds = JSON.parse(raw);
+    const oauth = creds?.claudeAiOauth ?? creds;
+    let account = null;
+    try {
+      const cfg = await wslExecFile(
+        ['-e', 'sh', '-c', `node -e 'try{const c=require(require("os").homedir()+"/.claude.json");process.stdout.write(JSON.stringify(c.oauthAccount||null))}catch(e){process.stdout.write("null")}'`],
+        8000
+      );
+      account = JSON.parse((cfg || 'null').trim() || 'null');
+    } catch (_) {}
+    return { oauth, account };
   } catch (_) { return null; }
 });
 
-// Switch accounts without a fresh OAuth login: overwrite ~/.claude/.credentials.json
-// with a previously-saved snapshot (the renderer captures one after a successful
-// `claude auth login`, keyed by a user-given label — see the Authentication modal's
-// saved-accounts list). Takes effect for new Claude Code sessions; a session already
-// running keeps whatever credentials it started with.
-ipcMain.handle(IPC.AUTH_STATUS_WRITE, async (_, { oauth } = {}) => {
+// Switch accounts without a fresh OAuth login: restore a previously-saved snapshot
+// of both files (the renderer captures one from the live login, keyed by a
+// user-given label — see the Authentication modal's saved-accounts list). Takes
+// effect for new Claude Code sessions; a session already running keeps whatever
+// credentials it started with, so the renderer reconnects them.
+ipcMain.handle(IPC.AUTH_STATUS_WRITE, async (_, { oauth, account } = {}) => {
   if (!oauth || typeof oauth !== 'object') return { ok: false, error: 'missing oauth' };
   try {
     const content = JSON.stringify({ claudeAiOauth: oauth }, null, 2) + '\n';
@@ -4403,9 +4418,158 @@ ipcMain.handle(IPC.AUTH_STATUS_WRITE, async (_, { oauth } = {}) => {
       ['-e', 'sh', '-c', 'mkdir -p ~/.claude && cat > ~/.claude/.credentials.json && chmod 600 ~/.claude/.credentials.json'],
       content, 5000
     );
-    return { ok: !!ok };
+    if (!ok) return { ok: false, error: 'could not write credentials' };
+    if (account && typeof account === 'object') {
+      // Read-modify-write ~/.claude.json: it also holds settings, project state and
+      // MCP config, so only `oauthAccount` may change. Written via a temp file +
+      // rename so a crash mid-write cannot truncate it.
+      // Both payloads travel as base64 so neither the JSON nor the shell has to
+      // survive the other's quoting.
+      const script = `
+        const fs=require('fs'),os=require('os'),p=os.homedir()+'/.claude.json';
+        let raw=''; try{raw=fs.readFileSync(p,'utf8')}catch(e){}
+        const cfg=raw?JSON.parse(raw):{};
+        cfg.oauthAccount=JSON.parse(Buffer.from(process.argv[2],'base64').toString());
+        fs.writeFileSync(p+'.gamut-tmp',JSON.stringify(cfg,null,2));
+        fs.renameSync(p+'.gamut-tmp',p);
+      `;
+      const b64 = Buffer.from(script).toString('base64');
+      const argB64 = Buffer.from(JSON.stringify(account)).toString('base64');
+      const wrote = await wslExecFile(['bash', '-lc',
+        `node -e "eval(Buffer.from(process.argv[1],'base64').toString())" ${b64} ${argB64}`
+      ], 8000);
+      if (wrote === null) return { ok: false, error: 'could not write account identity' };
+    }
+    return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
 });
+
+// The live credentials file carries no email, so it can never answer "which
+// account is this?" — `claude auth status --json` is the only thing that can.
+async function claudeAuthStatus() {
+  try {
+    const out = await wslExecFile(['bash', '-lic', 'claude auth status --json'], 15000);
+    const m = /\{[\s\S]*\}/.exec(out || '');   // step over any login-shell banner
+    return m ? JSON.parse(m[0]) : null;
+  } catch (_) { return null; }
+}
+
+ipcMain.handle(IPC.AUTH_ACCOUNT_INFO, () => claudeAuthStatus());
+
+// `claude auth status` reports the identity cached in ~/.claude.json and never
+// touches the network, so it cannot tell a working token from a revoked one. This
+// can: the endpoint behind the usage meters answers 401 for a retired token.
+// A network failure is reported as unverified, not as a bad token — losing wifi
+// must not look like a rejected account.
+ipcMain.handle(IPC.AUTH_TOKEN_CHECK, async () => {
+  const tok = await claudeOauthToken();
+  if (!tok) return { ok: false, reason: 'no-token' };
+  try {
+    const { status } = await httpsGetJson('api.anthropic.com', '/api/oauth/usage', {
+      'Authorization': 'Bearer ' + tok,
+      'anthropic-beta': 'oauth-2025-04-20',
+      'anthropic-version': '2023-06-01',
+      'User-Agent': 'claude-cli',
+    });
+    if (status === 401 || status === 403) return { ok: false, reason: 'revoked' };
+    if (status !== 200) return { ok: true, unverified: true, reason: `http-${status}` };
+    return { ok: true };
+  } catch (e) { return { ok: true, unverified: true, reason: 'offline' }; }
+});
+
+// ── In-app `claude auth login` ────────────────────────────────────
+// Login is a terminal dialogue: the CLI prints an authorize URL, then blocks on
+// "Paste code here". Spawning it in a terminal tab left the whole round-trip to
+// the user; driving the PTY from here lets the Authentication modal surface the
+// URL as a button and take the code in a field.
+let authLoginPty = null;
+let authLoginUrl = null;   // opened host-side on request — the renderer never hands us a URL to launch
+
+function authLoginEmit(phase, extra = {}) { uiSend(IPC.AUTH_LOGIN_EVENT, { phase, ...extra }); }
+
+function killAuthLogin() {
+  if (!authLoginPty) return;
+  const p = authLoginPty;
+  authLoginPty = null;   // clear first: onExit must see itself as stale and stay quiet
+  safeKill(p);
+}
+
+// The URL arrives wrapped in an OSC-8 hyperlink and colour codes; strip both
+// before matching, or the captured link carries terminator bytes.
+function stripAnsi(s) {
+  return String(s)
+    .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '');
+}
+
+ipcMain.on(IPC.AUTH_LOGIN_START, (_, { email, useConsole } = {}) => {
+  killAuthLogin();
+  authLoginUrl = null;   // a stale URL from a cancelled attempt is a dead PKCE challenge
+  let proc;
+  try {
+    const pty = require('node-pty');
+    const flags = [useConsole ? '--console' : '--claudeai'];
+    // The address is interpolated into a shell command, so it is matched against an
+    // allowlist of email characters — a denylist would have to anticipate every
+    // metacharacter, and missing one (a bare `>`) is a redirect into the shell.
+    if (email && /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) flags.push('--email', email);
+    const cmd = `export PATH="$HOME/.local/bin:$PATH"; claude auth login ${flags.join(' ')}`;
+    const { file, args } = platform.nixFileArgs(['bash', '-lic', cmd]);
+    proc = pty.spawn(file, args, {
+      name: 'xterm-256color', cols: 100, rows: 30,
+      cwd: sessionCwd(),
+      env: { ...process.env, TERM: 'xterm-256color' },
+    });
+  } catch (err) {
+    authLoginEmit('error', { message: `Couldn't start login: ${err.message}` });
+    return;
+  }
+  authLoginPty = proc;
+
+  let sawUrl = false, awaiting = false, tail = '';
+  proc.onData(data => {
+    if (authLoginPty !== proc) return;
+    tail = (tail + stripAnsi(data)).slice(-4000);
+    if (!sawUrl) {
+      // The lookahead is the point: it only matches once whitespace has arrived
+      // after the URL, so a chunk that splits the link mid-string is not mistaken
+      // for a complete one (which would send a truncated, unusable link).
+      const m = /https?:\/\/[^\s"'<>]*oauth\/authorize[^\s"'<>]*(?=\s)/.exec(tail);
+      if (m) {
+        sawUrl = true; authLoginUrl = m[0];
+        // The CLI tries to open a browser itself, but it is running inside WSL,
+        // where that usually goes nowhere — open it from the host side instead.
+        shell.openExternal(authLoginUrl).catch(() => {});
+        authLoginEmit('url', { url: authLoginUrl });
+      }
+    }
+    if (!awaiting && /paste code here/i.test(tail)) { awaiting = true; authLoginEmit('awaiting-code'); }
+  });
+
+  proc.onExit(async () => {
+    if (authLoginPty !== proc) return;   // a cancel or a newer attempt already replaced us
+    authLoginPty = null;
+    const status = await claudeAuthStatus();
+    if (status && status.loggedIn) authLoginEmit('done', { status });
+    else {
+      // The CLI's own last words are more useful than a generic failure.
+      const lines = tail.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      authLoginEmit('error', { message: lines[lines.length - 1] || 'Login did not complete.' });
+    }
+  });
+
+  authLoginEmit('started');
+});
+
+ipcMain.on(IPC.AUTH_LOGIN_CODE, (_, { code } = {}) => {
+  if (!authLoginPty) return;
+  try { authLoginPty.write(String(code || '').trim() + '\r'); } catch (_) {}
+  authLoginEmit('verifying');
+});
+
+ipcMain.on(IPC.AUTH_LOGIN_CANCEL, () => killAuthLogin());
+
+ipcMain.on(IPC.AUTH_LOGIN_OPEN, () => { if (authLoginUrl) shell.openExternal(authLoginUrl).catch(() => {}); });
 
 // ── Per-agent memory file ─────────────────────────────────────────
 // Each agent reads its own instructions file from its config dir; resolve the
