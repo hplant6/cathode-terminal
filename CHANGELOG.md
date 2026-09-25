@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- **New empty-state background: "golden rings."** The Storybook-offline and Browser "Boot up a server" screens now show rotating golden-ratio rings with RGB-split trails instead of the iridescent cellophane sheets. A dark oval stays behind the title and buttons so they read cleanly. It renders at full display resolution, still only while the empty state is on screen.
+
 ## [1.15.0] - 2026-09-25
 
 ### Added

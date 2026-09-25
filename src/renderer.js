@@ -13408,86 +13408,84 @@ document.getElementById('sb-build-fw')?.addEventListener('click', () => buildSto
 document.getElementById('sb-build-project')?.addEventListener('click', () => buildStorybook({}));   // scaffold auto-detecting the project's framework
 document.getElementById('sb-folder')?.addEventListener('click', () => document.getElementById('sb-folder-pick')?.click());   // readonly folder input → open the picker
 
-// ── Empty-state background — two undulating iridescent "cellophane" sheets ──
-// Raw WebGL fragment shader (no dependency). Renders premultiplied-alpha over the
-// dark gradient, confined behind the hero, and only runs while the state is visible.
-// Shared by the Storybook and Browser empty states (one canvas each).
+// ── Empty-state background — "golden rings" ──
+// A rotating field of golden-ratio rings with per-channel time lag; values tuned in fx-lab. The
+// centre calm keeps the area behind the title/buttons dark for legibility. Raw WebGL2 fragment
+// shader (no dependency), rendered only while the empty state is visible. Shared by the Storybook
+// and Browser empty states (one canvas each).
+const ES_FX = {
+  speed: 0.37, zoom: 2, spin: 0.1, wobble: 0, lag: -0.12,  // time scale, cells across, rotation, centre wobble, RGB lag
+  phi: 1.618, ring: 0.52, drift: 0.2, freq: 2, glow: 0.065,  // golden factor, ring density, pattern drift, grid freq, line glow
+  falloff: 1, edge: -0.16,                                   // centre falloff exponent, fwidth edge mix
+  red: -0.06, green: 0.5, blue: 0.01, bright: 0.84,          // per-channel cut, overall brightness
+  calmFloor: 0, calmRadius: 0.58,                            // dim behind the hero text (0 = black at centre)
+};
 function initEmptyStateFx(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   let gl = null;
-  try { gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true, depth: false }); } catch (_) {}
+  try { gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false }); } catch (_) {}
   if (!gl) return;
+  const C = ES_FX;
 
-  const VS = 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
-  const FS = [
-    'precision highp float;',
-    'uniform float uT; uniform vec2 uR;',
-    'float hash(vec2 p){ p = fract(p*vec2(123.34,345.45)); p += dot(p, p+34.345); return fract(p.x*p.y); }',
-    'float noise(vec2 p){ vec2 i=floor(p), f=fract(p); float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.)); vec2 u=f*f*(3.-2.*f); return mix(mix(a,b,u.x),mix(c,d,u.x),u.y); }',
-    'float fbm(vec2 p){ float s=0.,a=0.5; for(int i=0;i<3;i++){ s+=a*noise(p); p*=2.02; a*=0.5; } return s; }',
-    'vec3 iri(float x){ return 0.5+0.5*cos(6.28318*(x+vec3(0.0,0.35,0.62))); }',
-    // one flowing sheet field (single domain warp) — the "wind"
-    'float field(vec2 p, float t, float seed){ vec2 q=vec2(fbm(p+seed), fbm(p+vec2(3.1,seed)+t*0.05)); return fbm(p + 1.6*q + vec2(t*0.06, seed)); }',
-    'void main(){',
-    '  vec2 p = (gl_FragCoord.xy - 0.5*uR)/uR.y;',   // aspect-correct, centered
-    '  float t = uT*0.62;',
-    '  vec3 col = vec3(0.0); float alpha = 0.0;',
-    '  for(int s=0; s<2; s++){',
-    '    float seed = float(s)*13.7;',
-    '    vec2 pp = p*0.85 + vec2(float(s)*0.5, -float(s)*0.25);',
-    '    float e = 0.012;',
-    '    float f  = field(pp*0.5, t + float(s)*2.0, seed);',
-    '    float fx = field((pp+vec2(e,0.))*0.5, t + float(s)*2.0, seed) - f;',
-    '    float fy = field((pp+vec2(0.,e))*0.5, t + float(s)*2.0, seed) - f;',
-    '    vec2 g = vec2(fx,fy)/e; float gm = length(g);',
-    '    float ca = clamp(gm*0.06, 0.0, 0.4);',           // chromatic split on folds
-    '    float ph = f*1.4 + gm*0.2 + seed*0.1;',
-    '    vec3 ir = vec3(iri(ph-ca).r, iri(ph).g, iri(ph+ca).b);',
-    '    float diag = smoothstep(-0.9, 0.7, p.x + p.y*0.55);',   // more presence toward the right/bottom
-    '    float body = smoothstep(0.34, 0.72, f) * diag;',
-    '    float rim  = smoothstep(0.18, 0.85, gm) * diag;',       // bright iridescent folds (fewer, larger)
-    '    float a = body*0.42 + rim*0.6;',
-    '    col += ir * (0.32 + rim*1.0) * a;',
-    '    alpha += a;',
-    '  }',
-    // slow-drifting warm glow lobe (the orange/red bloom)
-    '  vec2 gp = vec2(0.4 + 0.18*sin(t*0.3), -0.05 + 0.16*cos(t*0.24));',
-    '  float gd = length(p - gp); float glow = exp(-gd*gd*7.0);',
-    '  col += vec3(1.0,0.36,0.12) * glow * 0.28; alpha += glow*0.22;',
-    // keep the middle (behind the title/button) calmer for legibility
-    '  float cm = smoothstep(0.0, 0.6, length(p*vec2(0.75,1.0)));',
-    '  col *= mix(0.4, 1.0, cm); alpha *= mix(0.45, 1.0, cm);',
-    '  alpha = clamp(alpha, 0.0, 1.0); col = clamp(col, 0.0, 1.0);',
-    '  gl_FragColor = vec4(col*alpha, alpha);',            // premultiplied
-    '}',
-  ].join('\n');
+  const VS = '#version 300 es\nlayout(location=0) in vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
+  const FS = `#version 300 es
+precision highp float;
+out vec4 o;
+uniform float uT; uniform vec2 uR;
+uniform float u_zoom, u_spin, u_wobble, u_lag, u_phi, u_ring, u_drift, u_freq, u_glow;
+uniform float u_falloff, u_edge, u_red, u_green, u_blue, u_bright, u_calmFloor, u_calmRadius;
+mat2 rot(float a){ float s = sin(a), c = cos(a); return mat2(c, -s, s, c); }
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*uR) / min(uR.x, uR.y);
+  vec2 p0 = uv;
+  uv *= u_zoom;
+  vec3 col = vec3(0);
+  float t = uT, tt = t*u_spin, d = 0.0;
+  uv *= rot(tt);
+  for (int i = 0; i < 3; i++) {
+    uv -= vec2(sin(t), cos(t))*u_wobble;
+    d = length(uv);
+    t -= u_lag;
+    vec2 p = uv;
+    p += p *= u_phi;                    // kept verbatim from the source shader; its evaluation order is part of the look
+    p *= sin(d*u_ring - t)*0.5;
+    p *= cos(d*0.5*u_ring - t)*0.5;
+    p += vec2(sin(tt), cos(tt))*u_drift;
+    col[i] = u_glow / (abs(length(fract(p*u_freq - 0.5) - 0.5)*0.5)*2.0);
+  }
+  col /= pow(d, u_falloff);
+  col = mix(col, vec3(1.0 - length(fwidth(col))), u_edge);
+  col -= vec3(u_red, u_green, u_blue);
+  col = clamp(col*u_bright, 0.0, 1.0);
+  col *= mix(u_calmFloor, 1.0, smoothstep(0.0, u_calmRadius, length(p0*vec2(0.75, 1.0))));   // legibility dip behind the hero
+  o = vec4(col, 1.0);
+}`;
 
-  function compile(type, src) { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.warn('[es-fx]', gl.getShaderInfoLog(sh)); return sh; }
   const prog = gl.createProgram();
-  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
-  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+  for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
+    const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) { console.warn('[es-fx]', gl.getShaderInfoLog(sh)); return; }
+    gl.attachShader(prog, sh);
+  }
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('[es-fx] link failed', gl.getProgramInfoLog(prog)); return; }
   gl.useProgram(prog);
 
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);   // one big triangle
-  const aLoc = gl.getAttribLocation(prog, 'a');
-  gl.enableVertexAttribArray(aLoc);
-  gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);   // one big triangle
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const uT = gl.getUniformLocation(prog, 'uT');
   const uR = gl.getUniformLocation(prog, 'uR');
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // premultiplied-alpha over the page
+  for (const [k, v] of Object.entries(C)) if (k !== 'speed') gl.uniform1f(gl.getUniformLocation(prog, 'u_' + k), v);   // static
 
+  // Thin line art, so render at full device resolution (the old soft shader was capped at 1000px).
   let W = 0, H = 0;
   function resize() {
     const r = canvas.getBoundingClientRect();
-    const scale = Math.min(1, 1000 / Math.max(r.width || 1, r.height || 1));   // cap long side for perf (soft bg)
-    const w = Math.max(2, Math.round((r.width || 2) * scale));
-    const h = Math.max(2, Math.round((r.height || 2) * scale));
+    const w = Math.max(2, Math.round((r.width || 2) * devicePixelRatio));
+    const h = Math.max(2, Math.round((r.height || 2) * devicePixelRatio));
     if (w !== W || h !== H) { W = w; H = h; canvas.width = W; canvas.height = H; }
   }
 
@@ -13496,16 +13494,15 @@ function initEmptyStateFx(canvasId) {
     if (!running) return;
     resize();
     gl.viewport(0, 0, W, H);
-    gl.uniform1f(uT, (now - t0) / 1000);
+    gl.uniform1f(uT, (now - t0) / 1000 * C.speed);
     gl.uniform2f(uR, W, H);
-    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     raf = requestAnimationFrame(frame);
   }
   function start() { if (running) return; running = true; raf = requestAnimationFrame(frame); }
   function stop() { running = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
 
-  // Only render while the offline state is actually on screen (saves GPU otherwise).
+  // Only render while the empty state is actually on screen (saves GPU otherwise).
   try {
     const io = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting && !document.hidden) start(); else stop(); } });
     io.observe(canvas);
