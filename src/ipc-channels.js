@@ -62,6 +62,16 @@ const IPC = Object.freeze({
   MOVE_PANEL_REMOVE: 'move-panel-remove',
   MOVE_PANEL_SEND: 'move-panel-send',
   MOVE_PANEL_UPDATE: 'move-panel-update',   // live move list from the page (polled)
+  SLIDERS_LIST: 'sliders-list',       // panel files for the active project (+ which match the page URL)
+  SLIDERS_OPEN: 'sliders-open',       // load a panel: inject the page runtime, return the normalized panel
+  SLIDERS_APPLY: 'sliders-apply',     // changed values → the page (one batch per animation frame)
+  SLIDERS_CLOSE: 'sliders-close',     // restore defaults, drop the injected CSS properties
+  SLIDERS_SEND: 'sliders-send',       // changed values → a bake request in chat
+  SLIDERS_PRESETS: 'sliders-presets', // write the presets map back into the panel file
+  SLIDERS_SCAN: 'sliders-scan',       // page :root custom properties → a starter panel file
+  SLIDERS_CHANGED: 'sliders-changed', // a panel file was added / changed / removed
+  SLIDERS_LAYOUT: 'sliders-layout',   // in-page panel corner / transparency / collapsed
+  SLIDERS_PAGE_CHANGES: 'sliders-page-changes', // values dragged on the in-page panel → the tool column
   ANIM_PANEL_CANCEL: 'anim-panel-cancel',
   ANIM_PANEL_OPEN: 'anim-panel-open',
   ANIM_PANEL_PREVIEW: 'anim-panel-preview',

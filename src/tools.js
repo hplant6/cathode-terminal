@@ -14,6 +14,7 @@ const TOOLS = [
   { key: 'l', id: 'btn-pick-lasso',      label: 'Lasso select',   group: 'project', menu: true,  desc: 'Freehand-select page elements' },
   { key: 'v', id: 'btn-pick-move',       label: 'Move',           group: 'project', menu: true,  desc: 'Drag elements to new spots on the page, then send the moves to chat' },
   { key: 'n', id: 'btn-pick-animate',    label: 'Animate',        group: 'project', menu: true,  desc: 'Target an element and build an animation request (type, easing, timing) for chat' },
+  { key: 't', id: 'btn-sliders',         label: 'Sliders',        group: 'project', menu: true,  desc: 'Live tuning panel for animations, effects and three.js scenes; your agent writes it, you drag, then send the values back' },
   { key: 's', id: 'btn-pick-component',  label: 'Pick component', group: 'project', menu: false },
   { key: 'e', id: 'btn-pick-aidev',      label: 'Extract',        menu: true },
   { key: 'c', id: 'btn-pick-eyedropper', label: 'Eyedropper',     menu: true,  desc: 'Sample any color with a magnifier loupe, then edit it live or send it to chat' },

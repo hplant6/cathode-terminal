@@ -8890,6 +8890,433 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   ipcRenderer.on(IPC.MOVE_PANEL_CLOSED, () => { if (!panel.hidden) close(); });
 })();
 
+// ── Sliders tool panel (docs/sliders-tool.md) ──
+// A live tuning panel built from <project>/.cathode/sliders/<id>.json (usually written by an
+// agent). This side owns the values: each drag batches its changes into one IPC per frame,
+// main forwards them to the page runtime (sliders-inject.js). Send turns the changed
+// values into a bake request; Cancel puts the page back the way the code has it.
+(function initSlidersPanel() {
+  const panel = document.getElementById('sliders-panel');
+  const btn   = document.getElementById('btn-sliders');
+  if (!panel || !btn) return;
+  const $ = (id) => document.getElementById(id);
+  const listEl = $('sl-list'), emptyEl = $('sl-empty'), errEl = $('sl-errors'), subEl = $('sl-sub');
+  const panelSel = $('sl-panel-select'), presetSel = $('sl-preset'), presetName = $('sl-preset-name');
+  const textarea = $('sl-textarea'), actionsEl = $('sl-actions');
+  const DEFAULT_SUB = 'Tune values live on the page, then send them to chat to bake in.';
+
+  let dir = '', cur = null;        // cur = { panel, file, values, rows: Map k → row api, demo }
+  let pending = {}, raf = 0, comparing = false;
+
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // ── The in-page panel: which corner, how see-through, shown or not. Remembered app-wide.
+  const CORNER_NAMES = { tl: 'Top left', tr: 'Top right', bl: 'Bottom left', br: 'Bottom right' };
+  let layout = { corner: 'tr', alpha: 0.92, hidden: false, collapsed: false };
+  try { Object.assign(layout, JSON.parse(localStorage.getItem('gamut-sliders-layout') || '{}')); } catch (_) {}
+  const alpha = $('sl-alpha'), alphaNum = $('sl-alpha-num'), overlayToggle = $('sl-overlay-toggle');
+  function syncLayout() {
+    document.querySelectorAll('#sl-corners button').forEach(b => {
+      const on = b.dataset.corner === layout.corner;
+      b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+    });
+    $('sl-corner-label').textContent = CORNER_NAMES[layout.corner] || '';
+    const t = Math.round((1 - layout.alpha) * 100);   // shown as transparency: 0% = solid
+    alpha.value = t; alphaNum.value = t;
+    overlayToggle.classList.toggle('on', !layout.hidden); overlayToggle.setAttribute('aria-checked', String(!layout.hidden));
+  }
+  function setLayout(l, { send = true } = {}) {
+    Object.assign(layout, l);
+    try { localStorage.setItem('gamut-sliders-layout', JSON.stringify(layout)); } catch (_) {}
+    syncLayout();
+    if (send) ipcRenderer.send(IPC.SLIDERS_LAYOUT, layout);
+  }
+  document.querySelectorAll('#sl-corners button').forEach(b => b.addEventListener('click', () => setLayout({ corner: b.dataset.corner, hidden: false })));
+  alpha.addEventListener('input', () => setLayout({ alpha: 1 - alpha.value / 100 }));
+  alphaNum.addEventListener('change', () => { const v = Math.min(100, Math.max(0, Number(alphaNum.value) || 0)); setLayout({ alpha: 1 - v / 100 }); });
+  alpha.closest('.pp-field').querySelector('.pp-field-label').addEventListener('dblclick', () => setLayout({ alpha: 0.92 }));
+  overlayToggle.addEventListener('click', () => setLayout({ hidden: !layout.hidden }));
+  syncLayout();
+  // The in-page panel is built in the page, so hand it the app's theme colours.
+  function themeColors() {
+    const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
+    return { text: v('--spec-text'), dim: v('--spec-text-dim'), faint: v('--spec-text-faint'), structural: v('--spec-structural'),
+      bg: v('--spec-toolbar-bg'), input: v('--spec-input-bg'), accent: v('--spec-accent') };
+  }
+  // No panels yet → a made-up panel with random values, so there's always something to
+  // preview on the page. Its controls are event-only: they change nothing on the page.
+  function demoPanel() {
+    const r = (a, b, st) => +(Math.round((a + Math.random() * (b - a)) / st) * st).toFixed(4);
+    const hex = () => '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    return { title: 'Demo controls', controls: [
+      { group: 'Motion' },
+      { k: 'speed', label: 'Speed', type: 'range', min: 0, max: 3, step: 0.01, def: r(0.2, 2.5, 0.01) },
+      { k: 'scale', label: 'Scale', type: 'range', min: 0.2, max: 3, step: 0.01, def: r(0.5, 2, 0.01) },
+      { k: 'rotation', label: 'Rotation', type: 'range', min: -180, max: 180, step: 1, def: r(-90, 90, 1), unit: 'deg' },
+      { k: 'count', label: 'Particles', type: 'int', min: 0, max: 500, step: 1, def: r(20, 300, 1) },
+      { group: 'Look' },
+      { k: 'opacity', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.01, def: r(0.3, 1, 0.01) },
+      { k: 'blur', label: 'Blur', type: 'range', min: 0, max: 20, step: 0.5, def: r(0, 12, 0.5), unit: 'px' },
+      { k: 'glow', label: 'Glow colour', type: 'color', def: hex() },
+      { k: 'blend', label: 'Blend', type: 'select', options: ['normal', 'screen', 'multiply', 'overlay'], def: pick(['normal', 'screen', 'multiply', 'overlay']) },
+      { k: 'grain', label: 'Film grain', type: 'toggle', def: Math.random() > 0.5 },
+      { k: 'offset', label: 'Offset', type: 'vec2', min: -50, max: 50, step: 1, def: [r(-30, 30, 1), r(-30, 30, 1)] },
+      { k: 'replay', label: 'Replay', type: 'button' },
+    ] };
+  }
+  const lsKey = (id) => 'gamut-sliders:' + dir + ':' + id;
+  const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (_) { return null; } };
+  const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} };
+  const round = (v, step) => { const d = Math.max(0, -Math.floor(Math.log10(step || 1))); return +(+v).toFixed(Math.min(6, d + 1)); };
+  const controls = () => (cur ? cur.panel.controls.filter(c => c.k) : []);
+
+  // ── Values → page, one batch per frame ──
+  function push(vals) {
+    Object.assign(pending, vals);
+    if (raf) return;
+    raf = requestAnimationFrame(async () => {
+      raf = 0;
+      const batch = pending; pending = {};
+      const r = await ipcRenderer.invoke(IPC.SLIDERS_APPLY, { values: batch });
+      if (!cur) return;
+      const missing = new Set((r && r.missing) || []);
+      for (const k of Object.keys(batch)) { const row = cur.rows.get(k); if (row) row.warn(missing.has(k)); }
+    });
+  }
+  function setValue(k, v, { fromRow = false, silent = false } = {}) {
+    if (!cur) return;
+    const c = cur.panel.controls.find(x => x.k === k);
+    if (!c) return;
+    if (c.type !== 'button') cur.values[k] = v;
+    const row = cur.rows.get(k);
+    if (row && !fromRow) row.set(v);
+    if (row) row.el.classList.toggle('modified', c.type !== 'button' && !same(v, c.def));
+    if (!silent) push({ [k]: v });
+    if (!comparing) saveValues();
+  }
+  let saveT = 0;
+  function saveValues() {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => { if (cur) lsSet(lsKey(cur.panel.id), changedValues()); }, 250);
+  }
+  function changedValues() {
+    const out = {};
+    for (const c of controls()) if (c.type !== 'button' && !same(cur.values[c.k], c.def)) out[c.k] = cur.values[c.k];
+    return out;
+  }
+  function applyAll(vals) {
+    for (const [k, v] of Object.entries(vals)) setValue(k, v, { silent: true });
+    push(vals);
+  }
+
+  // ── Rows ──
+  function snap(c, v) {
+    if (!c.tokens) return v;
+    let best = v, d = Infinity;
+    for (const tv of Object.values(c.tokens)) if (Math.abs(tv - v) < d) { d = Math.abs(tv - v); best = tv; }
+    return best;
+  }
+  function tokenOf(c, v) {
+    const e = c.tokens && Object.entries(c.tokens).find(([, tv]) => tv === v);
+    return e ? e[0] : '';
+  }
+  function sliderPair(c, value, onInput) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sl-pair';
+    const r = document.createElement('input');
+    r.type = 'range'; r.className = 'rz-slider'; r.min = c.min; r.max = c.max; r.step = c.tokens ? 'any' : c.step;
+    const n = document.createElement('input');
+    n.type = 'number'; n.className = 'pp-ctrl-input anim-num'; n.step = c.step;
+    const set = (v) => { r.value = v; n.value = round(v, c.step); };
+    set(value);
+    // Shift-drag = fine tune: the range moves at a tenth of the pointer's speed.
+    let fine = null;
+    r.addEventListener('pointerdown', (e) => { if (e.shiftKey) { fine = { x: e.clientX, v: +r.value, w: r.getBoundingClientRect().width }; r.setPointerCapture(e.pointerId); e.preventDefault(); } });
+    r.addEventListener('pointermove', (e) => {
+      if (!fine) return;
+      const v = Math.min(c.max, Math.max(c.min, fine.v + (e.clientX - fine.x) / fine.w * (c.max - c.min) * 0.1));
+      const s = Math.round(v / c.step) * c.step;
+      set(s); onInput(round(s, c.step));
+    });
+    r.addEventListener('pointerup', () => { fine = null; });
+    r.addEventListener('input', () => { if (fine) return; let v = snap(c, +r.value); if (!c.tokens) v = round(v, c.step); set(v); onInput(v); });
+    n.addEventListener('change', () => { const v = Number(n.value); if (Number.isFinite(v)) { set(v); onInput(c.type === 'int' ? Math.round(v) : v); } });   // typed values may go past min/max
+    n.addEventListener('keydown', (e) => { if (e.key === 'Enter') n.blur(); });
+    wrap.append(r, n);
+    return { el: wrap, set };
+  }
+  function buildRow(c) {
+    const el = document.createElement('div');
+    el.className = 'pp-field sl-field';
+    const label = document.createElement('span');
+    label.className = 'pp-field-label';
+    label.textContent = c.label;
+    label.title = [c.k, c.hint, c.source, c.bind.css ? 'CSS ' + c.bind.css + (c.bind.on ? ' on ' + c.bind.on : '') : '', c.bind.path ? 'window.' + c.bind.path : '', c.type !== 'button' ? 'Double-click to reset' : ''].filter(Boolean).join('\n');
+    const tok = document.createElement('span');
+    tok.className = 'sl-token';
+    const warn = document.createElement('span');
+    warn.className = 'sl-warn'; warn.hidden = true; warn.textContent = '!';
+    warn.title = c.bind.path ? `window.${c.bind.path} isn't on the page` : `Nothing on the page matches ${c.bind.on}`;
+    const ctrl = document.createElement('div');
+    ctrl.className = 'pp-field-ctrl';
+    el.append(label, tok, warn, ctrl);
+    let set = () => {};
+    const v0 = cur.values[c.k];
+
+    if (c.type === 'range' || c.type === 'int') {
+      const p = sliderPair(c, v0, (v) => { tok.textContent = tokenOf(c, v); setValue(c.k, v, { fromRow: true }); });
+      ctrl.append(p.el);
+      set = (v) => { p.set(v); tok.textContent = tokenOf(c, v); };
+      tok.textContent = tokenOf(c, v0);
+    } else if (c.type === 'vec2' || c.type === 'vec3') {
+      el.classList.add('pp-field-stack', 'sl-vec');
+      const pairs = [];
+      let vec = (v0 || c.def).slice();
+      ['x', 'y', 'z'].slice(0, vec.length).forEach((axis, i) => {
+        const line = document.createElement('div');
+        line.className = 'sl-axis';
+        const a = document.createElement('span'); a.className = 'sl-axis-label'; a.textContent = axis;
+        const p = sliderPair(c, vec[i], (v) => { vec = vec.slice(); vec[i] = v; setValue(c.k, vec, { fromRow: true }); });
+        line.append(a, p.el); ctrl.append(line); pairs.push(p);
+      });
+      set = (v) => { vec = v.slice(); v.forEach((x, i) => pairs[i] && pairs[i].set(x)); };
+    } else if (c.type === 'color') {
+      const sw = document.createElement('button');
+      sw.type = 'button'; sw.className = 'anim-swatch';
+      const hex = document.createElement('input');
+      hex.className = 'pp-ctrl-input anim-num sl-hex'; hex.spellcheck = false;
+      set = (v) => { sw.style.background = v; hex.value = v; };
+      set(v0);
+      sw.addEventListener('click', () => sharedColorPicker && sharedColorPicker.open(sw, cur.values[c.k], (h) => { set(h); setValue(c.k, h, { fromRow: true }); }));
+      hex.addEventListener('change', () => { const h = hex.value.trim().toLowerCase(); if (/^#[0-9a-f]{6}$/.test(h)) { set(h); setValue(c.k, h, { fromRow: true }); } else hex.value = cur.values[c.k]; });
+      ctrl.append(hex, sw);
+    } else if (c.type === 'toggle') {
+      const sw = document.createElement('button');
+      sw.className = 'vt-switch'; sw.setAttribute('role', 'switch');
+      sw.innerHTML = '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span>';
+      set = (v) => { sw.classList.toggle('on', !!v); sw.setAttribute('aria-checked', String(!!v)); };
+      set(v0);
+      sw.addEventListener('click', () => { const v = !cur.values[c.k]; set(v); setValue(c.k, v, { fromRow: true }); });
+      ctrl.append(sw);
+    } else if (c.type === 'select') {
+      const sel = document.createElement('select');
+      sel.className = 'anim-select';
+      sel.innerHTML = c.options.map(o => `<option></option>`).join('');
+      c.options.forEach((o, i) => { sel.options[i].value = o; sel.options[i].textContent = o; });
+      ctrl.append(sel);
+      enhanceSelect(sel); sel.parentNode.classList.add('pp-ct');
+      set = (v) => { sel.value = v; };
+      set(v0);
+      sel.addEventListener('change', () => setValue(c.k, sel.value, { fromRow: true }));
+    } else if (c.type === 'button') {
+      const b = document.createElement('button');
+      b.className = 'rz-reset-btn sl-fire'; b.textContent = c.label;
+      label.textContent = '';
+      b.addEventListener('click', () => push({ [c.k]: Date.now() }));
+      ctrl.append(b);
+    }
+    if (c.type !== 'button') label.addEventListener('dblclick', () => setValue(c.k, c.def));
+    el.classList.toggle('modified', c.type !== 'button' && !same(v0, c.def));
+    return { el, set, warn: (on) => { warn.hidden = !on; } };
+  }
+  function render() {
+    listEl.innerHTML = '';
+    if (!cur) return;
+    cur.rows = new Map();
+    let group = null;
+    for (const c of cur.panel.controls) {
+      if (!c.k) {
+        const head = document.createElement('div');
+        head.className = 'sl-group-head';
+        head.textContent = c.group;
+        group = document.createElement('div');
+        group.className = 'sl-group';
+        const g = group;
+        head.addEventListener('click', () => { head.classList.toggle('collapsed'); g.hidden = head.classList.contains('collapsed'); });
+        listEl.append(head, group);
+        continue;
+      }
+      const row = buildRow(c);
+      cur.rows.set(c.k, row);
+      (group || listEl).append(row.el);
+    }
+  }
+  function showErrors(errors) {
+    errEl.hidden = !(errors && errors.length);
+    errEl.textContent = (errors || []).map(e => '• ' + e).join('\n');
+  }
+  function renderPresets() {
+    const names = cur ? Object.keys(cur.panel.presets || {}) : [];
+    presetSel.innerHTML = '<option value="">Presets</option>' + names.map(() => '<option></option>').join('');
+    names.forEach((n, i) => { presetSel.options[i + 1].value = n; presetSel.options[i + 1].textContent = n; });
+    presetSel.value = '';
+  }
+
+  // ── Loading ──
+  async function refreshList(preferId) {
+    const r = await ipcRenderer.invoke(IPC.SLIDERS_LIST);
+    dir = r.dir || '';
+    const panels = r.panels || [];
+    panelSel.innerHTML = panels.map(() => '<option></option>').join('');
+    panels.forEach((p, i) => {
+      panelSel.options[i].value = p.id;
+      panelSel.options[i].textContent = p.title + (p.error ? ' (invalid JSON)' : p.matches ? '' : ' (other page)');
+    });
+    const last = lsGet('gamut-sliders-last:' + dir);
+    const pick = [preferId, cur && cur.panel.id, last].find(id => id && panels.some(p => p.id === id))
+      || (panels.find(p => p.matches) || panels[0] || {}).id;
+    return { panels, pick };
+  }
+  async function load(id, { keepValues = false, demo = null } = {}) {
+    const prev = cur;
+    const r = await ipcRenderer.invoke(IPC.SLIDERS_OPEN, { id, demo, layout, theme: themeColors() });
+    if (!r || !r.panel) { cur = null; render(); showErrors((r && (r.errors || [r.error])) || ['Could not load the panel']); return; }
+    showErrors(r.errors);
+    const saved = demo ? {} : keepValues && prev && prev.panel.id === id ? prev.values : (lsGet(lsKey(id)) || {});
+    const values = {};
+    for (const c of r.panel.controls) if (c.k && c.type !== 'button') values[c.k] = c.def;
+    for (const [k, v] of Object.entries(saved)) if (k in values && typeof v === typeof values[k]) values[k] = v;
+    cur = { panel: r.panel, file: r.file, values, rows: new Map(), demo: !!demo };
+    if (!demo) { lsSet('gamut-sliders-last:' + dir, id); panelSel.value = id; }
+    listEl.hidden = !!demo;   // sample rows only live on the page; the column keeps just the set-up
+    $('sl-send').disabled = !!demo;
+    $('sl-send').title = demo ? 'Sample values: nothing to send. Ask your agent for a real panel, or use From Page Vars.' : '';
+    subEl.textContent = r.noPage ? 'Open a page in the browser to tune it.' : DEFAULT_SUB;
+    render(); renderPresets();
+    // Every control, not just the changed ones: the page may still hold another panel's values.
+    push({ ...values });
+  }
+  async function open(preferId) {
+    panel.hidden = false;
+    btn.classList.add('active');
+    btn.classList.remove('has-news');
+    textarea.value = '';
+    const { panels, pick } = await refreshList(preferId);
+    emptyEl.hidden = panels.length > 0;
+    panelSel.parentNode.hidden = !panels.length;
+    actionsEl.hidden = !panels.length;
+    showErrors([]);
+    if (!panels.length) { await load('__demo', { demo: demoPanel() }); return; }
+    await load(pick);
+  }
+  function close(send) {
+    if (panel.hidden) return;
+    if (send) {
+      const changes = Object.entries(changedValues()).map(([k, value]) => ({ k, value }));
+      const f = textarea.closest('.tp-foot');
+      ipcRenderer.send(IPC.SLIDERS_SEND, { changes, instruction: decorateToolInstruction(textarea.value.trim(), f) });
+      if (cur) lsSet(lsKey(cur.panel.id), null);   // baked → the code is the new starting point
+    } else {
+      ipcRenderer.send(IPC.SLIDERS_CLOSE);
+    }
+    panel.hidden = true;
+    btn.classList.remove('active');
+    cur = null; listEl.innerHTML = '';
+  }
+
+  // ── Actions ──
+  function resetAll() { if (!cur) return; const d = {}; for (const c of controls()) if (c.type !== 'button') d[c.k] = c.def; applyAll(d); }
+  function compare(on) {
+    if (!cur || on === comparing) return;
+    comparing = on;
+    panel.classList.toggle('sl-comparing', on);
+    const d = {};
+    for (const c of controls()) if (c.type !== 'button') d[c.k] = on ? c.def : cur.values[c.k];
+    push(d);   // page only: the rows keep showing the tuned values
+  }
+  $('sl-reset').addEventListener('click', resetAll);
+  const cmp = $('sl-compare');
+  cmp.addEventListener('pointerdown', () => compare(true));
+  ['pointerup', 'pointerleave'].forEach(ev => cmp.addEventListener(ev, () => compare(false)));
+  $('sl-copy').addEventListener('click', (e) => {
+    if (!cur) return;
+    navigator.clipboard.writeText(JSON.stringify(changedValues(), null, 2)).then(() => {
+      e.target.textContent = 'Copied'; setTimeout(() => { e.target.textContent = 'Copy'; }, 1000);
+    }).catch(() => {});
+  });
+  $('sl-paste').addEventListener('click', async () => {
+    if (!cur) return;
+    try {
+      const obj = JSON.parse(await navigator.clipboard.readText());
+      const ok = {};
+      for (const c of controls()) if (c.k in obj && c.type !== 'button') ok[c.k] = obj[c.k];
+      applyAll(ok);
+    } catch (_) { showErrors(['The clipboard doesn\'t hold { "key": value } JSON']); setTimeout(() => showErrors(cur ? [] : null), 2500); }
+  });
+  presetSel.addEventListener('change', () => {
+    if (!cur || !presetSel.value) return;
+    const p = cur.panel.presets[presetSel.value] || {};
+    const vals = {};
+    for (const c of controls()) if (c.type !== 'button') vals[c.k] = c.k in p ? p[c.k] : c.def;   // unnamed keys → the code's value
+    applyAll(vals);
+    presetName.value = presetSel.value;
+  });
+  $('sl-preset-save').addEventListener('click', async () => {
+    const name = presetName.value.trim();
+    if (!cur || !name) { presetName.focus(); return; }
+    const presets = { ...(cur.panel.presets || {}), [name]: changedValues() };
+    const r = await ipcRenderer.invoke(IPC.SLIDERS_PRESETS, { id: cur.panel.id, presets });
+    if (r && r.ok) { cur.panel.presets = presets; renderPresets(); presetSel.value = name; }
+    else showErrors(['Could not save the preset' + (r && r.error ? ': ' + r.error : '')]);
+  });
+  $('sl-scan').addEventListener('click', async () => {
+    const r = await ipcRenderer.invoke(IPC.SLIDERS_SCAN);
+    if (r && r.id) { await open(r.id); subEl.textContent = `Made a panel from ${r.count} page variables. Prune it in ${cur ? cur.file : '.cathode/sliders'}.`; }
+    else showErrors([(r && r.error) || 'Scan failed']);
+  });
+  panelSel.addEventListener('change', () => { if (panelSel.value && (!cur || panelSel.value !== cur.panel.id)) load(panelSel.value); });
+  enhanceSelect(panelSel);
+  enhanceSelect(presetSel);
+
+  // Toolbar / Alt+T toggles the panel. It doesn't arm a page overlay, so it can sit
+  // alongside the page; another tool taking over the column closes it.
+  btn.addEventListener('click', () => { if (!panel.hidden) close(false); else { clearPickMode(); open(); } });
+  document.addEventListener('click', (e) => {
+    const other = e.target.closest && e.target.closest('.pick-btn');
+    if (other && other !== btn && !panel.hidden) close(false);
+  }, true);
+  $('sl-send').addEventListener('click', () => close(true));
+  $('sl-cancel').addEventListener('click', () => close(false));
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); close(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(false); }
+  });
+  const typing = (el) => el && (el === textarea || el.tagName === 'INPUT' || el.isContentEditable);
+  addPanelEscClose(panel, () => close(false), typing);
+  document.addEventListener('keydown', (e) => {
+    const ae = document.activeElement;
+    if (panel.hidden || typing(ae) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (ae && ae !== document.body && !panel.contains(ae)) return;   // keys belong to whatever else has focus
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resetAll(); }
+    else if (e.key === '\\' && !e.repeat) { e.preventDefault(); compare(true); }
+  });
+  document.addEventListener('keyup', (e) => { if (e.key === '\\') compare(false); });
+
+  // Drags on the in-page panel (already applied there) → mirror into these rows.
+  ipcRenderer.on(IPC.SLIDERS_PAGE_CHANGES, (_, { values, layout: l } = {}) => {
+    if (panel.hidden) return;
+    if (l) setLayout({ collapsed: !!l.collapsed }, { send: false });
+    if (values && cur) for (const [k, v] of Object.entries(values)) setValue(k, v, { silent: true });
+  });
+
+  // A panel file appeared or changed. An agent's new panel opens by itself unless another
+  // tool holds the column; then the toolbar button gets a dot.
+  ipcRenderer.on(IPC.SLIDERS_CHANGED, async (_, { id, kind } = {}) => {
+    if (!panel.hidden) {
+      if (kind === 'change' && cur && cur.panel.id === id) { await refreshList(id); await load(id, { keepValues: true }); }
+      else if (kind === 'add' && cur && cur.demo) { await open(id); }
+      else if (kind === 'add') { await refreshList(cur && cur.panel.id); subEl.textContent = `New panel: ${id}. Pick it from the list.`; }
+      else if (kind === 'remove') { if (cur && cur.panel.id === id) close(false); else refreshList(cur && cur.panel.id); }
+      return;
+    }
+    if (kind !== 'add') return;
+    const busy = pickMode || document.querySelector('.tool-panel:not([hidden])');
+    if (busy) btn.classList.add('has-news');
+    else open(id);
+  });
+})();
+
 // ── Animation tool panel (Phase 2: controls + WAAPI live preview) ──
 (function initAnimationPanel() {
   const panel = document.getElementById('animation-panel');
