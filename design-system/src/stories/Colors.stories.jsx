@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default {
-  title: 'Gamut Terminal Design System / Colors',
+  title: 'Gamut Toolbox Design System / Colors',
   parameters: { layout: 'padded' },
 };
 

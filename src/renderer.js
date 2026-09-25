@@ -4555,10 +4555,10 @@ function showProjectPrompt({ name, dir, note, branch, onCreate, onStay }) {
     if (create) {
       onCreate && onCreate(picked);
       routeToActiveSession(branch
-        ? `Gamut Terminal: branch "${branch}" is now tracked as its own project, "${picked}". Carry on in ${dir}.`
-        : `Gamut Terminal: I created a new project for "${picked}" at ${dir}. Work there from now on.`);
+        ? `Gamut Toolbox: branch "${branch}" is now tracked as its own project, "${picked}". Carry on in ${dir}.`
+        : `Gamut Toolbox: I created a new project for "${picked}" at ${dir}. Work there from now on.`);
     }
-    else        { onStay   && onStay();   routeToActiveSession(`Gamut Terminal: staying in ${here} — treat this as part of the current project.`); }
+    else        { onStay   && onStay();   routeToActiveSession(`Gamut Toolbox: staying in ${here} — treat this as part of the current project.`); }
   };
   card.querySelector('.acp-perm-allow').addEventListener('click', () => decide(true));
   card.querySelector('.acp-perm-deny').addEventListener('click', () => decide(false));
@@ -4908,7 +4908,7 @@ gearBtn?.addEventListener('click', e => {
   ipcRenderer.send(IPC.SHOW_SETTINGS_MENU, { x: Math.round(rect.left), y: Math.round(rect.bottom) });
 });
 
-// Clicking the Gamut Terminal logo opens the same settings menu (anchored to the logo seat).
+// Clicking the Gamut Toolbox logo opens the same settings menu (anchored to the logo seat).
 document.querySelector('#app-bar-logo img')?.addEventListener('click', e => {
   e.stopPropagation();
   const rect = document.getElementById('app-bar-logo').getBoundingClientRect();
@@ -5000,7 +5000,7 @@ let openWatchApprovalModal = null;
   };
 })();
 
-// ── About modal (Settings → About Gamut Terminal) ────────────────────────
+// ── About modal (Settings → About Gamut Toolbox) ────────────────────────
 const aboutModalCtl = wireModal(document.getElementById('about-modal'));
 document.getElementById('about-close')?.addEventListener('click', aboutModalCtl.close);
 async function openAboutModal() {
@@ -6669,7 +6669,7 @@ function wfFolderGo() {
 function wfFigmaGo() {
   const v = wfFigmaIn.value.trim();
   if (!v) { wfFigmaIn.focus(); return; }
-  sendToAgent(`Build a web app from this Figma design: ${v}. Use the Figma MCP to read the frames, recreate them with the Gamut Terminal design system / Storybook components, start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Browser.`);
+  sendToAgent(`Build a web app from this Figma design: ${v}. Use the Figma MCP to read the frames, recreate them with the Gamut Toolbox design system / Storybook components, start the dev server on a free localhost port, and reply with the exact http://localhost:<port> URL so I can open it in the Browser.`);
   wfFigmaIn.value = '';
 }
 function wfCloneGo() {
@@ -9966,7 +9966,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
 
   ipcRenderer.on(IPC.UPDATE_DOWNLOADING, (_, info) => {
     ready = false;
-    desc.textContent = info && info.version ? `Downloading Gamut Terminal ${info.version}…` : 'Downloading the latest version…';
+    desc.textContent = info && info.version ? `Downloading Gamut Toolbox ${info.version}…` : 'Downloading the latest version…';
     setPct(0); statusEl.textContent = 'Starting download…';
     installBtn.disabled = true;
     open();
@@ -9980,7 +9980,7 @@ ipcRenderer.on(IPC.UPDATE_AVAILABLE, (_, info) => {
   });
   ipcRenderer.on(IPC.UPDATE_DOWNLOADED, (_, info) => {
     ready = true; setPct(100);
-    desc.textContent = info && info.version ? `Gamut Terminal ${info.version} is ready to install.` : 'Update ready to install.';
+    desc.textContent = info && info.version ? `Gamut Toolbox ${info.version} is ready to install.` : 'Update ready to install.';
     statusEl.textContent = 'Downloaded — restart to finish updating.';
     installBtn.disabled = false;
     document.getElementById('btn-settings')?.classList.add('has-update');
@@ -13795,12 +13795,12 @@ let openOnboarding = null;
   // in the native login shell, so there's no Linux env to install.
   const introEl = document.getElementById('onb-setup-intro');
   if (introEl) introEl.textContent = IS_WIN
-    ? "Gamut Terminal runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red."
-    : "Gamut Terminal runs AI coding agents in your shell. Install what's missing below — each step checks itself and only what's needed stays red.";
+    ? "Gamut Toolbox runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red."
+    : "Gamut Toolbox runs AI coding agents in your shell. Install what's missing below — each step checks itself and only what's needed stays red.";
 
   const ONB_STEPS = [
     ...(IS_WIN ? [{ id: 'wsl', detect: 'wsl', manual: true, title: 'WSL 2 + Ubuntu',
-      desc: 'The Linux environment Gamut Terminal runs your agents in. One-time — needs admin & a reboot.',
+      desc: 'The Linux environment Gamut Toolbox runs your agents in. One-time — needs admin & a reboot.',
       cmd: 'wsl --install',
       manualHtml: 'Open <b>Windows PowerShell as Administrator</b>, run the command below, then <b>reboot</b>. After Ubuntu finishes its first-time setup, come back and press <b>Re-check</b>.' }] : []),
     { id: 'node', detect: 'node', title: 'Node.js',

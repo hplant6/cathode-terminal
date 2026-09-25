@@ -2,7 +2,7 @@ import React from 'react';
 import { Toast } from '../Toast';
 
 export default {
-  title: 'Gamut Terminal Design System / Toast',
+  title: 'Gamut Toolbox Design System / Toast',
   component: Toast,
   argTypes: { spinner: { control: 'boolean' } },
   tags: ['autodocs'],

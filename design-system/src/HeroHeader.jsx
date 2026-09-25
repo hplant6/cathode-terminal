@@ -12,7 +12,7 @@ const ALIGN_ITEMS = { left: 'flex-start', center: 'center', right: 'flex-end' };
 
 /* Hero header — eyebrow sub-heading over a title whose last line is a
    zoom-animated rotating word. Recreation of the itshenry.me landing hero,
-   rebuilt on Gamut Terminal design tokens. */
+   rebuilt on Gamut Toolbox design tokens. */
 export function HeroHeader({
   subHeading = 'Henry Plant, Senior Product Designer',
   headingPrefix = 'Mastering',

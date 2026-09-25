@@ -2,7 +2,7 @@ import React from 'react';
 import { Slider } from '../Slider';
 
 export default {
-  title: 'Gamut Terminal Design System / Slider',
+  title: 'Gamut Toolbox Design System / Slider',
   component: Slider,
   argTypes: {
     min: { control: 'number' },

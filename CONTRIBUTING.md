@@ -1,18 +1,18 @@
-# Contributing to Gamut Terminal
+# Contributing to Gamut Toolbox
 
-Thanks for your interest! This guide covers running Gamut Terminal from source, the codebase layout, and the dev workflow.
+Thanks for your interest! This guide covers running Gamut Toolbox from source, the codebase layout, and the dev workflow.
 
 ## Prerequisites
 
 - **Node.js 20+**
-- **Windows only:** [WSL 2](https://learn.microsoft.com/windows/wsl/install) — Gamut Terminal runs AI agents inside the Linux environment. macOS/Linux use the native shell.
+- **Windows only:** [WSL 2](https://learn.microsoft.com/windows/wsl/install) — Gamut Toolbox runs AI agents inside the Linux environment. macOS/Linux use the native shell.
 - **An agent CLI** (optional, for exercising a real session) — e.g. Claude Code.
 
 ## Getting started
 
 ```bash
-git clone https://github.com/hplant6/cathode-terminal.git
-cd cathode-terminal
+git clone https://github.com/hplant6/gamut-toolbox.git
+cd gamut-toolbox
 npm install        # postinstall also rebuilds node-pty for your platform
 npm start          # launch the app (electron .)
 ```
@@ -86,4 +86,4 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the process model, agent in
 
 ## Reporting bugs
 
-Open an [issue](https://github.com/hplant6/cathode-terminal/issues) — the in-app **Settings → Report an Issue** link takes you there too.
+Open an [issue](https://github.com/hplant6/gamut-toolbox/issues) — the in-app **Settings → Report an Issue** link takes you there too.

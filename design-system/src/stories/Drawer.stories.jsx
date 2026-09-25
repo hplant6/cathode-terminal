@@ -1,7 +1,7 @@
 import { Drawer } from '../Drawer';
 
 export default {
-  title: 'Gamut Terminal Design System / Context Drawer',
+  title: 'Gamut Toolbox Design System / Context Drawer',
   component: Drawer,
   tags: ['autodocs'],
   parameters: {

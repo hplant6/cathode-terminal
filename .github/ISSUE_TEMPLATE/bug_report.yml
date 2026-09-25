@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with Gamut Terminal
+description: Report a problem with Gamut Toolbox
 labels: ["bug"]
 body:
   - type: textarea
@@ -32,7 +32,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Gamut Terminal version
+      label: Gamut Toolbox version
       placeholder: "e.g. 1.0.0"
   - type: input
     id: agent

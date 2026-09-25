@@ -2,7 +2,7 @@ import React from 'react';
 import { Spinner } from '../Spinner';
 
 export default {
-  title: 'Gamut Terminal Design System / Spinner',
+  title: 'Gamut Toolbox Design System / Spinner',
   component: Spinner,
   argTypes: {
     size: { control: { type: 'range', min: 10, max: 48 } },

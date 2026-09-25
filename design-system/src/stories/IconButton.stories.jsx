@@ -9,7 +9,7 @@ const BoxIcon = (
 );
 
 export default {
-  title: 'Gamut Terminal Design System / IconButton',
+  title: 'Gamut Toolbox Design System / IconButton',
   component: IconButton,
   argTypes: {
     variant: { control: 'select', options: ['default', 'outline'] },

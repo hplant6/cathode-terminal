@@ -1,6 +1,6 @@
 import { Select } from '../Select';
 
-// Gamut Terminal's only dropdown type. Every native <select> in the app is routed through
+// Gamut Toolbox's only dropdown type. Every native <select> in the app is routed through
 // it by enhanceSelect(), so this is what a dropdown looks like everywhere — the
 // framework and project pickers, the eyedropper, MCP, tabs, the animation panel and
 // the Box Select property rows are all this component on different surfaces.
@@ -11,7 +11,7 @@ const options = [
 ];
 
 export default {
-  title: 'Gamut Terminal Design System / Select',
+  title: 'Gamut Toolbox Design System / Select',
   component: Select,
   tags: ['autodocs'],
   parameters: {

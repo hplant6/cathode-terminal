@@ -1,7 +1,7 @@
 import { Tabs } from '../Tabs';
 
 export default {
-  title: 'Gamut Terminal Design System / Tabs',
+  title: 'Gamut Toolbox Design System / Tabs',
   component: Tabs,
   tags: ['autodocs'],
 };

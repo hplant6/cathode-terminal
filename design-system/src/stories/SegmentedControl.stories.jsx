@@ -1,7 +1,7 @@
 import { SegmentedControl } from '../SegmentedControl';
 
 export default {
-  title: 'Gamut Terminal Design System / SegmentedControl',
+  title: 'Gamut Toolbox Design System / SegmentedControl',
   component: SegmentedControl,
   tags: ['autodocs'],
 };

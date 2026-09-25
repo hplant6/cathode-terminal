@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '../Badge';
 
 export default {
-  title: 'Gamut Terminal Design System / Badge',
+  title: 'Gamut Toolbox Design System / Badge',
   component: Badge,
   argTypes: {
     variant: { control: 'select', options: ['default', 'accent', 'success', 'danger', 'warning'] },

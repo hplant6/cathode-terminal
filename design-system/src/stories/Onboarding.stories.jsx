@@ -2,7 +2,7 @@ import React from 'react';
 import { Onboarding } from '../Onboarding';
 
 export default {
-  title: 'Gamut Terminal Design System / Onboarding',
+  title: 'Gamut Toolbox Design System / Onboarding',
   component: Onboarding,
   parameters: { layout: 'centered', backgrounds: { default: 'dark' } },
   tags: ['autodocs'],
@@ -67,7 +67,7 @@ export const NeedsSignIn = {
 export const Complete = {
   args: {
     subtitle: 'Everything is installed and you’re signed in.',
-    primaryLabel: 'Start using Gamut Terminal',
+    primaryLabel: 'Start using Gamut Toolbox',
     primaryVariant: 'primary',
     steps: base.map((b, i) => ({ ...b, state: 'done', time: ['2.1s', '318ms', '6.4s', '19.5s', '1.2s', '—', '120ms'][i] })),
   },

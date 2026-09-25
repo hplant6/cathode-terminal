@@ -9,7 +9,7 @@ const GitIcon = (
 );
 
 export default {
-  title: 'Gamut Terminal Design System / Card',
+  title: 'Gamut Toolbox Design System / Card',
   component: Card,
   argTypes: { title: { control: 'text' }, description: { control: 'text' }, selected: { control: 'boolean' } },
   tags: ['autodocs'],

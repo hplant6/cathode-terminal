@@ -1,12 +1,13 @@
 # Changelog
 
-All notable changes to Cathode Terminal are documented here.
+All notable changes to Gamut Toolbox are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
 ### Changed
+- **Gamut Terminal is now Gamut Toolbox.** The display name, npm package name, window title, dialogs, onboarding and Storybook copy, and the update-check User-Agent all changed, and the GitHub repo moved to `hplant6/gamut-toolbox`. Old repo URLs redirect, so installed builds still find updates. Profiles created under the "Gamut Terminal" name are picked up in place, the same way "Cathode Terminal" ones already were. The appId and the `.cathode` file format are unchanged.
 - **New empty-state background: "golden rings."** The Storybook-offline and Browser "Boot up a server" screens now show rotating golden-ratio rings with RGB-split trails instead of the iridescent cellophane sheets. A dark oval stays behind the title and buttons so they read cleanly. It renders at full display resolution, still only while the empty state is on screen.
 
 ## [1.15.0] - 2026-09-25
@@ -617,24 +618,24 @@ Hardening release: four full audits (correctness, security, performance, maintai
 <!-- On release: rename this section to `## [X.Y.Z] - YYYY-MM-DD` and start a fresh
      `## [Unreleased]` above it. -->
 
-[Unreleased]: https://github.com/hplant6/cathode-terminal/compare/v1.11.0...HEAD
-[1.11.0]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.11.0
-[1.10.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.10.1
-[1.0.17]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.17
-[1.0.16]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.16
-[1.0.15]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.15
-[1.0.14]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.14
-[1.0.13]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.13
-[1.0.12]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.12
-[1.0.11]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.11
-[1.0.10]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.10
-[1.0.9]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.9
-[1.0.8]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.8
-[1.0.7]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.7
-[1.0.6]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.6
-[1.0.5]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.5
-[1.0.4]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.4
-[1.0.3]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.3
-[1.0.2]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.2
-[1.0.1]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.1
-[1.0.0]: https://github.com/hplant6/cathode-terminal/releases/tag/v1.0.0
+[Unreleased]: https://github.com/hplant6/gamut-toolbox/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.11.0
+[1.10.1]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.10.1
+[1.0.17]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.17
+[1.0.16]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.16
+[1.0.15]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.15
+[1.0.14]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.14
+[1.0.13]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.13
+[1.0.12]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.12
+[1.0.11]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.11
+[1.0.10]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.10
+[1.0.9]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.9
+[1.0.8]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.8
+[1.0.7]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.7
+[1.0.6]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.6
+[1.0.5]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.5
+[1.0.4]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.4
+[1.0.3]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.3
+[1.0.2]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.2
+[1.0.1]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.1
+[1.0.0]: https://github.com/hplant6/gamut-toolbox/releases/tag/v1.0.0

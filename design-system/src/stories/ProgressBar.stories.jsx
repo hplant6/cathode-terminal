@@ -2,7 +2,7 @@ import React from 'react';
 import { ProgressBar } from '../ProgressBar';
 
 export default {
-  title: 'Gamut Terminal Design System / ProgressBar',
+  title: 'Gamut Toolbox Design System / ProgressBar',
   component: ProgressBar,
   argTypes: {
     value: { control: { type: 'range', min: 0, max: 100 } },

@@ -1,9 +1,9 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/gamut-logo.svg" />
-    <img src="docs/gamut-logo-light.svg" width="360" alt="Gamut Terminal" />
+    <img src="docs/gamut-logo-light.svg" width="360" alt="Gamut Toolbox" />
   </picture>
-  <h1>Gamut Terminal</h1>
+  <h1>Gamut Toolbox</h1>
   <p><strong>A split chat + browser dev tool for AI coding agents.</strong></p>
   <p>
     Pair Claude Code, Codex, Gemini, or Hermes with an embedded browser and
@@ -12,19 +12,19 @@
   </p>
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-FF5720.svg)](LICENSE)
-  [![Release](https://img.shields.io/github/v/release/hplant6/cathode-terminal?color=FF5720)](https://github.com/hplant6/cathode-terminal/releases)
+  [![Release](https://img.shields.io/github/v/release/hplant6/gamut-toolbox?color=FF5720)](https://github.com/hplant6/gamut-toolbox/releases)
   ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-333)
 </div>
 
 ---
 
-## Why Gamut Terminal?
+## Why Gamut Toolbox?
 
-I built Gamut Terminal out of sheer frustration with current AI coding tools. Translating visual intuition and HTML structure into endless text prompts was completely draining my creative energy. Gamut Terminal is designed to fix that: **it requires less typing while delivering much higher precision to your AI agents.** By eliminating design drift, enforcing strict UI consistency, and offering clear visibility into your daily limits, Gamut Terminal accelerates your workflow — helping you ship production-ready code faster while keeping your credit budget intact.
+I built Gamut Toolbox out of sheer frustration with current AI coding tools. Translating visual intuition and HTML structure into endless text prompts was completely draining my creative energy. Gamut Toolbox is designed to fix that: **it requires less typing while delivering much higher precision to your AI agents.** By eliminating design drift, enforcing strict UI consistency, and offering clear visibility into your daily limits, Gamut Toolbox accelerates your workflow — helping you ship production-ready code faster while keeping your credit budget intact.
 
 ## Screenshot
 
-![Gamut Terminal — the Eyedropper tool sampling a color from a live page and sending it to the agent](docs/eyedropper.png)
+![Gamut Toolbox — the Eyedropper tool sampling a color from a live page and sending it to the agent](docs/eyedropper.png)
 
 ## Features
 
@@ -39,11 +39,11 @@ I built Gamut Terminal out of sheer frustration with current AI coding tools. Tr
 - **Audits & code review** — run audits and review changes in-app.
 - **Theming** — a shade-based theme engine with presets.
 
-![Box Select — Gamut Terminal scans a page element's computed styles (padding, position, and more) and hands them to the agent as a targeted selection](docs/workspace.png)
+![Box Select — Gamut Toolbox scans a page element's computed styles (padding, position, and more) and hands them to the agent as a targeted selection](docs/workspace.png)
 
 ## The tools
 
-Everything Gamut Terminal gives you, straight from the in-app **Meet the tools** tour.
+Everything Gamut Toolbox gives you, straight from the in-app **Meet the tools** tour.
 
 ### Workspace
 
@@ -82,11 +82,11 @@ Everything Gamut Terminal gives you, straight from the in-app **Meet the tools**
 
 - **Windows** — [WSL 2](https://learn.microsoft.com/windows/wsl/install); agents run inside the Linux environment.
 - **macOS / Linux** — agents run in your native login shell.
-- **At least one agent CLI** — Claude Code, Codex, Gemini, or Hermes. Gamut Terminal's first-run setup helps install what's missing.
+- **At least one agent CLI** — Claude Code, Codex, Gemini, or Hermes. Gamut Toolbox's first-run setup helps install what's missing.
 
 ## Install
 
-Grab the latest build for your platform from the [**Releases**](https://github.com/hplant6/cathode-terminal/releases) page:
+Grab the latest build for your platform from the [**Releases**](https://github.com/hplant6/gamut-toolbox/releases) page:
 
 | Platform | Files |
 | --- | --- |
@@ -94,11 +94,11 @@ Grab the latest build for your platform from the [**Releases**](https://github.c
 | **macOS** | `.dmg` (Apple Silicon + Intel) |
 | **Linux** | `.AppImage`, `.deb`, or `.tar.gz` |
 
-> On first launch, Gamut Terminal walks you through installing WSL (on Windows) and your chosen agent.
+> On first launch, Gamut Toolbox walks you through installing WSL (on Windows) and your chosen agent.
 
 ## Quick start
 
-1. Launch Gamut Terminal and complete setup for your agent.
+1. Launch Gamut Toolbox and complete setup for your agent.
 2. Enter a URL or `localhost:3000` in the browser bar to load a site or local dev server.
 3. Use a toolbar tool to select an element, then send it to your agent in the chat.
 4. Toggle a session between **chat** and **terminal**, or open the embedded **DevTools**.
@@ -117,8 +117,8 @@ Install, add, or remove agents any time from **Manage LLMs**.
 ## Build from source
 
 ```bash
-git clone https://github.com/hplant6/cathode-terminal.git
-cd cathode-terminal
+git clone https://github.com/hplant6/gamut-toolbox.git
+cd gamut-toolbox
 npm install
 npm start
 ```
@@ -141,7 +141,7 @@ Electron · [node-pty](https://github.com/microsoft/node-pty) · [xterm.js](http
 
 ## Contributing
 
-Contributions are welcome. Clone, `npm install`, `npm start` (see [Build from source](#build-from-source)), and open a PR. Found a bug or have an idea? Open an [issue](https://github.com/hplant6/cathode-terminal/issues).
+Contributions are welcome. Clone, `npm install`, `npm start` (see [Build from source](#build-from-source)), and open a PR. Found a bug or have an idea? Open an [issue](https://github.com/hplant6/gamut-toolbox/issues).
 
 ## License
 

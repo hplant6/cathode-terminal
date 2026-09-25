@@ -1,7 +1,7 @@
 import { TextToggle } from '../TextToggle';
 
 export default {
-  title: 'Gamut Terminal Design System / TextToggle',
+  title: 'Gamut Toolbox Design System / TextToggle',
   component: TextToggle,
   tags: ['autodocs'],
   parameters: {

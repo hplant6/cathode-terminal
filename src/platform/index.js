@@ -1,5 +1,5 @@
 // ── Platform abstraction layer ────────────────────────────────────
-// All OS-specific branching for Gamut Terminal lives here so main.js can stay
+// All OS-specific branching for Gamut Toolbox lives here so main.js can stay
 // platform-agnostic. The Windows code paths are preserved verbatim: on Windows
 // the "*nix environment" agents/tools run in is WSL, reached via wsl.exe, and
 // every translator below is the identity there. On macOS/Linux there is no WSL —

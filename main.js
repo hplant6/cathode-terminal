@@ -16,7 +16,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
-// The app used to be "Cathode Terminal". Electron derives the profile (userData) folder
+// The app used to be "Cathode Terminal", then "Gamut Terminal". Electron derives the profile (userData) folder
 // from the app name, so renaming it would silently open an empty profile and orphan the
 // user's API keys, projects, browser state and settings. Keep using whichever legacy
 // folder already exists (newest wins if both do); only a fresh install gets the new name.
@@ -24,7 +24,7 @@ const fs = require('fs');
 (function pinLegacyUserData() {
   try {
     const base = app.getPath('appData');
-    const legacy = ['cathode-terminal', 'Cathode Terminal']
+    const legacy = ['gamut-terminal', 'Gamut Terminal', 'cathode-terminal', 'Cathode Terminal']
       .map((n) => path.join(base, n))
       .filter((p) => { try { return fs.statSync(p).isDirectory(); } catch (_) { return false; } })
       .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
@@ -504,9 +504,9 @@ function createWindow() {
   mainWindow.on('maximize', sendMaxState);
   mainWindow.on('unmaximize', sendMaxState);
 
-  // Warn before quitting while Gamut Terminal is hosting a live Storybook / dev server —
+  // Warn before quitting while Gamut Toolbox is hosting a live Storybook / dev server —
   // otherwise closing the window silently kills them (before-quit tears them down).
-  // Only guards processes Gamut Terminal owns; anything the user launched in an external
+  // Only guards processes Gamut Toolbox owns; anything the user launched in an external
   // terminal keeps running regardless, so we say so. Per-window flag lets the
   // confirmed close (and a mac window recreate) go through cleanly.
   let quitConfirmed = false;
@@ -514,7 +514,7 @@ function createWindow() {
     if (quitConfirmed) return;
     const sb  = [...sbServers.values()].filter(s => s.managed && (s.status === 'ready' || s.status === 'starting')).length;
     const srv = [...projectServers.values()].filter(s => s.proc && s.status !== 'stopped' && s.status !== 'error').length;
-    if (!sb && !srv) return;   // nothing running under Gamut Terminal → close normally
+    if (!sb && !srv) return;   // nothing running under Gamut Toolbox → close normally
     e.preventDefault();
     const parts = [];
     if (sb)  parts.push(sb === 1 ? 'Storybook' : sb + ' Storybooks');
@@ -524,9 +524,9 @@ function createWindow() {
       type: 'warning',
       buttons: ['Cancel', 'Quit anyway'],
       defaultId: 0, cancelId: 0,
-      title: 'Gamut Terminal',
+      title: 'Gamut Toolbox',
       message: `${running} still running`,
-      detail: `Quitting Gamut Terminal will stop ${sb && srv ? 'them' : 'it'}. Anything you started in an external terminal keeps running.`,
+      detail: `Quitting Gamut Toolbox will stop ${sb && srv ? 'them' : 'it'}. Anything you started in an external terminal keeps running.`,
     }).then(({ response }) => {
       if (response === 1) { quitConfirmed = true; mainWindow.close(); }
     }).catch(() => {});
@@ -1179,7 +1179,7 @@ ipcMain.handle(IPC.PROJECT_EXPORT, async (_, { dir } = {}) => {
   try {
     const bundle = buildBundle(dir);
     const def = (bundle.project.name || 'project').replace(/[^a-z0-9._-]+/gi, '-') + '.cathode';
-    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, { title: 'Export Project', defaultPath: def, filters: [{ name: 'Gamut Terminal Project', extensions: ['cathode'] }] });
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, { title: 'Export Project', defaultPath: def, filters: [{ name: 'Gamut Toolbox Project', extensions: ['cathode'] }] });
     if (canceled || !filePath) return { ok: false, canceled: true };
     fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2));
     return { ok: true, path: filePath };
@@ -1187,17 +1187,17 @@ ipcMain.handle(IPC.PROJECT_EXPORT, async (_, { dir } = {}) => {
 });
 ipcMain.handle(IPC.PROJECT_IMPORT_PICK, async () => {
   try {
-    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { title: 'Import Project', properties: ['openFile'], filters: [{ name: 'Gamut Terminal Project', extensions: ['cathode'] }] });
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, { title: 'Import Project', properties: ['openFile'], filters: [{ name: 'Gamut Toolbox Project', extensions: ['cathode'] }] });
     if (canceled || !filePaths || !filePaths.length) return { ok: false, canceled: true };
     const bundle = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
-    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Gamut Terminal project bundle' };
+    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Gamut Toolbox project bundle' };
     return { ok: true, bundle };
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle(IPC.PROJECT_IMPORT_READ, (_, { path: p } = {}) => {
   try {
     const bundle = JSON.parse(fs.readFileSync(p, 'utf8'));
-    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Gamut Terminal project bundle' };
+    if (!bundle || bundle.kind !== 'project-bundle') return { ok: false, error: 'Not a Gamut Toolbox project bundle' };
     return { ok: true, bundle };
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -1375,7 +1375,7 @@ function previewHeadBlock() {
   return [
     SB_PV_START,
     '<style>',
-    '  /* Gamut Terminal — managed preview styling (thumb-only scrollbars) */',
+    '  /* Gamut Toolbox — managed preview styling (thumb-only scrollbars) */',
     '  ::-webkit-scrollbar { width: 8px; height: 8px; }',
     '  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }',
     '  ::-webkit-scrollbar-thumb { background: rgba(140,140,150,0.35); border-radius: 4px; }',
@@ -1931,7 +1931,7 @@ function storybookBlock(url) {
     SB_START,
     '## Design System (Storybook)',
     "Each project has its own Storybook. Resolve this project's URL in this order:",
-    '1. `$STORYBOOK_URL` — set in your environment by Gamut Terminal for the active project',
+    '1. `$STORYBOOK_URL` — set in your environment by Gamut Toolbox for the active project',
     "2. `.cathode/storybook.json` in the project root (`url` field) — present while this project's Storybook is running",
     `3. Fallback: ${url}`,
     'Reference it before making any UI changes — use its design tokens, component APIs, and visual styles to keep the UI consistent with the existing design system.',
@@ -2129,7 +2129,7 @@ function projectBlock(dir) {
   const name = m.name || path.basename(String(dir).replace(/[\\/]+$/, ''));
   const branch = gitBranchOf(dir);
   const servers = Array.isArray(m.servers) ? m.servers : [];
-  const lines = [PJ_START, '## Project (managed by Gamut Terminal)', `You are working in the project **${name}**.`, `- Root: \`${dir}\``];
+  const lines = [PJ_START, '## Project (managed by Gamut Toolbox)', `You are working in the project **${name}**.`, `- Root: \`${dir}\``];
   if (branch) lines.push(`- Git branch: \`${branch}\``);
   if (m.repo && m.repo.remote) lines.push(`- Repo: ${m.repo.remote}`);
   if (servers.length) {
@@ -2142,24 +2142,24 @@ function projectBlock(dir) {
       lines.push(`  - ${s.role === 'storybook' ? 'Storybook' : (s.name || 'server')}: ${bits.join(', ') || '—'}`);
     }
   }
-  lines.push('This block is regenerated by Gamut Terminal each session — treat it as the source of truth for this project; editing it here has no lasting effect.');
+  lines.push('This block is regenerated by Gamut Toolbox each session — treat it as the source of truth for this project; editing it here has no lasting effect.');
   // Return path: agents are the first to know the user has changed subject, long
   // before any branch or folder does. Keep it ASK-first — never create silently.
   lines.push(
     '',
     '### When the work changes',
     'Watch for work that does **not** belong to this project. For example: **starting a brand-new app or project from scratch**, cloning or pulling a different repo, switching to **another folder already on this machine**, or any task unrelated to what is described above.',
-    'Also signal when the user moves onto **a different branch or PR of this same repo** — add `"branch": "<name>"` to the file and leave `dir` as this project\'s root. Gamut Terminal then tracks that branch as its own project.',
-    'When you notice that, do **not** ask in chat and do not start the work yet. Write the file below instead — Gamut Terminal shows the user a prompt with the choice, and tells you which way they answered. Wait for that reply before continuing.',
-    'The file (Gamut Terminal consumes it immediately):',
+    'Also signal when the user moves onto **a different branch or PR of this same repo** — add `"branch": "<name>"` to the file and leave `dir` as this project\'s root. Gamut Toolbox then tracks that branch as its own project.',
+    'When you notice that, do **not** ask in chat and do not start the work yet. Write the file below instead — Gamut Toolbox shows the user a prompt with the choice, and tells you which way they answered. Wait for that reply before continuing.',
+    'The file (Gamut Toolbox consumes it immediately):',
     '',
     '```json',
     `// write it HERE, always — ${path.join(dir, '.cathode', 'signal.json')}`,
     '{ "action": "new-project", "name": "<short title for the work>", "dir": "<absolute path of the folder>", "reason": "<one line: why it is separate>" }',
     '```',
     '',
-    'Write the file at that exact path — inside **this** project, not the new one. Gamut Terminal only watches here, so a signal left anywhere else is never seen.',
-    'Set `dir` to the folder the new work lives in (an existing folder on this machine, or where you just cloned it). That folder has to exist when you write the file — Gamut Terminal drops a signal pointing at one that does not. Writing this file is the only way to reach Gamut Terminal; it cannot see your conversation.',
+    'Write the file at that exact path — inside **this** project, not the new one. Gamut Toolbox only watches here, so a signal left anywhere else is never seen.',
+    'Set `dir` to the folder the new work lives in (an existing folder on this machine, or where you just cloned it). That folder has to exist when you write the file — Gamut Toolbox drops a signal pointing at one that does not. Writing this file is the only way to reach Gamut Toolbox; it cannot see your conversation.',
     PJ_END);
   return lines.join('\n');
 }
@@ -2452,7 +2452,7 @@ function queuePtyOut(id, data) {
 // Claude Code gates each new folder behind an interactive "trust this folder?"
 // prompt. In a PTY that prompt blocks forever (the ACP/chat path auto-bypasses it,
 // but the raw terminal view runs interactive `claude`). The user explicitly pointed
-// Gamut Terminal at this project, so pre-accept trust for its cwd in ~/.claude.json — the
+// Gamut Toolbox at this project, so pre-accept trust for its cwd in ~/.claude.json — the
 // same thing choosing "Yes, I trust this folder" would do. Runs in the nix env
 // (WSL on Windows / native on macOS+Linux) where that config actually lives.
 async function ensureClaudeTrusted(dir) {
@@ -2988,7 +2988,7 @@ async function spawnAcpSession(id, modelOverride = '', agentKey = 'claude', resu
     const initResult = await conn.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
-      clientInfo: { name: 'Gamut Terminal', version: app.getVersion() },
+      clientInfo: { name: 'Gamut Toolbox', version: app.getVersion() },
     });
     // Agents like Hermes advertise authMethods even when fully configured, so
     // their presence alone doesn't mean "unconfigured". Try the first
@@ -3474,7 +3474,7 @@ ipcMain.handle(IPC.GET_RATE_LIMITS, async () => {
 // Nous Portal credits for Hermes sessions — the balance Hermes' own /credits shows.
 // Read THROUGH Hermes rather than beside it: the portal wants Hermes' OAuth access token,
 // which Hermes refreshes itself, so running its own account helper in its own venv means
-// Gamut Terminal never reimplements that refresh or touches the token. Account-level, not
+// Gamut Toolbox never reimplements that refresh or touches the token. Account-level, not
 // per-session, and the panel refreshes after every reply, so a fresh-for-60s cache keeps
 // that from spawning Python each turn; like the Claude meters, the last good figures are
 // served (flagged stale) for up to 30 min when a fetch blips.
@@ -4146,10 +4146,10 @@ function fetchLatestRelease() {
   return new Promise((resolve, reject) => {
     const req = net.request({
       method: 'GET',
-      url: 'https://api.github.com/repos/hplant6/cathode-terminal/releases/latest',
+      url: 'https://api.github.com/repos/hplant6/gamut-toolbox/releases/latest',
     });
     req.setHeader('Accept', 'application/vnd.github+json');
-    req.setHeader('User-Agent', 'Gamut-Terminal');
+    req.setHeader('User-Agent', 'Gamut-Toolbox');
     req.on('response', (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
@@ -4161,7 +4161,7 @@ function fetchLatestRelease() {
           const j = JSON.parse(body);
           resolve({
             tag: j.tag_name || '',
-            page: j.html_url || 'https://github.com/hplant6/cathode-terminal/releases/latest',
+            page: j.html_url || 'https://github.com/hplant6/gamut-toolbox/releases/latest',
             assets: (j.assets || []).map(a => ({ name: a.name, url: a.browser_download_url })),
           });
         } catch (e) { reject(new Error('Could not parse GitHub response')); }
@@ -4304,7 +4304,7 @@ ipcMain.on(IPC.SHOW_SETTINGS_MENU, (_, pos) => {
     { label: 'Check for Updates…', click: () => { checkForAppUpdate().catch(() => {}); } },
     { label: 'Reload App',         click: () => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reloadIgnoringCache(); } },
     { label: 'Report an Issue…',   click: act('perf-report') },
-    { label: 'About Gamut Terminal',      click: act('about') },
+    { label: 'About Gamut Toolbox',      click: act('about') },
   ]);
   const p = pos || {};   // a missing pos → popup at the default (cursor) position
   menu.popup({ window: mainWindow, x: p.x, y: p.y });
@@ -4349,7 +4349,7 @@ async function collectPerfDiagnostics(sampleMs) {
 function perfSummaryMarkdown(d) {
   const L = [];
   L.push('### Environment');
-  L.push(`- **Gamut Terminal** ${d.version} · Electron ${d.electron} / Chrome ${d.chrome} / Node ${d.node}`);
+  L.push(`- **Gamut Toolbox** ${d.version} · Electron ${d.electron} / Chrome ${d.chrome} / Node ${d.node}`);
   L.push(`- **OS** ${d.platform}${d.osVersion ? ' ' + d.osVersion : ''} (${d.arch}, kernel ${d.osRelease})`);
   L.push(`- **CPU** ${d.cpuModel} ×${d.cpuCount} · **RAM** ${d.totalMemGB} GB · uptime ${d.uptimeMin}m`);
   L.push(`- **Live load** CPU ${d.live.cpu}% · RAM ${d.live.ram}% · GPU ${d.live.gpu}%`);
@@ -4369,7 +4369,7 @@ ipcMain.handle(IPC.PERF_REPORT_COLLECT, async (_, { sampleMs } = {}) => {
 ipcMain.on(IPC.PERF_REPORT_OPEN, (_, { description = '', summary = '' } = {}) => {
   const title = (description.split('\n')[0] || 'Issue report').slice(0, 70);
   const body = `### What happened\n${description.trim() || '_(add detail: what you did, what you expected, steps to reproduce)_'}\n\n${summary}`;
-  const url = 'https://github.com/hplant6/cathode-terminal/issues/new?labels=bug'
+  const url = 'https://github.com/hplant6/gamut-toolbox/issues/new?labels=bug'
     + '&title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
   shell.openExternal(url).catch(() => {});
 });
@@ -6152,7 +6152,7 @@ function relaunchWithScale(scale) {
 }
 
 // ── .cathode file association (Phase 5) ──────────────────────────
-// Double-clicking a .cathode file opens Gamut Terminal straight into that project.
+// Double-clicking a .cathode file opens Gamut Toolbox straight into that project.
 // Windows/Linux: the path arrives in argv (first launch) or via second-instance
 // (already running). macOS: the open-file event. Only works in an installed build.
 let pendingBundlePath = '', rendererReadyOnce = false;

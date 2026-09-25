@@ -1,7 +1,7 @@
 import { Textarea } from '../Textarea';
 
 export default {
-  title: 'Gamut Terminal Design System / Textarea',
+  title: 'Gamut Toolbox Design System / Textarea',
   component: Textarea,
   tags: ['autodocs'],
   parameters: {

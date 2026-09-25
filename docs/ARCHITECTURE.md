@@ -1,10 +1,10 @@
 # Architecture
 
-A high-level map of how Gamut Terminal is put together.
+A high-level map of how Gamut Toolbox is put together.
 
 ## Process model
 
-Gamut Terminal is an Electron app with the usual two-process split, plus native views:
+Gamut Toolbox is an Electron app with the usual two-process split, plus native views:
 
 - **Main process** (`main.js`) — owns the `BrowserWindow`, spawns agent sessions (PTY via node-pty, or ACP), manages the embedded browser and other panels as **`WebContentsView`s**, and handles all IPC.
 - **Renderer** (`src/renderer.js`) — the whole UI: agent chat, terminal (xterm), the usage / system / terminal / devtools panels, toolbar tools, and modals. Runs with `nodeIntegration` (it uses `ipcRenderer` and node-pty types directly).
@@ -24,7 +24,7 @@ Both main and renderer use `IPC.CHANNEL_NAME` — never string literals — so c
 
 There are two integration paths, chosen per session by a profile's `acp` flag + `acpAgentFor(command)`:
 
-- **ACP agents** (Claude Code, Codex, Gemini) speak the [Agent Client Protocol](https://agentclientprotocol.com). Main spawns them and exchanges newline-delimited JSON-RPC over stdio, and they render in Gamut Terminal's **chat UI** — bubbles, tool cards, streaming, permission prompts. See `ACP_LAUNCH` / `spawnAcpSession` in `main.js`.
+- **ACP agents** (Claude Code, Codex, Gemini) speak the [Agent Client Protocol](https://agentclientprotocol.com). Main spawns them and exchanges newline-delimited JSON-RPC over stdio, and they render in Gamut Toolbox's **chat UI** — bubbles, tool cards, streaming, permission prompts. See `ACP_LAUNCH` / `spawnAcpSession` in `main.js`.
 - **Terminal agents** (Aider, LLM, Hermes) have no ACP mode, so they run as their native **TUI** inside an xterm terminal (PTY via node-pty). See `spawnPty`.
 
 The client implements the full ACP callback set (permission, `fs/*`, terminal), so any ACP-capable agent that negotiates the protocol version gets the chat UI.

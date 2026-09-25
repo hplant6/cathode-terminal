@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gamut Terminal</title>
+  <title>Gamut Toolbox</title>
   <!-- Fonts are bundled locally in src/fonts/ (see @font-face in styles.css) — no CDN, fully offline -->
   <link rel="stylesheet" href="styles.css?v=6" />
   <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
@@ -15,7 +15,7 @@
     <div id="app-bar-grab-line" aria-hidden="true"></div>
     <!-- Left: logo button (logo + settings chevron) — structural seat, bottom-right blob -->
     <div id="app-bar-logo">
-      <img src="icons/figma/logo.svg" alt="Gamut Terminal" draggable="false" />
+      <img src="icons/figma/logo.svg" alt="Gamut Toolbox" draggable="false" />
       <button id="btn-settings" title="Settings">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 18 18" fill="none"><polyline points="4.5,7 9,11.5 13.5,7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -735,7 +735,7 @@
               <canvas id="sb-fx" class="es-fx" aria-hidden="true"></canvas>
               <div class="es-hero-content">
                 <h2 class="es-hero-title">Storybook<br/><span id="sb-hero-state">Offline</span></h2>
-                <p class="es-hero-sub">to get the most out of cathode terminal connect a storybook<br/>The storybook prevents design drift when building projects</p>
+                <p class="es-hero-sub">to get the most out of gamut toolbox connect a storybook<br/>The storybook prevents design drift when building projects</p>
                 <div class="es-hero-actions">
                   <button id="sb-start" class="es-hero-btn">Run existing storybook</button>
                   <button id="sb-detect-running" class="es-hero-icon-btn" type="button" title="Detect running storybook" aria-label="Detect running storybook"><svg class="es-radar-icon" viewBox="0 0 18 18" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M1.0498 9C1.0498 4.6094 4.6094 1.0498 9 1.0498C11.1949 1.0498 13.184 1.9399 14.6221 3.37793C14.8954 3.6513 14.8954 4.0948 14.6221 4.36816C14.3487 4.64148 13.9052 4.64151 13.6318 4.36816C12.4459 3.1822 10.8091 2.4502 9 2.4502C5.3826 2.4502 2.4502 5.3826 2.4502 9C2.4502 12.6174 5.3826 15.5498 9 15.5498C12.6174 15.5498 15.5498 12.6174 15.5498 9C15.5498 8.18894 15.4031 7.41352 15.1348 6.69824C14.999 6.33629 15.182 5.93266 15.5439 5.79688C15.9059 5.66124 16.3095 5.84513 16.4453 6.20703C16.7715 7.07667 16.9502 8.01818 16.9502 9C16.9502 13.3906 13.3906 16.9502 9 16.9502C4.6094 16.9502 1.0498 13.3906 1.0498 9Z"/><path d="M12.8105 8.83691C13.1933 8.89102 13.4604 9.24514 13.4062 9.62793C13.1007 11.7885 11.2448 13.4502 9 13.4502C6.5423 13.4502 4.5498 11.4577 4.5498 9C4.5498 6.5423 6.5423 4.5498 9 4.5498C10.2286 4.5498 11.342 5.049 12.1465 5.85352C12.4198 6.12689 12.4198 6.5704 12.1465 6.84375C11.8731 7.11682 11.4295 7.11697 11.1562 6.84375C10.6036 6.29107 9.84241 5.9502 9 5.9502C7.3155 5.9502 5.9502 7.3155 5.9502 9C5.9502 10.6845 7.3155 12.0498 9 12.0498C10.5377 12.0498 11.8103 10.9115 12.0195 9.43164C12.0736 9.04893 12.4279 8.78296 12.8105 8.83691Z"/><path d="M15.2549 1.75488C15.5283 1.48151 15.9718 1.48151 16.2451 1.75488C16.5185 2.02824 16.5185 2.47174 16.2451 2.74511L9.49513 9.49511C9.22176 9.76848 8.77826 9.76848 8.50489 9.49511C8.23152 9.22174 8.23152 8.77824 8.50489 8.50488L15.2549 1.75488Z"/></svg><span class="es-radar-load" aria-hidden="true"></span><svg class="es-radar-error" viewBox="0 0 18 18" width="20" height="20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12.2754 0.786133L12.4795 0.990234L17.0068 5.48926L17.2139 5.69434V12.3057L17.0068 12.5107L12.4795 17.0098L12.2754 17.2139H5.69531L0.786133 12.3047V5.69629L5.69531 0.786133H12.2754ZM2.18652 6.27539V11.7246L6.27539 15.8135H11.6982L15.8135 11.7227V6.27637L11.6982 2.18652H6.27539L2.18652 6.27539Z"/><path d="M9.69336 11.2861V12.6865H8.28613V11.2861H9.69336Z"/><path d="M8.28613 5.28613H9.68652V9.68652H8.28613V5.28613Z"/></svg></button>
@@ -1041,7 +1041,7 @@
     <div class="modal-box">
       <button class="mcp-modal-close" id="new-project-close" title="Close" aria-label="Close">✕</button>
       <div class="modal-title">Name your new project</div>
-      <p class="modal-desc">Gamut Terminal creates the folder, runs <code>git init</code> and writes its manifest. You'll pick where it lives next.</p>
+      <p class="modal-desc">Gamut Toolbox creates the folder, runs <code>git init</code> and writes its manifest. You'll pick where it lives next.</p>
       <input id="new-project-input" class="modal-input" placeholder="e.g. my-app" spellcheck="false" autocomplete="off" />
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="new-project-cancel">Cancel</button>
@@ -1443,7 +1443,7 @@
   <div id="update-modal" class="modal-backdrop">
     <div class="modal-box">
       <button id="update-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
-      <div class="modal-title">Updating Gamut Terminal</div>
+      <div class="modal-title">Updating Gamut Toolbox</div>
       <p class="modal-desc" id="update-desc">Downloading the latest version…</p>
       <div class="upd-progress"><div class="upd-progress-fill" id="update-bar"></div></div>
       <div class="upd-status" id="update-status">Starting…</div>
@@ -1459,7 +1459,7 @@
     <div class="modal-box about-box">
       <button id="about-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
       <div class="about-logo">
-        <svg viewBox="0 0 156 31" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gamut Terminal">
+        <svg viewBox="0 0 156 31" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gamut Toolbox">
           <path d="M0 23.4917V6.57082C0 5.626 0.15747 4.75276 0.472411 3.95109C0.787352 3.12079 1.21682 2.41933 1.76081 1.84671C2.33342 1.27409 2.97762 0.830313 3.6934 0.515373C4.4378 0.171801 5.21084 1.45777e-05 6.01251 1.45777e-05H22.4181V4.38055H6.01251C5.46852 4.38055 5.05337 4.6096 4.76706 5.0677C4.50938 5.49716 4.38054 5.99821 4.38054 6.57082V23.4917C4.38054 24.0644 4.50938 24.5797 4.76706 25.0378C5.05337 25.4673 5.46852 25.682 6.01251 25.682H20.7861V15.289H9.83474L12.5833 10.9084H25.1666V25.682H20.7861V30.0625H6.01251C5.21084 30.0625 4.4378 29.9051 3.6934 29.5901C2.97762 29.2466 2.33342 28.7885 1.76081 28.2158C1.21682 27.6432 0.787352 26.9561 0.472411 26.1544C0.15747 25.3241 0 24.4366 0 23.4917Z"/>
           <path d="M37.7137 30.0625C36.7689 30.0625 35.8813 29.9051 35.051 29.5901C34.2494 29.2466 33.5622 28.7885 32.9896 28.2158C32.417 27.6432 31.9589 26.9561 31.6153 26.1544C31.3004 25.3241 31.1429 24.4366 31.1429 23.4917V20.7861C31.1429 19.6981 31.4149 18.6531 31.9589 17.651C32.5315 16.6489 33.3618 15.8616 34.4498 15.289L48.6651 8.20279V13.0987L36.6401 19.1112C36.3537 19.3975 36.0961 19.6838 35.867 19.9701C35.638 20.2278 35.5234 20.4998 35.5234 20.7861V23.4917C35.5234 24.0644 35.7525 24.5797 36.2106 25.0378C36.6687 25.4673 37.1697 25.682 37.7137 25.682H51.929V6.57082C51.929 5.99821 51.6999 5.49716 51.2419 5.0677C50.7838 4.6096 50.2827 4.38055 49.7387 4.38055H33.3332V1.45777e-05H49.7387C50.6836 1.45777e-05 51.5568 0.171801 52.3585 0.515373C53.1888 0.830313 53.8902 1.27409 54.4628 1.84671C55.0355 2.41933 55.4792 3.12079 55.7942 3.95109C56.1377 4.75276 56.3095 5.626 56.3095 6.57082V25.682H51.929V30.0625H37.7137Z"/>
           <path d="M62.5425 30.0625L67.4813 4.89591C68.0253 3.52163 68.8413 2.36207 69.9293 1.41725C71.0172 0.472426 72.3772 1.45777e-05 74.0092 1.45777e-05H76.1994C77.0297 1.45777e-05 77.7312 0.143169 78.3038 0.429479C78.9051 0.687158 79.4777 1.08799 80.0217 1.63198C80.5943 1.08799 81.2528 0.687158 81.9972 0.429479C82.7703 0.143169 83.5719 1.45777e-05 84.4022 1.45777e-05H90.4147V4.38055H94.7953V30.0625H90.4147V4.38055H84.4022C83.8582 4.38055 83.3572 4.6096 82.8991 5.0677C82.441 5.49716 82.2119 5.99821 82.2119 6.57082V30.0625H77.8314V6.57082C77.8314 5.99821 77.7026 5.49716 77.4449 5.0677C77.1872 4.6096 76.7721 4.38055 76.1994 4.38055H74.0092C73.4652 4.38055 73.0357 4.50939 72.7208 4.76707C72.4058 5.02475 72.1052 5.4399 71.8189 6.01252L67.4813 30.0625H62.5425Z"/>
@@ -1605,7 +1605,7 @@
     <div id="onb-panel">
       <div id="onb-header">
         <div>
-          <div id="onb-title">Welcome to Gamut Terminal</div>
+          <div id="onb-title">Welcome to Gamut Toolbox</div>
           <div id="onb-subtitle">Get the prerequisites installed, then learn what each tool does.</div>
         </div>
         <button id="onb-close" class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
@@ -1619,7 +1619,7 @@
       </div>
       <div id="onb-body">
         <div id="onb-setup" class="onb-section">
-          <div id="onb-setup-intro" class="onb-section-intro">Gamut Terminal runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red.</div>
+          <div id="onb-setup-intro" class="onb-section-intro">Gamut Toolbox runs AI coding agents inside WSL. Install what's missing below — each step checks itself and only what's needed stays red.</div>
           <div id="onb-steps"></div>
           <div class="onb-optional-head">Optional agents</div>
           <div class="onb-optional-sub">Extra CLI agents you can use alongside Claude Code.</div>

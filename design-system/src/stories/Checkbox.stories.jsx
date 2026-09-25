@@ -1,7 +1,7 @@
 import { Checkbox } from '../Checkbox';
 
 export default {
-  title: 'Gamut Terminal Design System / Checkbox',
+  title: 'Gamut Toolbox Design System / Checkbox',
   component: Checkbox,
   argTypes: {
     label: { control: 'text' },

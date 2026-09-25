@@ -1,6 +1,6 @@
 // Watch Approval bridge.
 //
-// Mirrors a Gamut Terminal tool-permission prompt to the Watch Approval phone app (see the
+// Mirrors a Gamut Toolbox tool-permission prompt to the Watch Approval phone app (see the
 // `watch-approval` repo) so a risky tool call can be approved/denied from an Apple
 // Watch. This runs *in parallel* with the in-app permission modal: whichever side
 // answers first wins. Every call here is best-effort — if the relay is down, the
