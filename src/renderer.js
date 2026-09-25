@@ -8723,7 +8723,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const row = document.createElement('div');
     row.className = 'mv-row';
     row.innerHTML = '<span class="mv-num"></span><div class="mv-main"><span class="mv-src"></span><span class="mv-to"></span>' +
-      '<span class="mv-from"></span><span class="mv-warn" hidden>Page re-rendered: selectors may be out of date</span>' +
+      '<span class="mv-warn" hidden>Page re-rendered: selectors may be out of date</span>' +
       '<input class="mv-note" type="text" placeholder="note for this move…" spellcheck="true" autocomplete="off" /></div>' +
       '<button class="mv-del" title="Remove this move">✕</button>';
     const note = row.querySelector('.mv-note');
@@ -8738,16 +8738,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function fillRow(row, m, i) {
     const src = m.sources || [];
     row.querySelector('.mv-num').textContent = String(i + 1) + (src.length > 1 ? ' ×' + src.length : '');
-    const srcEl = row.querySelector('.mv-src');
-    srcEl.textContent = src.map(x => x.label).join(', ');
-    srcEl.title = src.map(x => x.selector).join('\n');
-    const to = row.querySelector('.mv-to');
-    to.textContent = '';
-    const verb = document.createElement('b');
-    if (m.kind === 'nudge') { verb.textContent = 'nudge'; to.append(verb, ' ' + nudgeText(m.dx, m.dy)); }
-    else if (m.kind === 'free') { verb.textContent = 'to spot'; to.append(verb, ' ' + nudgeText(m.dx, m.dy) + (m.over ? ' · over ' + m.over.label : '')); to.title = (m.over && m.over.selector) || ''; }
-    else { verb.textContent = m.place; to.append(verb, ' ' + ((m.ref && m.ref.label) || '')); to.title = (m.ref && m.ref.selector) || ''; }
-    row.querySelector('.mv-from').textContent = m.from ? 'from ' + m.from : '';
+    // Just the element and how far it travels; where exactly it lands is in the tooltip
+    // (and in full in the request the agent gets).
+    row.querySelector('.mv-src').textContent = src.map(x => x.label).join(', ');
+    row.querySelector('.mv-to').textContent = nudgeText(m.dx || 0, m.dy || 0);
+    const where = m.kind === 'nudge' ? 'Nudge'
+      : m.kind === 'free' ? 'To the marked spot' + (m.over ? ', over ' + m.over.selector : '')
+      : `${m.place[0].toUpperCase() + m.place.slice(1)} ${(m.ref && m.ref.selector) || ''}`;
+    row.title = [src.map(x => x.selector).join('\n'), where, m.from ? 'From ' + m.from : ''].filter(Boolean).join('\n');
     row.querySelector('.mv-warn').hidden = !m.stale;
     row.classList.toggle('stale', !!m.stale);
     row.classList.toggle('hot', m.id === hot);

@@ -428,6 +428,8 @@ function getMoveScript(opts) {
       m.overInfo = drop.over ? info(drop.over) : null;
     } else {
       m.kind = 'move'; m.ref = drop.ref; m.refInfo = info(drop.ref); m.place = drop.place; m.row = drop.row;
+      var sbx = bbox(ordered), land = dropPoint(drop.ref, drop.place, drop.row);   // travel, for the panel row
+      m.dx = Math.round(land.x - (sbx.left + sbx.width / 2)); m.dy = Math.round(land.y - (sbx.top + sbx.height / 2));
       m.refParent = drop.ref.parentElement ? getSelector(drop.ref.parentElement) : '';
     }
     moves.push(m);
@@ -629,7 +631,7 @@ function getMoveScript(opts) {
     var r = { id: m.id, kind: m.kind, stale: !!m.stale, sources: m.srcInfo, from: m.from };
     if (m.kind === 'nudge') { r.dx = m.dx; r.dy = m.dy; }
     else if (m.kind === 'free') { r.dx = m.dx; r.dy = m.dy; r.px = m.px; r.py = m.py; r.over = m.overInfo; }
-    else { r.place = m.place; r.ref = m.refInfo; r.refParent = m.refParent; }
+    else { r.place = m.place; r.ref = m.refInfo; r.refParent = m.refParent; r.dx = m.dx; r.dy = m.dy; }
     return r;
   }
 

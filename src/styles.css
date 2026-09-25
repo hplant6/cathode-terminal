@@ -3769,11 +3769,9 @@ html, body {
 .mv-num { flex-shrink: 0; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--spec-selection, var(--spec-accent)); color: #fff; font: 700 11px/20px var(--font-mono); text-align: center; }   /* mirrors the numbered badges drawn on the page */
 .mv-row.stale .mv-num { background: var(--spec-text-faint); }
 .mv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.mv-src, .mv-to, .mv-from { font: 11px/1.4 var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-src, .mv-to { font: 11px/1.4 var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-src { font-weight: 600; color: var(--spec-text); }
-.mv-to { color: var(--spec-text); }
-.mv-to b { font-weight: 600; color: var(--spec-accent); }
-.mv-from { color: var(--spec-text-faint); }
+.mv-to { color: var(--spec-text-dim); }   /* how far it travels */
 .mv-warn { font: 10px/1.4 var(--font-mono); color: var(--warning); }
 .mv-note { margin-top: 4px; width: 100%; box-sizing: border-box; height: 26px; padding: 4px 8px; background: var(--spec-input-bg); border: 1px solid var(--spec-structural); border-radius: 4px; color: var(--spec-text); font: 11px var(--font-mono); outline: none; }
 .mv-note:focus { border-color: var(--spec-text-dim); }
