@@ -4,6 +4,7 @@
 // page. It must stay fully self-contained: no closure references; everything
 // it needs arrives through OPTS. getCombinedScript() below builds the string.
 const { Z } = require('./ui-constants');
+const IS = require('./inject-styles');
 const fs = require('fs');
 const path = require('path');
 
@@ -56,6 +57,7 @@ const PAGE_CSS_PROPS = [
 
 function cathodeCombinedPage(OPTS) {
   const { isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevMode, wholePage, CSS_PROPS, PAGE_CSS_PROPS, Z } = OPTS;
+  const ACC = OPTS.ACCENT || '#FF5720', ACC_RGB = OPTS.ACCENT_RGB || '255,87,32';   // the theme's Selection colour
   ['__cathode_popup_host__', '__cathode_row_hl__'].forEach(id => {
     const e = document.getElementById(id); if (e) e.remove();
   });
@@ -71,11 +73,11 @@ function cathodeCombinedPage(OPTS) {
   }
   const MARCH_CSS = [
     'border:none','background-color:transparent','border-radius:0',
-    'background-image:repeating-linear-gradient(90deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(90deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,#FF5720 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,#FF5720 0 4px,transparent 4px 7px)',
+    'background-image:repeating-linear-gradient(90deg,' + ACC + ' 0 4px,transparent 4px 7px),repeating-linear-gradient(90deg,' + ACC + ' 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,' + ACC + ' 0 4px,transparent 4px 7px),repeating-linear-gradient(0deg,' + ACC + ' 0 4px,transparent 4px 7px)',
     'background-position:0 0,0 100%,0 0,100% 0',
     'background-size:100% 1px,100% 1px,1px 100%,1px 100%',
     'background-repeat:repeat-x,repeat-x,repeat-y,repeat-y',
-    'box-shadow:0 0 14px 2px rgba(255,87,32,0.275),0 0 30px 6px rgba(255,87,32,0.14)',
+    'box-shadow:0 0 14px 2px rgba(' + ACC_RGB + ',0.275),0 0 30px 6px rgba(' + ACC_RGB + ',0.14)',
     'animation:cathode-march 0.6s linear infinite',
   ].join(';');
 
@@ -672,12 +674,12 @@ function cathodeCombinedPage(OPTS) {
       psel.removeAttribute('id');
       psel.setAttribute('data-cathode-selection', String(OPTS.selId || ''));   // which selection chip this outline belongs to
       psel.querySelectorAll('rect,path').forEach(function (s) {
-        s.setAttribute('fill', 'rgba(255,87,32,0.12)');
-        s.setAttribute('stroke', '#FF5720');
+        s.setAttribute('fill', 'rgba(' + ACC_RGB + ',0.12)');
+        s.setAttribute('stroke', ACC);
         s.setAttribute('stroke-width', '1.5');
         s.setAttribute('stroke-dasharray', '4,3');
         s.style.animation = 'cathode-march-svg 0.6s linear infinite';   // dancing ants
-        s.style.filter = 'drop-shadow(0 0 6px rgba(255,87,32,0.5))';
+        s.style.filter = 'drop-shadow(0 0 6px rgba(' + ACC_RGB + ',0.5))';
       });
     }
 
@@ -693,14 +695,124 @@ function cathodeCombinedPage(OPTS) {
       ].join(';');
       const tg = document.createElement('div');
       tg.textContent = item.label;
-      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:#FF5720;color:#fff;font:700 12px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
+      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:' + ACC + ';color:#fff;font:700 12px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
       b.appendChild(tg);
       return b;
     }
+    // ── Resize handles on the focused element (exactly one drawer open, base state) ──
+    // The Resize tool's bounding box: solid orange frame + glow, 8 white handles, and a
+    // W × H (+Δ) label. Dragging writes inline width/height (the same path as a drawer
+    // edit); each finished drag is published for main to poll, and the panel then ticks
+    // the Width/Height rows so the change rides along with Send. Shift keeps the ratio.
+    const RZ_HANDLES = [['nw', 'nw-resize'], ['n', 'n-resize'], ['ne', 'ne-resize'], ['e', 'e-resize'],
+                        ['se', 'se-resize'], ['s', 's-resize'], ['sw', 'sw-resize'], ['w', 'w-resize']];
+    const rzOrig = {};     // item index → rect when first focused, so Δ survives refocusing
+    let rz = null;         // { i, el, host, box, label, raf, last }
+    let rzDone = null;     // { i, props } — last finished drag, not yet collected by main's poll
+    function rzDetach() {
+      if (!rz) return;
+      cancelAnimationFrame(rz.raf);
+      rz.host.remove();
+      rz = null;
+    }
+    function rzPosition() {
+      if (!rz) return;
+      if (!rz.el.isConnected) { rzDetach(); return; }
+      const r = rz.el.getBoundingClientRect();
+      const k = r.left + ',' + r.top + ',' + r.width + ',' + r.height;
+      if (k !== rz.last) {   // idle frames skip the writes
+        rz.last = k;
+        Object.assign(rz.box.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+        const mx = Math.round(r.width / 2), my = Math.round(r.height / 2);
+        const pos = { nw: [-5, -5], n: [mx - 5, -5], ne: [r.width - 5, -5], e: [r.width - 5, my - 5],
+                      se: [r.width - 5, r.height - 5], s: [mx - 5, r.height - 5], sw: [-5, r.height - 5], w: [-5, my - 5] };
+        rz.box.querySelectorAll('[data-h]').forEach(h => { const p = pos[h.dataset.h]; h.style.left = p[0] + 'px'; h.style.top = p[1] + 'px'; });
+        const o = rzOrig[rz.i], nW = Math.round(r.width), nH = Math.round(r.height);
+        const dW = nW - Math.round(o.width), dH = nH - Math.round(o.height);
+        const fmt = (n, d) => n + (d ? ' (' + (d > 0 ? '+' : '') + d + ')' : '');
+        rz.label.textContent = fmt(nW, dW) + ' \u00d7 ' + fmt(nH, dH);
+        const lh = rz.label.offsetHeight || 20;
+        // Above the box, clear of the element's name tag; below it when there's no room.
+        rz.label.style.left = Math.max(4, r.left) + 'px';
+        rz.label.style.top = (r.top >= lh + 30 ? r.top - lh - 28 : r.bottom + 8) + 'px';
+      }
+      rz.raf = requestAnimationFrame(rzPosition);
+    }
+    function rzAttach(i) {
+      if (rz && rz.i === i) return;
+      rzDetach();
+      const el = items[i] && items[i].el;
+      if (!el || !el.isConnected) return;
+      const r0 = el.getBoundingClientRect();
+      if (r0.width < 1 || r0.height < 1) return;
+      if (!rzOrig[i]) rzOrig[i] = { width: r0.width, height: r0.height };
+      const host = document.createElement('div');
+      host.id = '__cathode_rz__';
+      host.style.cssText = 'position:fixed;inset:0;pointer-events:none;overflow:visible;z-index:' + Z.OVERLAY + ';';
+      const box = document.createElement('div');
+      box.style.cssText = 'position:absolute;box-sizing:border-box;pointer-events:none;border:1.5px solid ' + ACC + ';' +
+        'box-shadow:0 0 14px 2px rgba(' + ACC_RGB + ',0.45),0 0 30px 6px rgba(' + ACC_RGB + ',0.22);';
+      const tg = document.createElement('div');   // keep the element's name tag, like the other boxes
+      tg.textContent = items[i].label;
+      tg.style.cssText = 'position:absolute;bottom:100%;left:-2px;background:' + ACC + ';color:#fff;font:700 12px/16px monospace;padding:1px 7px;border-radius:3px 3px 0 0;white-space:nowrap;';
+      box.appendChild(tg);
+      RZ_HANDLES.forEach(([id, cur]) => {
+        const h = document.createElement('div');
+        h.dataset.h = id;
+        h.style.cssText = 'position:absolute;width:10px;height:10px;background:#fff;border-radius:2px;box-sizing:border-box;' +
+          'pointer-events:auto;cursor:' + cur + ';box-shadow:0 0 8px 2px rgba(' + ACC_RGB + ',0.6);';
+        h.addEventListener('mousedown', (e) => rzStart(e, id), true);
+        box.appendChild(h);
+      });
+      const label = document.createElement('div');
+      label.style.cssText = 'position:absolute;pointer-events:none;background:' + ACC + ';border-radius:4px;color:#fff;' +
+        'font:700 11px/1.4 monospace;padding:2px 7px;white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+      host.append(box, label);
+      document.documentElement.appendChild(host);
+      rz = { i, el, host, box, label, raf: 0, last: '' };
+      rzPosition();
+    }
+    function rzStart(e, hid) {
+      if (e.button !== 0 || !rz) return;
+      e.preventDefault(); e.stopPropagation();
+      const el = rz.el, i = rz.i;
+      const r0 = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      // Computed width/height follow box-sizing; the drag delta is in border-box pixels,
+      // so apply it as a delta — a content-box element with padding keeps its padding.
+      const d = { x: e.clientX, y: e.clientY, w: r0.width, h: r0.height,
+                  cw: parseFloat(cs.width) || r0.width, ch: parseFloat(cs.height) || r0.height,
+                  ew: /[ew]/.test(hid), ns: /[ns]/.test(hid), changed: {} };
+      const move = (ev) => {
+        const dx = ev.clientX - d.x, dy = ev.clientY - d.y;
+        let W = d.w + (hid.includes('e') ? dx : hid.includes('w') ? -dx : 0);
+        let H = d.h + (hid.includes('s') ? dy : hid.includes('n') ? -dy : 0);
+        let setW = d.ew, setH = d.ns;
+        if (ev.shiftKey && d.w && d.h) {   // keep the aspect ratio: follow whichever axis moved more
+          const ratio = d.w / d.h;
+          if (d.ew && d.ns) { if (Math.abs(W / d.w - 1) >= Math.abs(H / d.h - 1)) H = W / ratio; else W = H * ratio; }
+          else if (d.ew) H = W / ratio;
+          else W = H * ratio;
+          setW = setH = true;
+        }
+        W = Math.max(10, W); H = Math.max(10, H);
+        if (setW) { const v = Math.max(1, Math.round(d.cw + (W - d.w))) + 'px'; el.style.setProperty('width', v); d.changed.width = v; }
+        if (setH) { const v = Math.max(1, Math.round(d.ch + (H - d.h))) + 'px'; el.style.setProperty('height', v); d.changed.height = v; }
+        pDraw(window.__cathodePanel ? window.__cathodePanel.active : null);
+      };
+      const up = () => {
+        document.removeEventListener('mousemove', move, true);
+        document.removeEventListener('mouseup', up, true);
+        if (Object.keys(d.changed).length) rzDone = { i, props: d.changed };
+      };
+      document.addEventListener('mousemove', move, true);
+      document.addEventListener('mouseup', up, true);
+    }
+
     function pDraw(active) {
       phost.innerHTML = '';
       items.forEach((item, i) => {
         if (active && active.indexOf(i) === -1) return;
+        if (rz && rz.i === i) return;   // the resize box replaces the ants for the focused element
         const b = pBox(item);
         if (b) phost.appendChild(b);
       });
@@ -737,7 +849,15 @@ function cathodeCombinedPage(OPTS) {
       items,                  // live elements — an appended pick builds on these
       editRules: _editRules,
       active: [],   // nothing highlighted until the panel hovers/opens a drawer
-      set(idx) { this.active = idx; pDraw(idx); },
+      // resizeIdx: the one focused element that gets resize handles (null/undefined → none).
+      set(idx, resizeIdx) {
+        this.active = idx;
+        if (resizeIdx === null || resizeIdx === undefined) rzDetach(); else rzAttach(resizeIdx);
+        pDraw(idx);
+      },
+      // Last finished handle drag, for main's poll. Handed over once, so a restarted poll
+      // can't replay an old drag (and re-tick a row the user has since unticked).
+      sizeState() { const d = rzDone; rzDone = null; return d; },
       // Live-edit a selected element from the left-column panel.
       // `state` is '' for the element's resting style, or a pseudo-class name
       // ('hover' / 'focus' / 'active' / 'disabled') that the panel is currently forcing
@@ -802,9 +922,11 @@ function cathodeCombinedPage(OPTS) {
       },
       // Hand-off to an appended pick: stop tracking scroll/resize, leave everything drawn.
       detach() {
+        rzDetach();
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
       },
       clear() {
+        rzDetach();
         try { window.removeEventListener('scroll', pReflow, true); window.removeEventListener('resize', pReflow, true); } catch (e) {}
         const h = document.getElementById('__cathode_panel_hl__'); if (h) h.remove();
         document.querySelectorAll('[data-cathode-selection], #__cathode_selection__').forEach(function (s) { s.remove(); });   // every pick's selection fill
@@ -831,7 +953,7 @@ function cathodeCombinedPage(OPTS) {
   const hlTag = document.createElement('div');
   hlTag.style.cssText = [
     'position:absolute','bottom:100%','left:-2px',
-    'background:#FF5720','color:#fff',
+    'background:' + ACC,'color:#fff',
     'font:700 10px/16px monospace','padding:1px 7px',
     'border-radius:3px 3px 0 0','white-space:nowrap',
   ].join(';');
@@ -1921,6 +2043,8 @@ function getCombinedScript({ isClick, bounds, cx, cy, mouseUpX, mouseUpY, aiDevM
     CSS_PROPS,
     PAGE_CSS_PROPS,
     Z,
+    ACCENT: IS.ACCENT,          // read per build — follows the theme's Selection colour
+    ACCENT_RGB: IS.ACCENT_RGB,
   };
   return `${IRO_INLINE}\n(${cathodeCombinedPage.toString()})(${JSON.stringify(opts)})`;
 }

@@ -53,6 +53,8 @@ const LS = {
   themeCustom:  'cathode-theme-custom',     // legacy single custom theme (migrated → themesSaved)
   themesSaved:  'cathode-themes-saved',     // array of saved custom themes [{name,colors}]
   notif:          'cathode-notif',                  // notification sounds on/off
+  acpModes:       'cathode-acp-modes',              // last permission mode picked, per agent {agent: modeId}
+  moveSnap:       'cathode-move-snap',              // Move tool: snap drops to elements ('0' = free arrows)
   hermesSetup:    'cathode-hermes-setup-dismissed', // Hermes setup card dismissed
   profilesAcpV2:  'cathode-profiles-acpv2',         // one-time profile→ACP migration flag
   codeTabRetired: 'cathode-code-tab-retired',       // one-time code-tab retirement flag
@@ -109,6 +111,7 @@ const THEME_TOKENS = [
   ['--spec-accent',      'Accent 1'],
   ['--spec-accent-dark', 'Accent 1 Alt'],
   ['--spec-accent-3',    'Messages'],
+  ['--spec-selection',   'Selection'],
   ['--danger',           'Danger'],
   ['--success',          'Success'],
   ['--warning',          'Warning'],
@@ -121,27 +124,27 @@ const THEME_PRESETS = {
   default: {
     '--spec-text':'#BCBCBC','--spec-text-dim':'#817E89','--spec-text-faint':'#46434D','--spec-structural':'#28262F',
     '--spec-dropdown-bg':'#212026','--spec-toolbar-bg':'#19191C','--spec-header-bg':'#111113','--spec-input-bg':'#08090C','--spec-black':'#000000',
-    '--spec-accent':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#30201C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
+    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#30201C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
   },
   tan: {   // light, warm cream — dark text on light tan backgrounds
     '--spec-text':'#5C4A38','--spec-text-dim':'#7A6450','--spec-text-faint':'#9A8369','--spec-structural':'#C7B49E',
     '--spec-dropdown-bg':'#DDCDB8','--spec-toolbar-bg':'#E8DAC8','--spec-header-bg':'#F2E7D8','--spec-input-bg':'#FBF5EC','--spec-black':'#2A211A',
-    '--spec-accent':'#FF5720','--spec-accent-dark':'#B83C10','--spec-accent-3':'#4A3826','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#B3681C','--mc-green':'#D8F5DE','--mc-green-dark':'#3C6B4A',
+    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#B83C10','--spec-accent-3':'#4A3826','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#B3681C','--mc-green':'#D8F5DE','--mc-green-dark':'#3C6B4A',
   },
   sky: {   // light, cool blue — dark slate text on light blue backgrounds
     '--spec-text':'#2C3E50','--spec-text-dim':'#4A6076','--spec-text-faint':'#6E869C','--spec-structural':'#A9BFD4',
     '--spec-dropdown-bg':'#C7D8E8','--spec-toolbar-bg':'#D6E4F0','--spec-header-bg':'#E6EFF7','--spec-input-bg':'#F5F9FD','--spec-black':'#16202B',
-    '--spec-accent':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#2E7DD6','--mc-green':'#D6F2E2','--mc-green-dark':'#2F6B52',
+    '--spec-accent':'#2E7DD6','--spec-selection':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#2E7DD6','--mc-green':'#D6F2E2','--mc-green-dark':'#2F6B52',
   },
   amber: {   // P3 phosphor — amber CRT
     '--spec-text':'#FFB454','--spec-text-dim':'#C98A3A','--spec-text-faint':'#7A5526','--spec-structural':'#4A3419',
     '--spec-dropdown-bg':'#3B2914','--spec-toolbar-bg':'#2E200F','--spec-header-bg':'#1F150A','--spec-input-bg':'#120C05','--spec-black':'#000000',
-    '--spec-accent':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-2':'#FFE16B','--mc-green':'#C8F5A8','--mc-green-dark':'#2E4A18',
+    '--spec-accent':'#FFA31A','--spec-selection':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-2':'#FFE16B','--mc-green':'#C8F5A8','--mc-green-dark':'#2E4A18',
   },
   dracula: {
     '--spec-text':'#F8F8F2','--spec-text-dim':'#BDBECC','--spec-text-faint':'#6272A4','--spec-structural':'#44475A',
     '--spec-dropdown-bg':'#3C3F51','--spec-toolbar-bg':'#343746','--spec-header-bg':'#282A36','--spec-input-bg':'#21222C','--spec-black':'#191A21',
-    '--spec-accent':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
+    '--spec-accent':'#BD93F9','--spec-selection':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
   },
   glacier: {   // glacier navy — Henry's blue ramp seated one step darker than the
                // swatches, so it carries the same weight as the other dark themes.
@@ -152,12 +155,12 @@ const THEME_PRESETS = {
                // since --text-on-accent is fixed white on solid accent buttons.
     '--spec-text':'#DCE9F2','--spec-text-dim':'#A3BED2','--spec-text-faint':'#557C93','--spec-structural':'#3B5D77',
     '--spec-dropdown-bg':'#2F4E69','--spec-toolbar-bg':'#223F5A','--spec-header-bg':'#152F4C','--spec-input-bg':'#0D2643','--spec-black':'#08203E',
-    '--spec-accent':'#A77BFF','--spec-accent-dark':'#570FBB','--spec-accent-3':'#2A1D4A','--danger':'#FF6B6B','--success':'#4ECFB0','--warning':'#E0B341','--spec-graph-2':'#DCC2FF','--mc-green':'#7FE3B0','--mc-green-dark':'#17423C',
+    '--spec-accent':'#A77BFF','--spec-selection':'#A77BFF','--spec-accent-dark':'#570FBB','--spec-accent-3':'#2A1D4A','--danger':'#FF6B6B','--success':'#4ECFB0','--warning':'#E0B341','--spec-graph-2':'#DCC2FF','--mc-green':'#7FE3B0','--mc-green-dark':'#17423C',
   },
   deepocean: {   // deep-ocean slate — teal-tinted darks with a #1DBFA1 accent
     '--spec-text':'#C9D9D7','--spec-text-dim':'#8AA5A3','--spec-text-faint':'#4F6A6D','--spec-structural':'#2A3E42',
     '--spec-dropdown-bg':'#243235','--spec-toolbar-bg':'#202B2E','--spec-header-bg':'#1C2427','--spec-input-bg':'#191E1F','--spec-black':'#12181A',
-    '--spec-accent':'#1DBFA1','--spec-accent-dark':'#0F4C40','--spec-accent-3':'#17332F','--danger':'#F0645F','--success':'#4EC9B0','--warning':'#D9A93C','--spec-graph-2':'#7FE3FF','--mc-green':'#6FE8C4','--mc-green-dark':'#12403A',
+    '--spec-accent':'#1DBFA1','--spec-selection':'#1DBFA1','--spec-accent-dark':'#0F4C40','--spec-accent-3':'#17332F','--danger':'#F0645F','--success':'#4EC9B0','--warning':'#D9A93C','--spec-graph-2':'#7FE3FF','--mc-green':'#6FE8C4','--mc-green-dark':'#12403A',
   },
 };
 const BUILTIN_THEMES = [
@@ -178,6 +181,9 @@ const THEME_GROUPS = [
   ]},
   { title: 'Graph', col: 'mid', rows: [
     ['--spec-accent','Graph 1'],['--spec-graph-2','Graph 2'],
+  ]},
+  { title: 'Page Tools', col: 'mid', rows: [
+    ['--spec-selection','Selection'],   // selection outlines, hover, arrows and handles drawn on the page
   ]},
   { title: 'Status', col: 'status', rows: [
     ['--success','Success'],['--warning','Warning'],['--danger','Danger'],
@@ -240,9 +246,15 @@ function isLightFill(hex) {
   });
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.4;   // WCAG relative luminance
 }
+let _sentOverlayAccent = null;
 function applyThemeColors(colors) {
   const root = document.documentElement;
   for (const [v] of THEME_TOKENS) if (colors[v]) root.style.setProperty(v, colors[v]);
+  // Selection colour: its own token, but themes saved before it existed fall back to
+  // their accent. Main builds every page-tool overlay from it.
+  const sel = colors['--spec-selection'] || colors['--spec-accent'] || '#FF5720';
+  root.style.setProperty('--spec-selection', sel);
+  if (sel !== _sentOverlayAccent) { _sentOverlayAccent = sel; ipcRenderer.send(IPC.OVERLAY_ACCENT, sel); }
   if (isLightFill(colors['--spec-input-bg'])) root.dataset.themeLight = '1';
   else delete root.dataset.themeLight;
 }
@@ -284,6 +296,8 @@ function applyTheme(name) {
   } else if (/^saved:/.test(name)) {
     const i = +name.split(':')[1];
     draftColors = { ...savedThemes[i].colors }; draftName = savedThemes[i].name;
+    // Saved before the Selection token existed → start it from the theme's accent.
+    if (!draftColors['--spec-selection']) draftColors['--spec-selection'] = draftColors['--spec-accent'] || '#FF5720';
   } else {
     draftColors = null; draftName = '';
   }
@@ -426,6 +440,7 @@ function generateThemeFromPair(baseHex, accentHex) {
   const card = shades[6];
   out['--spec-accent'] = tuneAccentForText(accentHex, card);
   out['--spec-accent-dark'] = tuneAccentForFill(accentHex);
+  out['--spec-selection'] = out['--spec-accent'];   // own token; starts as the accent
   const acc = hexToHsl(out['--spec-accent']);
   // Messages: the accent sunk into the background, a tinted fill rather than a colour.
   out['--spec-accent-3'] = hslToHex(acc.h, clampNum(acc.s * 0.45, 0, 60),
@@ -1600,8 +1615,28 @@ function requestMode(s, modeId) {
     return;
   }
   s.modes.currentModeId = modeId;
+  saveModePick(s, modeId);
   updateModePill();
   ipcRenderer.send(IPC.ACP_SET_MODE, { id: s.id, modeId });
+}
+
+// Remember the user's mode pick per agent so new tabs open in it. Bypass is never
+// restored silently (it's behind a confirm) and plan is a one-task detour, so neither is saved.
+const MODE_NOT_REMEMBERED = new Set(['bypassPermissions', 'plan']);
+function loadSavedModes() { try { return JSON.parse(localStorage.getItem(LS.acpModes)) || {}; } catch (_) { return {}; } }
+function saveModePick(s, modeId) {
+  if (!s.agent || MODE_NOT_REMEMBERED.has(modeId)) return;
+  const saved = loadSavedModes(); saved[s.agent] = modeId;
+  try { localStorage.setItem(LS.acpModes, JSON.stringify(saved)); } catch (_) {}
+}
+// On session ready: switch to the remembered mode if the agent offers it.
+function applySavedMode(s) {
+  if (!s.modes || !s.agent) return;
+  const want = loadSavedModes()[s.agent];
+  if (!want || want === s.modes.currentModeId || MODE_NOT_REMEMBERED.has(want)) return;
+  if (!(s.modes.availableModes || []).some(m => m.id === want)) return;
+  s.modes.currentModeId = want;
+  ipcRenderer.send(IPC.ACP_SET_MODE, { id: s.id, modeId: want });
 }
 
 function cycleMode() {
@@ -2356,6 +2391,7 @@ function switchSession(id) {
   const s = sessions.get(id);
   if (!s) return;
   s.el.classList.add('active');
+  s._alert = null;   // seen — drop the tab's alert dot
   refitSession(id);
   syncSvt(s);
   ensureSessionModel();
@@ -2399,6 +2435,12 @@ function renderPtyTabs() {
     });
     // Kebab leads the title, then the name, then the close button.
     tab.appendChild(settingsBtn);
+    if (s._alert && id !== activeId) {
+      const dot = document.createElement('span');
+      dot.className = 'pty-tab-alert pty-tab-alert--' + s._alert;
+      dot.title = { message: 'New reply', permission: 'Waiting on your approval', error: 'Error' }[s._alert] || '';
+      tab.appendChild(dot);
+    }
     tab.appendChild(nameEl);
 
     const x = document.createElement('button');
@@ -3295,6 +3337,14 @@ const Notif = (() => {
   };
 })();
 
+// Mark a background agent tab with a colored dot when it raises an alert, so it's clear
+// which tab a chime came from. Cleared when the tab is opened; the visible tab is never marked.
+function flagSessionTab(s, type) {
+  if (!s || s.id === activeId) return;
+  s._alert = type === 'limit' ? 'error' : type;   // message | permission | error
+  renderPtyTabs();
+}
+
 function syncNotifToggles() {
   const on = Notif.isOn();
   document.querySelectorAll('.notif-toggle').forEach(b => {
@@ -3456,7 +3506,7 @@ function acpSetStatus(s, state) {
   // Animate the bars in every busy state (working, connecting, installing).
   if (s.eq) { if (state === 'thinking' || state === 'connecting' || state === 'installing') s.eq.start(); else s.eq.stop(); }
   // Alerts: error (task-complete is covered by the per-message sound on finalize)
-  if (state === 'error' && prev !== 'error') Notif.play('error');
+  if (state === 'error' && prev !== 'error') { Notif.play('error'); flagSessionTab(s, 'error'); }
   // Drive the Changes tab: a new turn re-enables auto-follow + pulses the tab; when the
   // turn ends, stop the pulse and do a final refresh so the diff reflects the end state.
   if (state === 'thinking' && prev !== 'thinking') { window.__diffSetWorking?.(true); window.__diffUnpin?.(); }
@@ -4271,6 +4321,7 @@ ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes, model
   }
   s.cwd = cwd || s.cwd || '';
   s.modes = modes || null;   // ACP permission modes (may be absent for some agents)
+  applySavedMode(s);         // new tabs open in the last mode the user picked for this agent
   // Models the agent advertises for session/set_model. When present these drive
   // the Model submenu (live list, in-place switching); when absent the static
   // MODEL_CATALOG is used and switching respawns the adapter instead.
@@ -4323,7 +4374,7 @@ ipcRenderer.on(IPC.ACP_DONE, (_, { id, usage }) => {
       acpScrollEnd(s);
     }
     s._sentSlash = null;
-    if (s._pendingNotif) { if (!s._replaying) Notif.play(s._pendingNotif); s._pendingNotif = null; }   // one chime per turn (silent while replaying resumed history)
+    if (s._pendingNotif) { if (!s._replaying) { Notif.play(s._pendingNotif); flagSessionTab(s, s._pendingNotif); } s._pendingNotif = null; }   // one chime per turn (silent while replaying resumed history)
     // Total session tokens across turns (agents like Hermes report per-turn usage).
     const t = usage && typeof usage.totalTokens === 'number' ? usage.totalTokens
       : usage ? (usage.inputTokens || 0) + (usage.outputTokens || 0) : 0;
@@ -4390,7 +4441,7 @@ ipcRenderer.on(IPC.ACP_PERMISSION_REQUEST, (_, { id, reqId, kind, title, canAlwa
   s.permStackEl.appendChild(card);
   showTopPerm(s);
   if (document.activeElement === uiTextarea) uiTextarea.blur();   // so 1/2/3 drive the prompt immediately
-  if (!s._replaying) Notif.play('permission');   // distinct cue: the agent is paused waiting on you
+  if (!s._replaying) { Notif.play('permission'); flagSessionTab(s, 'permission'); }   // distinct cue: the agent is paused waiting on you
 });
 
 // Project prompt — the agent has spotted work that doesn't belong to the current
@@ -6701,9 +6752,14 @@ document.getElementById('btn-new-tab')?.addEventListener('click', () => createTa
 
   // Focus selects the whole URL (about to be replaced), so show the browse menu:
   // every running localhost server + recent history, unfiltered.
-  addressBar.addEventListener('focus', async () => { addressBar.select(); await refreshData(); render(''); });
+  // The server probe can outlast a quick click-away — only open if the bar still has focus,
+  // otherwise the dropdown lands after the blur's close() and nothing ever closes it.
+  addressBar.addEventListener('focus', async () => { addressBar.select(); await refreshData(); if (document.activeElement === addressBar) render(''); });
   addressBar.addEventListener('input', () => { sel = -1; render(addressBar.value); });
   addressBar.addEventListener('blur', () => setTimeout(close, 150));   // let a row mousedown land first
+  // Clicking into the native browser view moves focus to another webContents; close on window blur too.
+  window.addEventListener('blur', close);
+  document.addEventListener('mousedown', e => { if (open && e.target !== addressBar && !box.contains(e.target)) close(); }, true);
   addressBar.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown') { if (open) { e.preventDefault(); sel = Math.min(sel + 1, items.length - 1); paint(); } }
     else if (e.key === 'ArrowUp') { if (open) { e.preventDefault(); sel = Math.max(sel - 1, -1); paint(); } }
@@ -7031,21 +7087,6 @@ document.getElementById('btn-screenshot')?.addEventListener('click', () => {
   document.getElementById('btn-screenshot')?.classList.add('active');
   ipcRenderer.send(IPC.PICK_SCREENSHOT);
 });
-document.getElementById('btn-pick-resize')?.addEventListener('click', () => {
-  if (pickMode === 'resize') { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); return; }
-  clearPickMode();
-  pickMode = 'resize';
-  applyPickCursor('resize');
-  document.getElementById('btn-pick-resize')?.classList.add('active');
-  ipcRenderer.send(IPC.PICK_RESIZE);
-});
-// Resize panel's "New Selection" → re-arm the resize tool to pick a new element.
-document.getElementById('resize-panel-new')?.addEventListener('click', () => {
-  clearPickMode();
-  pickMode = 'resize';
-  applyPickCursor('resize');
-  ipcRenderer.send(IPC.PICK_RESIZE);
-});
 
 document.getElementById('btn-draw')?.addEventListener('click', () => {
   if (pickMode === 'draw') { clearPickMode(); ipcRenderer.send(IPC.DRAW_CANCEL); return; }
@@ -7290,7 +7331,14 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (hovered != null && rows[hovered] && inView(rows[hovered]) && !rows[hovered].item.page) s.add(hovered);
     return [...s];
   }
-  function pushHighlight() { ipcRenderer.send(IPC.PICK_PANEL_UPDATE, { active: highlightSet() }); }
+  // Resize handles go on the one element you're focused on: exactly one drawer open, in its
+  // base state (a handle drag writes resting width/height, which means nothing under :hover).
+  function resizeTarget() {
+    const open = [];
+    rows.forEach((r, i) => { if (inView(r) && r.expanded && !r.item.page) open.push(i); });
+    return open.length === 1 && !rows[open[0]].state ? open[0] : null;
+  }
+  function pushHighlight() { ipcRenderer.send(IPC.PICK_PANEL_UPDATE, { active: highlightSet(), resize: resizeTarget() }); }
 
   function el(tag, cls, text) {
     const e = document.createElement(tag);
@@ -8097,6 +8145,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
         body.innerHTML = '';
         buildBody(row, i, body);
         updateSendCount();
+        pushHighlight();   // a state switch turns the resize handles on/off
       };
       const statesRow = isPage ? null : buildStatesRow(row, i, rebuildBody);   // :hover on the page means nothing
       if (statesRow) {
@@ -8620,91 +8669,166 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     if (base > 0 && !panel.hidden && base === rows.length) append(items || [], selId);
     else open(items || [], tool, selId);
   });
+
+  // A resize-handle drag finished on the page: the element already has the new inline
+  // width/height, so record them as base-state edits (ticked, so they go out with Send)
+  // and redraw that drawer so its Width/Height rows show the new values.
+  ipcRenderer.on(IPC.PICK_PANEL_SIZE, (_, { i, props } = {}) => {
+    const row = rows[i];
+    if (panel.hidden || !row || !props) return;
+    const mods = modsOf(row, BASE), checked = checkedOf(row, BASE);
+    row.item.cssProps = row.item.cssProps || [];
+    for (const [name, value] of Object.entries(props)) {
+      mods[name] = value;
+      checked.add(name);
+      if (!row.item.cssProps.some(x => x.name === name)) row.item.cssProps.push({ name, value: '' });
+    }
+    const fb = fieldBodies.find(f => f.i === i);
+    if (fb && row.expanded && !row.state) {
+      const scroll = listEl.scrollTop;
+      fb.body.dataset.built = '';
+      fb.body.innerHTML = '';
+      buildBody(row, i, fb.body);
+      listEl.scrollTop = scroll;
+    }
+    updateSendCount();
+  });
 })();
 
-// ── Resize tool panel (overtakes the chat column) ────────────────
-// The handles stay live on the page; this panel shows the element, live W×H
-// (polled from main), an instructions box, and Reset / Cancel / Send.
-(function initResizePanel() {
-  const panel    = document.getElementById('resize-panel');
-  const titleEl  = document.getElementById('resize-panel-title');
-  const elEl     = document.getElementById('resize-panel-el');
-  const wEl       = document.getElementById('resize-w');
-  const hEl       = document.getElementById('resize-h');
-  const wSlider   = document.getElementById('resize-w-slider');
-  const hSlider   = document.getElementById('resize-h-slider');
-  const textarea  = document.getElementById('resize-textarea');
-  const resetBtn  = document.getElementById('resize-reset');
-  const cancelBtn = document.getElementById('resize-cancel');
-  const sendBtn   = document.getElementById('resize-send');
-  if (!panel) return;
+// ── Move tool panel: live list of the arrows drawn on the page ──
+// The page owns the moves (main polls them into MOVE_PANEL_UPDATE); the panel owns the
+// per-move notes and the screenshot toggle. The tool stays armed until Send/Cancel.
+(function initMovePanel() {
+  const panel = document.getElementById('move-panel');
+  const btn   = document.getElementById('btn-pick-move');
+  if (!panel || !btn) return;
+  const $ = (id) => document.getElementById(id);
+  const listEl = $('move-list'), emptyEl = $('move-empty'), subEl = $('move-panel-sub');
+  const textarea = $('move-textarea'), shotBtn = $('move-shot');
+  // Snap | Drag lives on the page (next to the selection); remember the last choice.
+  let snapOn = true;
+  try { snapOn = localStorage.getItem(LS.moveSnap) !== '0'; } catch (_) {}
+  const DEFAULT_SUB = 'Select an element, then drag it to where it should go.';
 
-  let sliding = null;   // 'w' | 'h' while the user drags a slider (don't let polling fight it)
+  let moves = [], notes = {}, hot = null, selected = 0;
+  const rows = new Map();   // move id → row element (kept across updates so note inputs keep focus)
 
-  function setText(el, nv, ov) {
-    const d = nv - ov;
-    el.value = nv + (d ? `  (${d > 0 ? '+' : ''}${d})` : '');
-    const field = el.closest('.pp-field');
-    if (field) field.classList.toggle('selected', d !== 0);   // orange checkbox/label when changed
+  function nudgeText(dx, dy) {
+    const parts = [];
+    if (dx) parts.push(`${Math.abs(dx)}px ${dx > 0 ? 'right' : 'left'}`);
+    if (dy) parts.push(`${Math.abs(dy)}px ${dy > 0 ? 'down' : 'up'}`);
+    return parts.join(', ') || '0px';
   }
-  function setDims(d) {
-    if (!d) return;
-    lastOrig = { oW: d.oW, oH: d.oH };
-    setText(wEl, d.nW, d.oW);
-    setText(hEl, d.nH, d.oH);
-    if (sliding !== 'w') { if (d.nW > +wSlider.max) wSlider.max = d.nW; wSlider.value = d.nW; }
-    if (sliding !== 'h') { if (d.nH > +hSlider.max) hSlider.max = d.nH; hSlider.value = d.nH; }
+  function buildRow(m) {
+    const row = document.createElement('div');
+    row.className = 'mv-row';
+    row.innerHTML = '<span class="mv-num"></span><div class="mv-main"><span class="mv-src"></span><span class="mv-to"></span>' +
+      '<span class="mv-from"></span><span class="mv-warn" hidden>Page re-rendered: selectors may be out of date</span>' +
+      '<input class="mv-note" type="text" placeholder="note for this move…" spellcheck="true" autocomplete="off" /></div>' +
+      '<button class="mv-del" title="Remove this move">✕</button>';
+    const note = row.querySelector('.mv-note');
+    note.value = notes[m.id] || '';
+    note.addEventListener('input', () => { notes[m.id] = note.value; });
+    note.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); note.blur(); } });
+    row.querySelector('.mv-del').addEventListener('click', () => ipcRenderer.send(IPC.MOVE_PANEL_REMOVE, { id: m.id }));
+    row.addEventListener('mouseenter', () => ipcRenderer.send(IPC.MOVE_PANEL_HOVER, { id: m.id }));
+    row.addEventListener('mouseleave', () => ipcRenderer.send(IPC.MOVE_PANEL_HOVER, { id: null }));
+    return row;
   }
-  function open({ tool, label, selShort, oW, oH, vw, vh }) {
-    clearPickMode();
-    titleEl.textContent = tool || 'Resize';
-    // Readable name (bright) + the tag.class selector after it (dimmed). If there's no
-    // readable name, show the selector alone.
-    elEl.textContent = '';
-    elEl.appendChild(document.createTextNode(label || selShort || ''));
-    if (label && selShort && selShort !== label) {
-      const s = document.createElement('span');
-      s.className = 'rz-el-sel';
-      s.textContent = selShort;
-      elEl.appendChild(s);
-    }
-    wSlider.max = Math.max(oW * 2, vw || 2000);
-    hSlider.max = Math.max(oH * 2, vh || 2000);
-    setDims({ oW, oH, nW: oW, nH: oH });
-    textarea.value = '';
-    panel.hidden = false;
+  function fillRow(row, m, i) {
+    const src = m.sources || [];
+    row.querySelector('.mv-num').textContent = String(i + 1) + (src.length > 1 ? ' ×' + src.length : '');
+    const srcEl = row.querySelector('.mv-src');
+    srcEl.textContent = src.map(x => x.label).join(', ');
+    srcEl.title = src.map(x => x.selector).join('\n');
+    const to = row.querySelector('.mv-to');
+    to.textContent = '';
+    const verb = document.createElement('b');
+    if (m.kind === 'nudge') { verb.textContent = 'nudge'; to.append(verb, ' ' + nudgeText(m.dx, m.dy)); }
+    else if (m.kind === 'free') { verb.textContent = 'to spot'; to.append(verb, ' ' + nudgeText(m.dx, m.dy) + (m.over ? ' · over ' + m.over.label : '')); to.title = (m.over && m.over.selector) || ''; }
+    else { verb.textContent = m.place; to.append(verb, ' ' + ((m.ref && m.ref.label) || '')); to.title = (m.ref && m.ref.selector) || ''; }
+    row.querySelector('.mv-from').textContent = m.from ? 'from ' + m.from : '';
+    row.querySelector('.mv-warn').hidden = !m.stale;
+    row.classList.toggle('stale', !!m.stale);
+    row.classList.toggle('hot', m.id === hot);
   }
-  function close() { panel.hidden = true; textarea.value = ''; sliding = null; }
-  function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.RESIZE_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), f) }); f?._composerBar?.clear(); close(); }
-  function cancel() { ipcRenderer.send(IPC.RESIZE_PANEL_CANCEL); close(); }
-
-  // Sliders → live-resize the page element; optimistic text update.
-  function wireSlider(slider, dim, valEl) {
-    slider.addEventListener('input', () => {
-      sliding = dim;
-      const v = +slider.value;
-      ipcRenderer.send(IPC.RESIZE_PANEL_SET, { dim, value: v });
-      const orig = dim === 'w' ? lastOrig.oW : lastOrig.oH;
-      setText(valEl, v, orig);
+  function render() {
+    const ids = new Set(moves.map(m => m.id));
+    for (const [id, row] of rows) if (!ids.has(id)) { row.remove(); rows.delete(id); delete notes[id]; }
+    moves.forEach((m, i) => {
+      let row = rows.get(m.id);
+      if (!row) { row = buildRow(m); rows.set(m.id, row); }
+      fillRow(row, m, i);
+      if (listEl.children[i] !== row) listEl.insertBefore(row, listEl.children[i] || null);
     });
-    slider.addEventListener('change', () => { sliding = null; });
-    slider.addEventListener('mouseup', () => { sliding = null; });
+    emptyEl.hidden = moves.length > 0;
+    subEl.textContent = selected
+      ? `${selected} selected. Drag to move ${selected > 1 ? 'them together' : 'it'}, or Shift+click to add more.`
+      : moves.length ? `${moves.length} move${moves.length > 1 ? 's' : ''}. Add more on the page, or Send.` : DEFAULT_SUB;
   }
-  let lastOrig = { oW: 0, oH: 0 };
-  wireSlider(wSlider, 'w', wEl);
-  wireSlider(hSlider, 'h', hEl);
 
-  resetBtn.addEventListener('click', () => ipcRenderer.send(IPC.RESIZE_PANEL_RESET));
-  sendBtn.addEventListener('click', send);
-  cancelBtn.addEventListener('click', cancel);
+  function open() {
+    moves = []; notes = {}; hot = null; selected = 0;
+    rows.clear(); listEl.innerHTML = '';
+    textarea.value = '';
+    render();
+    panel.hidden = false;
+    btn.classList.add('active');
+    applyPickCursor(null);   // armed → the page overlay owns the cursor from here
+  }
+  function close() {
+    panel.hidden = true;
+    textarea.value = '';
+    moves = []; notes = {}; rows.clear(); listEl.innerHTML = '';
+    btn.classList.remove('active');
+    if (pickMode === 'move') clearPickMode();
+  }
+  function cancel() { if (panel.hidden) return; ipcRenderer.send(IPC.MOVE_PANEL_CANCEL); close(); }
+  function send() {
+    const f = textarea.closest('.tp-foot');
+    ipcRenderer.send(IPC.MOVE_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), f), notes: { ...notes }, screenshot: shotBtn.classList.contains('on') });
+    f?._composerBar?.clear();
+    close();
+  }
+
+  // Toolbar / Alt+V toggles the whole session.
+  btn.addEventListener('click', () => {
+    if (!panel.hidden) { cancel(); return; }
+    if (pickMode === 'move') { ipcRenderer.send(IPC.MOVE_PANEL_CANCEL); clearPickMode(); return; }   // armed, panel not open yet
+    clearPickMode();
+    pickMode = 'move';
+    applyPickCursor('move');
+    btn.classList.add('active');
+    ipcRenderer.send(IPC.PICK_MOVE, { snap: snapOn });
+  });
+  // Another page tool takes over the page → end the move session first (its overlay
+  // would otherwise keep swallowing the clicks meant for that tool).
+  document.addEventListener('click', (e) => {
+    const other = e.target.closest && e.target.closest('.pick-btn');
+    if (other && other !== btn && !panel.hidden) cancel();
+  }, true);
+
+  $('move-panel-clear').addEventListener('click', () => moves.forEach(m => ipcRenderer.send(IPC.MOVE_PANEL_REMOVE, { id: m.id })));
+  shotBtn.addEventListener('click', (e) => { e.preventDefault(); shotBtn.classList.toggle('on'); });
+  $('move-send').addEventListener('click', send);
+  $('move-cancel').addEventListener('click', cancel);
   textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
   });
-  addPanelEscClose(panel, cancel, el => el === textarea);
+  addPanelEscClose(panel, cancel, el => el === textarea || (el && el.classList && el.classList.contains('mv-note')));
 
-  ipcRenderer.on(IPC.RESIZE_PANEL_OPEN, (_, data) => open(data || {}));
-  ipcRenderer.on(IPC.RESIZE_PANEL_DIMS, (_, d) => { if (!panel.hidden) setDims(d); });
+  ipcRenderer.on(IPC.MOVE_PANEL_OPEN, open);
+  ipcRenderer.on(IPC.MOVE_PANEL_UPDATE, (_, d) => {
+    if (panel.hidden || !d) return;
+    moves = d.moves || []; hot = d.hot == null ? null : d.hot; selected = d.selected || 0;
+    if (typeof d.snap === 'boolean' && d.snap !== snapOn) {
+      snapOn = d.snap;
+      try { localStorage.setItem(LS.moveSnap, snapOn ? '1' : '0'); } catch (_) {}
+    }
+    render();
+  });
+  ipcRenderer.on(IPC.MOVE_PANEL_CLOSED, () => { if (!panel.hidden) close(); });
 })();
 
 // ── Animation tool panel (Phase 2: controls + WAAPI live preview) ──

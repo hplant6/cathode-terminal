@@ -10,7 +10,7 @@
 // Resolves with { url, total, tokens, issues } on handoff, or null if cancelled.
 const SHARED = require('./inject-shared');
 const { Z } = require('./ui-constants');
-const { ACCENT } = require('./inject-styles');
+const IS = require('./inject-styles');   // read at build time: the colour follows the theme
 
 // `sbTokens` (optional) is a { '--name': 'value', … } map of design-system
 // tokens pre-resolved from a connected Storybook's preview `:root`. When present
@@ -222,10 +222,10 @@ ${SHARED.selectorHelper('__drift')}
     (document.body || document.documentElement).appendChild(layer);
     issues.forEach(function(iss, i) {
       var b = document.createElement('div');
-      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid ${ACCENT};border-radius:2px;pointer-events:none;transition:background .1s;';
+      b.style.cssText = 'position:fixed;box-sizing:border-box;border:2px solid ${IS.ACCENT};border-radius:2px;pointer-events:none;transition:background .1s;';
       var badge = document.createElement('div');
       badge.textContent = (i + 1);
-      badge.style.cssText = 'position:absolute;top:-12px;left:-4px;min-width:24px;height:24px;padding:0 5px;box-sizing:border-box;background:${ACCENT};color:#fff;font:700 12px/24px system-ui,sans-serif;text-align:center;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
+      badge.style.cssText = 'position:absolute;top:-12px;left:-4px;min-width:24px;height:24px;padding:0 5px;box-sizing:border-box;background:${IS.ACCENT};color:#fff;font:700 12px/24px system-ui,sans-serif;text-align:center;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.55);';
       b.appendChild(badge); layer.appendChild(b); iss.marker = b;
     });
     function position() {

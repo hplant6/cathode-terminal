@@ -1,6 +1,6 @@
 const { Z } = require('./ui-constants');
 const path = require('path');
-const { MARCH_BORDER_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
+const IS = require('./inject-styles');   // read at build time: the colour follows the theme
 const { iconText } = require('./read-icon');
 
 // Build the camera cursor data URL once at require time
@@ -12,7 +12,7 @@ const CURSOR_URL = `url("data:image/svg+xml;base64,${CURSOR_B64}") 9 9, crosshai
 
 function getScreenshotScript() {
   return `(function() {
-  ${MARCH_KEYFRAMES_JS}
+  ${IS.MARCH_KEYFRAMES_JS}
   const existing = document.getElementById('__cathode_shot__');
   if (existing) existing.remove();
 
@@ -40,14 +40,14 @@ function getScreenshotScript() {
     sel.style.cssText = [
       'position:fixed', 'pointer-events:none',
       'display:none', 'box-sizing:border-box',
-      '${MARCH_BORDER_CSS}',
+      '${IS.MARCH_BORDER_CSS}',
     ].join(';');
     overlay.appendChild(sel);
 
     const lbl = document.createElement('div');
     lbl.style.cssText = [
       'position:fixed', 'pointer-events:none',
-      'background:${ACCENT}', 'color:#fff',
+      'background:${IS.ACCENT}', 'color:#fff',
       'font:700 10px/16px monospace', 'padding:1px 6px',
       'border-radius:0 0 3px 3px', 'display:none',
     ].join(';');

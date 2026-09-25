@@ -1,5 +1,5 @@
 const path = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
+const IS = require('./inject-styles');   // read at build time: the colour follows the theme
 const { Z } = require('./ui-constants');
 const { iconB64 } = require('./read-icon');
 
@@ -22,7 +22,7 @@ function getPickerScript(mode) {
     : mode === 'component' ? STORYBOOK_CURSOR
     : 'crosshair';
   return `(function() {
-  ${MARCH_KEYFRAMES_JS}
+  ${IS.MARCH_KEYFRAMES_JS}
   const existing = document.getElementById('__cathode_picker__');
   if (existing) existing.remove();
   const existingHl = document.getElementById('__cathode_hl__');
@@ -60,7 +60,7 @@ function getPickerScript(mode) {
     hl.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
       'box-sizing:border-box', 'transition:left 40ms,top 40ms,width 40ms,height 40ms',
-      '${MARCH_OUTLINE_CSS}',
+      '${IS.MARCH_OUTLINE_CSS}',
     ].join(';');
     (document.body || document.documentElement).appendChild(hl);
 
@@ -68,7 +68,7 @@ function getPickerScript(mode) {
     const label = document.createElement('div');
     label.style.cssText = [
       'position:fixed', 'pointer-events:none', 'z-index:${Z.HOVER_HIGHLIGHT}',
-      'background:${ACCENT}', 'color:#fff', 'font:bold 11px/18px monospace',
+      'background:${IS.ACCENT}', 'color:#fff', 'font:bold 11px/18px monospace',
       'padding:1px 6px', 'border-radius:2px', 'white-space:nowrap',
     ].join(';');
     (document.body || document.documentElement).appendChild(label);
@@ -144,14 +144,14 @@ function getPickerScript(mode) {
       } else {
         shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       }
-      shape.setAttribute('fill', 'rgba(${ACCENT_RGB},0.10)');
-      shape.setAttribute('stroke', '${ACCENT}');
+      shape.setAttribute('fill', 'rgba(${IS.ACCENT_RGB},0.10)');
+      shape.setAttribute('stroke', '${IS.ACCENT}');
       shape.setAttribute('stroke-width', '1.5');
       shape.setAttribute('stroke-dasharray', '4,3');
       shape.setAttribute('stroke-linejoin', 'round');
       shape.setAttribute('stroke-linecap', 'butt');
       shape.style.animation = 'cathode-march-svg 0.6s linear infinite';   /* marching ants */
-      shape.style.filter = 'drop-shadow(0 0 6px rgba(${ACCENT_RGB},0.5))';     /* orange glow */
+      shape.style.filter = 'drop-shadow(0 0 6px rgba(${IS.ACCENT_RGB},0.5))';     /* orange glow */
       svg.appendChild(shape);
     });
 

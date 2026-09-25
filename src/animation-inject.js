@@ -1,6 +1,6 @@
 const { Z } = require('./ui-constants');
 const path = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS } = require('./inject-styles');
+const IS = require('./inject-styles');   // read at build time: the colour follows the theme
 const SHARED = require('./inject-shared');
 const { iconB64 } = require('./read-icon');
 const { KEYFRAMES_FN_SRC } = require('./animation-spec');
@@ -17,7 +17,7 @@ const ANIM_CURSOR = `url("data:image/svg+xml;base64,${ANIM_B64}") 16 16, crossha
 // of them.
 function getAnimationScript(append) {
   return `(function() {
-  ${MARCH_KEYFRAMES_JS}
+  ${IS.MARCH_KEYFRAMES_JS}
   var __animKeyframes = ${KEYFRAMES_FN_SRC};   // inlined spec→WAAPI generator (shared with the panel)
   var __prev = (${append ? 'true' : 'false'} && window.__cathodeAnim) ? window.__cathodeAnim : null;
   if (__prev) { try { __prev.cancelAnims(); } catch(e){} }   // drop any live preview, keep targets/overlay state
@@ -46,7 +46,7 @@ function getAnimationScript(append) {
     var hv = document.createElement('div');
     hv.id = '__ca_hv';
     hv.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_MID};box-sizing:border-box;display:none;' +
-      'transition:left 40ms,top 40ms,width 40ms,height 40ms;${MARCH_OUTLINE_CSS}';
+      'transition:left 40ms,top 40ms,width 40ms,height 40ms;${IS.MARCH_OUTLINE_CSS}';
     (document.body || document.documentElement).appendChild(hv);
 
     var lastHover = null;

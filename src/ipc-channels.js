@@ -55,6 +55,13 @@ const IPC = Object.freeze({
   ACP_TOOL_APPROVED: 'acp-tool-approved',
   ACP_UPDATE: 'acp-update',
   AGENT_MD_READ: 'agent-md-read',
+  MOVE_PANEL_CANCEL: 'move-panel-cancel',
+  MOVE_PANEL_CLOSED: 'move-panel-closed',   // page-side Escape closed the tool → renderer hides the panel
+  MOVE_PANEL_HOVER: 'move-panel-hover',     // panel row hovered → highlight that arrow on the page
+  MOVE_PANEL_OPEN: 'move-panel-open',
+  MOVE_PANEL_REMOVE: 'move-panel-remove',
+  MOVE_PANEL_SEND: 'move-panel-send',
+  MOVE_PANEL_UPDATE: 'move-panel-update',   // live move list from the page (polled)
   ANIM_PANEL_CANCEL: 'anim-panel-cancel',
   ANIM_PANEL_OPEN: 'anim-panel-open',
   ANIM_PANEL_PREVIEW: 'anim-panel-preview',
@@ -171,8 +178,10 @@ const IPC = Object.freeze({
   PICK_PANEL_STYLE: 'pick-panel-style',
   PICK_PANEL_READ_CSS: 'pick-panel-read-css',   // re-read one element's computed CSS (with any forced pseudo-state applied)
   PICK_PANEL_UPDATE: 'pick-panel-update',
+  PICK_PANEL_SIZE: 'pick-panel-size',   // a resize-handle drag finished on the page → tick Width/Height in the drawer
   PICK_PROJECT_DIR: 'pick-project-dir',
-  PICK_RESIZE: 'pick-resize',
+  PICK_MOVE: 'pick-move',
+  OVERLAY_ACCENT: 'overlay-accent',   // theme's Selection colour → page-tool overlays (renderer → main)
   PICK_SCREENSHOT: 'pick-screenshot',
   PICK_SEND_TO_SESSION: 'pick-send-to-session',
   STATES_FORCE: 'states-force',
@@ -191,12 +200,6 @@ const IPC = Object.freeze({
   PTY_SPAWN: 'pty-spawn',
   REGISTER_BROWSER_TOOLS: 'register-browser-tools',
   RENDERER_READY: 'renderer-ready',
-  RESIZE_PANEL_CANCEL: 'resize-panel-cancel',
-  RESIZE_PANEL_DIMS: 'resize-panel-dims',
-  RESIZE_PANEL_OPEN: 'resize-panel-open',
-  RESIZE_PANEL_RESET: 'resize-panel-reset',
-  RESIZE_PANEL_SEND: 'resize-panel-send',
-  RESIZE_PANEL_SET: 'resize-panel-set',
   RIGHT_PANEL_MODE: 'right-panel-mode',
   SB_BAR_MENU_ACTION: 'sb-bar-menu-action',
   SCREENSHOT_PANEL_CANCEL: 'screenshot-panel-cancel',

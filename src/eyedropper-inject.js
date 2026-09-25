@@ -9,7 +9,7 @@
 //   pickedColor, instruction } or null.
 const { Z } = require('./ui-constants');
 const path = require('path');
-const { MARCH_OUTLINE_CSS, MARCH_KEYFRAMES_JS, ACCENT, ACCENT_RGB } = require('./inject-styles');
+const IS = require('./inject-styles');   // read at build time: the colour follows the theme
 const { iconB64 } = require('./read-icon');
 
 const ED_CURSOR_B64 = iconB64(path.join(__dirname, 'icons', 'eyedropper-cursor.svg'));
@@ -18,8 +18,8 @@ const ED_CURSOR = `url("data:image/svg+xml;base64,${ED_CURSOR_B64}") 2 20, cross
 
 function getEyedropperScript(snapshotDataUrl) {
   return `(function() {
-  ${MARCH_KEYFRAMES_JS}
-  if (window.__cathodeEyedropper) { try { window.__cathodeEyedropper.clear(); } catch(e){} }   // disarm the previous run's key handler first (like resize-inject)
+  ${IS.MARCH_KEYFRAMES_JS}
+  if (window.__cathodeEyedropper) { try { window.__cathodeEyedropper.clear(); } catch(e){} }   // disarm the previous run's key handler first (like move-inject)
   ['__ed_ov','__ed_loupe','__ed_pop','__ed_hl__','__ed_cp__'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();});
 
   return new Promise(function(resolve) {
@@ -64,7 +64,7 @@ function getEyedropperScript(snapshotDataUrl) {
     loupe.id = '__ed_loupe';
     loupe.style.cssText = 'position:fixed;pointer-events:none;z-index:${Z.OVERLAY_TOP};display:none;'
       + 'flex-direction:column;align-items:center;gap:9px;padding:11px 11px 8px;background:#000;border-radius:22px;'
-      + 'box-shadow:0 0 18px rgba(${ACCENT_RGB},.55),0 0 0 1px rgba(${ACCENT_RGB},.40),0 10px 30px rgba(0,0,0,.7);';
+      + 'box-shadow:0 0 18px rgba(${IS.ACCENT_RGB},.55),0 0 0 1px rgba(${IS.ACCENT_RGB},.40),0 10px 30px rgba(0,0,0,.7);';
     var lmag = document.createElement('div');
     lmag.style.cssText = 'position:relative;width:150px;height:150px;border-radius:20px;overflow:hidden;background:#0a0a0a;';
     var lcanvas = document.createElement('canvas');

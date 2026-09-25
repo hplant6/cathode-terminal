@@ -35,8 +35,9 @@ const { getPickerScript }        = require('./src/picker-inject');
 const { Z }                       = require('./src/ui-constants');
 const { getCombinedScript }       = require('./src/combined-inject');
 const { getScreenshotScript }     = require('./src/screenshot-inject');
-const { getResizeScript }         = require('./src/resize-inject');
 const { getAnimationScript }      = require('./src/animation-inject');
+const { getMoveScript }           = require('./src/move-inject');
+const injectStyles                = require('./src/inject-styles');
 const { cssSnippet: animCss, jsSnippet: animJs, summaryFor: animSummary, emitCode: animEmit, ANIM_FRAMEWORKS } = require('./src/animation-spec');
 const ANIM_FW_LABEL = Object.fromEntries(ANIM_FRAMEWORKS.map(f => [f[0], f[1]]));
 const { getDrawScript }           = require('./src/draw-inject');
@@ -4821,10 +4822,33 @@ async function clearPanelHighlight(view) {
   if (!wc || wc.isDestroyed()) return;
   try { await wc.executeJavaScript('window.__cathodePanel && window.__cathodePanel.clear()'); } catch (_) {}
 }
-ipcMain.on(IPC.PICK_PANEL_UPDATE, async (_, { active } = {}) => {
+// resize: the one focused element that gets on-page resize handles (null → none). While
+// handles are up, poll for finished drags and hand them to the drawer.
+let panelSizeTimer = null, panelSizeFor = null;   // poll timer + the pick it belongs to
+function stopPanelSizePoll() { if (panelSizeTimer) { clearInterval(panelSizeTimer); panelSizeTimer = null; } panelSizeFor = null; }
+function startPanelSizePoll(p) {
+  stopPanelSizePoll();
+  panelSizeFor = p;
+  panelSizeTimer = setInterval(async () => {
+    if (pendingPanelPick !== p || !p.view || p.view.webContents.isDestroyed()) { stopPanelSizePoll(); return; }
+    let st = null;
+    try { st = await p.view.webContents.executeJavaScript('window.__cathodePanel && window.__cathodePanel.sizeState ? window.__cathodePanel.sizeState() : null'); } catch (_) {}
+    if (st) uiSend(IPC.PICK_PANEL_SIZE, { i: st.i, props: st.props });
+  }, 150);
+}
+ipcMain.on(IPC.PICK_PANEL_UPDATE, async (_, { active, resize } = {}) => {
   const p = pendingPanelPick;
   if (!p || !p.view || p.view.webContents.isDestroyed()) return;
-  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])})`); } catch (_) {}
+  const rz = Number.isInteger(resize) ? resize : null;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodePanel && window.__cathodePanel.set(${JSON.stringify(active || [])}, ${rz === null ? 'null' : rz})`); } catch (_) {}
+  if (rz !== null) { if (panelSizeFor !== p) startPanelSizePoll(p); return; }
+  if (panelSizeFor === p) {   // handles going away: collect a drag that finished since the last tick
+    stopPanelSizePoll();
+    try {
+      const st = await p.view.webContents.executeJavaScript('window.__cathodePanel && window.__cathodePanel.sizeState ? window.__cathodePanel.sizeState() : null');
+      if (st) uiSend(IPC.PICK_PANEL_SIZE, { i: st.i, props: st.props });
+    } catch (_) {}
+  }
 });
 ipcMain.on(IPC.PICK_PANEL_DROP_SEL, async (_, { selId } = {}) => {
   const p = pendingPanelPick;
@@ -5211,82 +5235,147 @@ ipcMain.on(IPC.DRAW_COMPOSITE_DONE, (_, { compositeDataUrl, instructions } = {})
   uiSend(IPC.PICK_SEND_TO_SESSION, { text: drawInstr ? `${drawRef}\n\n${drawInstr}` : drawRef, body: drawInstr, detail: drawRef, label: 'Drawing' });
 });
 
-// ── IPC: element resize (left-column panel) ───────────────────────
-// The on-page handles stay live in the page; instructions/dimensions/Send-Cancel
-// live in the left column. window.__cathodeResize drives live dims + teardown.
-let pendingResize  = null;   // { view }
-let resizePollTimer = null;
-function stopResizePoll() { if (resizePollTimer) { clearInterval(resizePollTimer); resizePollTimer = null; } }
-function startResizePoll() {
-  stopResizePoll();
-  resizePollTimer = setInterval(async () => {
-    const p = pendingResize;
-    if (!p || !p.view || p.view.webContents.isDestroyed()) { stopResizePoll(); return; }
-    try {
-      const d = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.dims()');
-      if (d) uiSend(IPC.RESIZE_PANEL_DIMS, d);
-    } catch (_) {}
+// ── Move tool: arrows from elements to where they should live → one batched request ──
+// The page script stays armed for the whole session; main polls its state and mirrors the move list into the left-column panel.
+let pendingMove   = null;   // { view, ver }
+let movePollTimer = null;
+function stopMovePoll() { if (movePollTimer) { clearInterval(movePollTimer); movePollTimer = null; } }
+async function clearMove(view) {
+  const wc = (view || (pendingMove && pendingMove.view) || {}).webContents;
+  if (!wc || wc.isDestroyed()) return;
+  try { await wc.executeJavaScript('window.__cathodeMove && window.__cathodeMove.clear()'); } catch (_) {}
+}
+function endMoveSession() {
+  pendingMove = null; stopMovePoll();
+  uiSend(IPC.MOVE_PANEL_CLOSED);
+  uiSend(IPC.PICK_CANCELLED);
+}
+function startMovePoll() {
+  stopMovePoll();
+  movePollTimer = setInterval(async () => {
+    const p = pendingMove;
+    if (!p || !p.view || p.view.webContents.isDestroyed()) { endMoveSession(); return; }
+    let st;
+    try { st = await p.view.webContents.executeJavaScript(`window.__cathodeMove ? window.__cathodeMove.state(${p.ver}) : 'gone'`); } catch (_) { return; }
+    if (p !== pendingMove) return;
+    if (st === 'gone') { endMoveSession(); return; }   // page reloaded / navigated under the tool
+    if (!st) return;                                    // unchanged since last poll
+    p.ver = st.ver;
+    if (st.close) { await clearMove(p.view); endMoveSession(); return; }   // Escape with nothing left to cancel
+    uiSend(IPC.MOVE_PANEL_UPDATE, { moves: st.moves, selected: st.selected, hot: st.hot, snap: st.snap });
   }, 150);
 }
-async function clearResize(view, reset) {
-  const wc = (view || (pendingResize && pendingResize.view) || {}).webContents;
-  if (!wc || wc.isDestroyed()) return;
-  const js = reset
-    ? 'window.__cathodeResize && (window.__cathodeResize.reset(), window.__cathodeResize.clear())'
-    : 'window.__cathodeResize && window.__cathodeResize.clear()';
-  try { await wc.executeJavaScript(js); } catch (_) {}
-}
 
-ipcMain.on(IPC.PICK_RESIZE, async () => {
+// The theme's Selection colour: every page tool builds its overlay from it at arm time.
+ipcMain.on(IPC.OVERLAY_ACCENT, (_, hex) => { injectStyles.setOverlayAccent(hex); });
+
+ipcMain.on(IPC.PICK_MOVE, async (_, { snap = true } = {}) => {
   const view = getActivePickView();
   if (!view) { uiSend(IPC.PICK_CANCELLED); return; }
   try {
-    const sel = await view.webContents.executeJavaScript(getResizeScript());
-    if (!sel) { uiSend(IPC.PICK_CANCELLED); return; }   // cancelled before selecting
-    pendingResize = { view };
-    uiSend(IPC.RESIZE_PANEL_OPEN, { tool: 'Resize', label: sel.label, selShort: sel.selShort, oW: sel.oW, oH: sel.oH, vw: sel.vw, vh: sel.vh });
-    startResizePoll();
+    await view.webContents.executeJavaScript(getMoveScript({ snap: snap !== false }));
+    pendingMove = { view, ver: 0 };
+    uiSend(IPC.MOVE_PANEL_OPEN);
+    startMovePoll();
   } catch (err) {
-    console.error('Resize error:', err);
+    console.error('Move error:', err);
     uiSend(IPC.PICK_CANCELLED);
   }
 });
+ipcMain.on(IPC.MOVE_PANEL_REMOVE, async (_, { id } = {}) => {
+  const p = pendingMove;
+  if (!p || p.view.webContents.isDestroyed()) return;
+  try { await p.view.webContents.executeJavaScript(`window.__cathodeMove && window.__cathodeMove.remove(${Number(id)})`); } catch (_) {}
+});
+ipcMain.on(IPC.MOVE_PANEL_HOVER, async (_, { id } = {}) => {
+  const p = pendingMove;
+  if (!p || p.view.webContents.isDestroyed()) return;
+  const arg = id == null ? 'null' : Number(id);
+  try { await p.view.webContents.executeJavaScript(`window.__cathodeMove && window.__cathodeMove.highlight(${arg})`); } catch (_) {}
+});
+ipcMain.on(IPC.MOVE_PANEL_CANCEL, async () => {
+  const p = pendingMove;
+  pendingMove = null; stopMovePoll();
+  if (p) await clearMove(p.view);
+  uiSend(IPC.PICK_CANCELLED);
+});
 
-ipcMain.on(IPC.RESIZE_PANEL_RESET, async () => {
-  const p = pendingResize;
-  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
-  try { await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.reset()'); } catch (_) {}
-});
-ipcMain.on(IPC.RESIZE_PANEL_SET, async (_, { dim, value } = {}) => {
-  const p = pendingResize;
-  if (!p || !p.view || p.view.webContents.isDestroyed()) return;
-  try { await p.view.webContents.executeJavaScript(`window.__cathodeResize && window.__cathodeResize.set(${JSON.stringify(String(dim))}, ${Number(value)})`); } catch (_) {}
-});
-ipcMain.on(IPC.RESIZE_PANEL_SEND, async (_, { instruction = '' } = {}) => {
-  const p = pendingResize;
-  pendingResize = null; stopResizePoll();
-  if (!p) { uiSend(IPC.PICK_CANCELLED); return; }
-  let res = null;
-  try { res = await p.view.webContents.executeJavaScript('window.__cathodeResize && window.__cathodeResize.result()'); } catch (_) {}
-  await clearResize(p.view, false);   // keep the resize applied on the page
+function describeNudge(dx, dy) {
+  const parts = [];
+  if (dx) parts.push(`${Math.abs(dx)}px ${dx > 0 ? 'right' : 'left'}`);
+  if (dy) parts.push(`${Math.abs(dy)}px ${dy > 0 ? 'down' : 'up'}`);
+  return parts.join(', ') || '0px';
+}
+function composeMoveLines(moves, notes) {
+  const lines = [`───── Move Request${moves.length > 1 ? ` (${moves.length})` : ''} ─────`];
+  moves.forEach((m, i) => {
+    const n = i + 1, src = m.sources || [];
+    lines.push('');
+    if (m.kind === 'nudge') {
+      lines.push(`${n}. Nudge: ${src.map(s => s.selector).join(', ')}`);
+      src.forEach(s => lines.push('   ' + s.snippet));
+      lines.push(`   Shift it ${describeNudge(m.dx, m.dy)} (keep its parent)`);
+    } else if (m.kind === 'free') {
+      lines.push(src.length > 1
+        ? `${n}. Move together to the marked spot (keep their order): ${src.map(s => s.selector).join(', ')}`
+        : `${n}. Move to the marked spot: ${src[0] && src[0].selector}`);
+      src.forEach(s => lines.push('   ' + s.snippet));
+      if (m.from) lines.push(`   From: ${m.from}`);
+      lines.push(`   To:   the point arrow ${n} marks, ${describeNudge(m.dx, m.dy)} from its current centre (page point ${m.px}, ${m.py})`);
+      if (m.over) lines.push(`   That point is over: ${m.over.selector}`);
+    } else {
+      lines.push(src.length > 1
+        ? `${n}. Move together (keep their order): ${src.map(s => s.selector).join(', ')}`
+        : `${n}. Move: ${src[0] && src[0].selector}`);
+      src.forEach(s => lines.push('   ' + s.snippet));
+      if (m.from) lines.push(`   From: ${m.from}`);
+      const ref = m.ref || {};
+      const to = m.place === 'inside'
+        ? `inside ${ref.selector} (as its last child)`
+        : `${m.place} ${ref.selector}${m.refParent ? `, inside ${m.refParent}` : ''}`;
+      lines.push(`   To:   ${to}`);
+      if (ref.snippet) lines.push(`   Target: ${ref.snippet}`);
+    }
+    const note = notes && String(notes[m.id] || '').trim();
+    if (note) lines.push(`   Note: ${note}`);
+    if (m.stale) lines.push('   (the page re-rendered after this was recorded — the selectors may be out of date)');
+  });
+  return lines;
+}
+ipcMain.on(IPC.MOVE_PANEL_SEND, async (_, { instruction = '', notes = {}, screenshot = true } = {}) => {
+  const p = pendingMove;
+  pendingMove = null; stopMovePoll();
+  if (!p || p.view.webContents.isDestroyed()) { uiSend(IPC.PICK_CANCELLED); return; }
+  const wc = p.view.webContents;
+  let moves = [];
+  try { moves = (await wc.executeJavaScript('window.__cathodeMove ? window.__cathodeMove.moves() : []')) || []; } catch (_) {}
+  let shot = '';
+  if (screenshot && moves.length) {
+    // Capture with the arrows on the page (selection/hover chrome hidden) — one image
+    // makes a multi-move request far less ambiguous for the agent.
+    try {
+      await wc.executeJavaScript('window.__cathodeMove && window.__cathodeMove.hideChrome()');
+      await new Promise(r => setTimeout(r, 60));
+      const img = await wc.capturePage();
+      const dir = path.join(app.getPath('userData'), 'screenshots');
+      fs.mkdirSync(dir, { recursive: true });
+      shot = path.join(dir, 'move-' + Date.now() + '.png');
+      fs.writeFileSync(shot, img.toPNG());
+    } catch (e) { console.error('[move] screenshot failed:', (e && e.message) || e); shot = ''; }
+  }
+  await clearMove(p.view);
   uiSend(IPC.PICK_CANCELLED);
-  if (!res) return;
-  const { selector, snippet, oW, oH, nW, nH } = res;
   const instr = (instruction || '').trim();
-  if (Math.abs(nW - oW) < 2 && Math.abs(nH - oH) < 2 && !instr) return;   // nothing to send
-  const lines = ['───── Resize Request ─────', snippet, '', 'Selector: ' + selector];
-  if (nW !== oW) lines.push('  width:  ' + oW + 'px  →  ' + nW + 'px');
-  if (nH !== oH) lines.push('  height: ' + oH + 'px  →  ' + nH + 'px');
-  const rzUrl = activePageUrl();
-  const detail = (rzUrl ? `From ${pageSource()} — ${rzUrl}\n\n` : '') + lines.join('\n');
-  const body = (instr ? instr + '\n\n' : '') + 'Update the CSS so this element matches these dimensions.';
-  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Resize request' });
-});
-ipcMain.on(IPC.RESIZE_PANEL_CANCEL, async () => {
-  const p = pendingResize;
-  pendingResize = null; stopResizePoll();
-  if (p) await clearResize(p.view, true);   // revert the on-page resize
-  uiSend(IPC.PICK_CANCELLED);
+  if (!moves.length && !instr) return;   // nothing to send
+  const lines = moves.length ? composeMoveLines(moves, notes) : [];
+  if (shot) lines.push('', `[Screenshot with the moves drawn as numbered arrows: ${shot}]`);
+  const mvUrl = activePageUrl();
+  const detail = (mvUrl ? `From ${pageSource()} — ${mvUrl}\n\n` : '') + lines.join('\n');
+  const body = (instr ? instr + '\n\n' : '') + (moves.length
+    ? 'Update the source so these elements render in the new positions. Apply the moves in order. Prefer changing markup/component order over absolute positioning; adjust layout CSS only where the new position needs it.' +
+      (moves.some(m => m.kind === 'free') ? ' "Marked spot" moves are hand-drawn arrows, so the point is approximate: work out the placement the arrow means from the screenshot and the surrounding layout.' : '')
+    : '');
+  uiSend(IPC.PICK_SEND_TO_SESSION, { text: detail + '\n\n' + body, body, detail, label: 'Move request' });
 });
 
 // ── Animation tool (Phase 1: target an element → panel → compose request) ──
