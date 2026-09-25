@@ -3161,7 +3161,7 @@ html, body {
 /* Tool icon in the menu header — shade 3. Fixed 18px box (rather than stretching to the
    row's height, which varies panel to panel) so the subtitle below can indent by exactly
    icon width + .pp-head-top's 12px gap and land flush under the title, not the icon. */
-.tp-head-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; color: var(--spec-structural); }
+.tp-head-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; color: var(--spec-text-faint); }   /* shade 2: shade 3 was too close to the header fill */
 .tp-head-icon svg { width: 100%; height: 100%; display: block; }
 .tp-framed .tp-head > .tp-sub { margin-left: 30px; }   /* 18px icon + 12px gap */
 /* Secondary chrome — background+border+text recipe from .modal-btn-cancel, this app's

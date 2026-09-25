@@ -162,7 +162,12 @@ const THEME_PRESETS = {
   briefcase: {   // briefcase — dark olive-leather shades, muted teal accent, orange→gold graph
     '--spec-text':'#BDBBB2','--spec-text-dim':'#847D66','--spec-text-faint':'#4B4535','--spec-structural':'#1E1C13',
     '--spec-dropdown-bg':'#1A1710','--spec-toolbar-bg':'#15130D','--spec-header-bg':'#110F0A','--spec-input-bg':'#0E0C08','--spec-black':'#0A0905',
-    '--spec-accent':'#4A7275','--spec-selection':'#847D6C','--spec-accent-dark':'#574A35','--spec-accent-3':'#4D6365','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#F84A00','--spec-graph-2':'#B38C00','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
+    '--spec-accent':'#2D5E62','--spec-selection':'#847D6C','--spec-accent-dark':'#3D311D','--spec-accent-3':'#4D6365','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#F84A00','--spec-graph-2':'#B38C00','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
+  },
+  retro: {   // retro — mid-gray shades, cyan accent, green messages, orange→yellow graph
+    '--spec-text':'#F2F2F2','--spec-text-dim':'#B3B3B3','--spec-text-faint':'#808080','--spec-structural':'#707070',
+    '--spec-dropdown-bg':'#5E5E5E','--spec-toolbar-bg':'#4D4D4D','--spec-header-bg':'#3E3E3E','--spec-input-bg':'#303030','--spec-black':'#232323',
+    '--spec-accent':'#09E1FF','--spec-selection':'#E58080','--spec-accent-dark':'#19788D','--spec-accent-3':'#509D2C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#FF5C00','--spec-graph-2':'#E6CF00','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
   },
   deepocean: {   // deep-ocean slate — teal-tinted darks with a #1DBFA1 accent
     '--spec-text':'#C9D9D7','--spec-text-dim':'#8AA5A3','--spec-text-faint':'#4F6A6D','--spec-structural':'#2A3E42',
@@ -173,7 +178,7 @@ const THEME_PRESETS = {
 const BUILTIN_THEMES = [
   ['default','Default'], ['tan','Tan'], ['sky','Sky'],
   ['amber','Amber CRT'], ['dracula','Dracula'],
-  ['deepocean','Deep Ocean'], ['glacier','Glacier'], ['briefcase','Briefcase'],
+  ['deepocean','Deep Ocean'], ['glacier','Glacier'], ['briefcase','Briefcase'], ['retro','Retro'],
 ];
 
 // Modal display layout — three columns.
@@ -1359,8 +1364,9 @@ function usageMiniItem(labelHtml, pct, sub) {
   </div>`;
 }
 
-function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel, credits }) {
+function renderUsage({ ctx, lim, isClaude, agentCtx, agentTokens = 0, agentLabel, agentModelId, credits }) {
   usageModelEl.textContent = (ctx && ctx.ok && ctx.model) ? ctx.model : (agentLabel || '');
+  usageModelEl.title = agentModelId || '';   // the full provider:model id behind a shortened name
 
   // Build the shared metric list (each: full label, compact label, %, sub-line)
   const metrics = [];
@@ -1466,7 +1472,8 @@ async function refreshUsage() {
       ctx, lim, isClaude,
       agentCtx:    acpOther ? (s.ctxUsage || null) : null,   // fed by ACP usage_update notifications
       agentTokens: acpOther ? (s.tokenTotal || 0) : 0,       // totalled from prompt-result usage
-      agentLabel:  acpOther ? (s.name || s.agent) : '',
+      agentLabel:  acpOther ? (sessionModelName(s) || s.name || s.agent) : '',
+      agentModelId: acpOther && s.acpModels ? s.acpModels.currentModelId : '',
       credits,
     };
     renderUsage(_lastUsage);
@@ -2660,6 +2667,18 @@ function modelsFor(key) {
 //     whole provider+base_url+model stack, so they need a respawn.
 // Offer both when both exist: advertised first, then profiles. 'Default' (id '')
 // is dropped from the catalogue half — it is meaningless next to a concrete list.
+// The model an ACP agent that advertises models (Hermes) is running right now, by display
+// name. Hermes ids carry a provider prefix ("custom:gpt-oss:20b", "openrouter:anthropic/…");
+// when there's no friendlier name, drop the prefix. '' → the agent advertises none.
+const MODEL_PROVIDER_PREFIX = /^(custom|openrouter|nous|anthropic|openai|copilot|ollama|codex|gemini|google|groq|together|deepseek|xai|mistral):(?=.)/i;
+function sessionModelName(s) {
+  const am = s && s.acpModels;
+  if (!am || !am.currentModelId) return '';
+  const m = am.models.find(x => x.id === am.currentModelId);
+  const label = (m && m.label) || am.currentModelId;
+  return label === am.currentModelId ? label.replace(MODEL_PROVIDER_PREFIX, '') : label;
+}
+
 function sessionModels(s) {
   const adv = (s && s.acpModels && s.acpModels.models) || [];
   const cat = modelsFor(sessionToolKey(s));
@@ -4400,8 +4419,8 @@ ipcRenderer.on(IPC.ACP_READY, (_, { id, version, model, cwd, agent, modes, model
   s.acpModels = models || null;
   acpSetStatus(s, 'ready');
   refreshStatusFlags();   // the block is per-project — re-read for this session's cwd
-  renderAcpBanner(s, version || '', model || '', cwd || '');
-  if (s === sessions.get(activeId)) updateModePill();
+  renderAcpBanner(s, version || '', model || sessionModelName(s), cwd || '');
+  if (s === sessions.get(activeId)) { updateModePill(); refreshUsage(); }
   finishModelSwitch(s);  // dismiss "switching…" toast + confirm, if a model switch is pending
 });
 
@@ -4410,6 +4429,7 @@ ipcRenderer.on(IPC.ACP_MODEL_CHANGED, (_, { id, currentModelId, error }) => {
   if (!s) return;
   if (s.acpModels && currentModelId) s.acpModels.currentModelId = currentModelId;
   finishModelSwitch(s);   // in-place switch: no respawn, so nothing else dismisses the toast
+  if (s === sessions.get(activeId)) refreshUsage();   // the Usage header names the model
   if (error) showToast(`Couldn't switch model: ${error}`, { duration: 3000 });
 });
 
