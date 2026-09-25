@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-25
+
+### Added
+- **A Move tool (Alt+V), in the slot the Resize tool used to hold.** Select an element, drag an arrow to where it should live, repeat for as many elements as you like, then send one numbered request. Each move carries the element's selector and HTML snippet, where it came from and where it goes, an optional note, and optionally a screenshot of the page with the arrows drawn on it. A **Snap | Drag** switch sits under the selection. Snap resolves a drop to before/after/inside an element, marked with insertion lines. Drag points the arrow at any spot and hands the agent the offset plus the element under it. **S** flips the switch. Shift+click selects several elements to move together; Shift while dragging snaps to the parent; Ctrl/⌘ on release records a pixel nudge instead. Click an arrow's number or arrowhead to delete it, or Ctrl+Z to undo. With something selected, a drag *anywhere* moves it and a click selects something else, so a press just outside the element no longer grabs its neighbour. The selection fills while it's grabbed. The panel lists each move as the element and how far it travels.
+- **Resize handles in Box and Lasso.** Open one element's drawer and its outline becomes the old Resize tool's bounding box: 8 handles and a live W × H label. Dragging updates the element on the page and ticks the drawer's Width and Height rows, so the change goes out with Send like any other edit. Shift keeps the aspect ratio. The drag is applied to the element's computed CSS size, so padded `content-box` elements come out the right size, which the old Resize tool got wrong.
+- **A Selection colour in the theme settings** (Page Tools → Selection). It sets the colour of everything the page tools draw on the page: Box/Lasso outlines, hover boxes and name tags, resize handles, Move arrows and badges, and the Screenshot, Eyedropper, Accessibility, Design-drift and Animate overlays. Those used to be a fixed orange whatever the theme. It's a separate value, set to each built-in theme's accent for now. Themes saved before it existed fall back to their accent.
+- **Glacier**, a navy theme with a purple accent, and **Generate** in Custom Themes, which builds all 18 theme colours from a background and an accent. A generated theme follows the same lightness curve the built-in themes share, picking dark or light mode from the background. Status colours aren't generated, so red still means danger.
+- **Agent tabs show a coloured dot when a background tab raises a notification**: green for a reply, orange when it's waiting on an approval, red for an error or usage limit. It clears when you open the tab.
+
+### Changed
+- **New agent tabs open in the permission mode you last picked** for that agent (e.g. Auto) instead of always starting in Ask. Plan and Bypass Permissions aren't remembered: Plan is usually a one-task detour, and Bypass asks for confirmation every time.
+- **Switching Claude accounts now works reliably, and you can sign in from the Authentication modal.** A Claude login lives in two files, and switching used to write only the tokens, not the identity. The CLI then reported one account while using another's tokens, which is where "OAuth access token has been revoked" came from. Both files are now switched together. The live tokens are saved back first, since the CLI rotates them. The switch is verified with a real network check, and a refused switch rolls back. Running Claude sessions restart onto the new account. Sign-in happens in the modal, with Open/Copy buttons for the authorize link and a field for the code, instead of a terminal tab. The modal's account cards are visible again, too: they had been the same colour as the modal behind them.
+
+### Removed
+- **The Resize tool.** Its handles now live in Box and Lasso (see above), and the Move tool took its toolbar slot, icon and cursor. Alt+R is free.
+
+### Fixed
+- **The browser address bar's suggestions dropdown now closes when you click away.** It waits on a scan for running localhost servers, and if you clicked away before the scan finished, the dropdown opened after the close had already run. Nothing was left to close it after that.
+
 ## [1.14.0] - 2026-09-22
 
 ### Changed
