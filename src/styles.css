@@ -3097,7 +3097,6 @@ html, body {
   border: none; border-radius: 0;
   font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;   /* right clearance for the resize handle */
 }
-.tp-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 */
 
 /* ── Tool-panel composer bar (attach + persona above the instruction input) ── */
 /* Mirrors the main composer's #ui-toolbar so tool inputs look/behave the same. */
@@ -3139,22 +3138,6 @@ html, body {
   border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 200;
 }
 .tp-persona-menu.open { display: block; }
-/* Attachment chips */
-.tp-attach-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.tp-attach-chip {
-  display: inline-flex; align-items: center; gap: 5px; max-width: 190px;
-  height: 24px; padding: 0 4px 0 8px; border-radius: var(--radius-sm);
-  background: var(--spec-dropdown-bg); color: var(--spec-text-dim);
-  font: 11px var(--font-mono);
-}
-.tp-chip-glyph { display: flex; flex-shrink: 0; }
-.tp-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-chip-x {
-  flex-shrink: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center;
-  background: transparent; border: none; border-radius: 3px; box-shadow: none;
-  color: var(--spec-text-faint); font-size: 10px; cursor: pointer;
-}
-.tp-chip-x:hover { color: var(--spec-text); background: var(--spec-structural); }
 /* Send bar (cancel/send) */
 .tp-inner .pp-btns {
   display: flex; align-items: stretch; gap: 2px; min-height: 40px; margin: 0;
@@ -3585,27 +3568,29 @@ html, body {
   border: none; border-radius: 0;
   font: 12px/1.5 var(--font-mono); padding: 12px 28px 12px 14px; outline: none;
 }
-#pick-panel-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 — matches the chat placeholder */
-/* It's a contenteditable, so the textarea's own behaviours are rebuilt: wrapping, scrolling,
-   and a placeholder while it holds neither text nor chips. */
-#pick-panel-textarea.pp-editor { white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; cursor: text; }
-#pick-panel-textarea.pp-editor.is-empty::before { content: attr(data-placeholder); color: var(--spec-structural); pointer-events: none; }
-/* A selection chip inside the sentence — the composer's file chip, sized to sit on a line of
-   12px text. The one whose elements the list is showing carries the accent. */
-.pp-sel-chip { vertical-align: middle; margin: 0 2px; padding: 2px 6px 2px 9px; gap: 6px; cursor: pointer; user-select: none; line-height: 16px; }
+/* Chip editors (chip-editor.js): the composer and every tool instruction box are
+   contenteditables so chips can sit in the sentence. The textarea's own behaviours are
+   rebuilt here: wrapping, scrolling, and a placeholder while it holds neither text nor chips. */
+.chip-editor { white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; cursor: text; }
+.chip-editor.is-empty::before { content: attr(data-placeholder); color: var(--spec-structural); pointer-events: none; }
+/* A chip inside the sentence — attached files and Box/Lasso selections alike, sized to sit on
+   a line of text. Files keep the resting shade-3 border; the selection whose elements the
+   list is showing carries the accent. */
+.inline-chip { vertical-align: middle; margin: 0 2px; padding: 2px 6px 2px 9px; gap: 6px; user-select: none; line-height: 16px; white-space: nowrap; }
+.inline-chip .chip-label { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.pp-sel-chip { cursor: pointer; }
 .pp-sel-chip:hover { border-color: var(--spec-text-faint); }
 .pp-sel-chip.active { border-color: var(--accent); color: var(--spec-text); }
-.pp-sel-chip .chip-label { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 /* Remove icon, right side of the chip. Sized explicitly: it's the only way out of a chip
    short of backspacing over it, so it must never collapse to nothing. */
-.pp-sel-chip .pp-chip-x {
+.inline-chip .chip-rm {
   display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   width: 16px; height: 16px; margin-right: -2px; border-radius: 50%;
   color: var(--spec-text-dim); cursor: pointer;
   transition: color 0.12s, background 0.12s;
 }
-.pp-sel-chip .pp-chip-x svg { display: block; }
-.pp-sel-chip .pp-chip-x:hover { color: var(--spec-text); background: var(--spec-structural); }
+.inline-chip .chip-rm svg { display: block; }
+.inline-chip .chip-rm:hover { color: var(--spec-text); background: var(--spec-structural); }
 /* Screenshot toggle — the shared .view-toggle/.vt-switch component (same as Usage/System/
    DevTools) dropped into the tool bar; just needs to not shrink among the other buttons. */
 .tp-shot-toggle { flex-shrink: 0; }
@@ -3868,7 +3853,6 @@ html, body {
   padding: 9px 38px 9px 12px;
   -webkit-user-select: text; user-select: text;
 }
-#ui-textarea::placeholder { color: var(--spec-structural); }   /* shade 3 */
 
 /* ── Clearable inputs ──────────────────────────────────────────────
    An X inside the chat composer and other substantial text inputs, to clear
@@ -4403,8 +4387,8 @@ html, body {
 }
 #btn-reload:hover { color: var(--spec-text); }
 
-/* Device-emulation dropdown — styled like the Model/Figma dropdowns */
-#btn-device {
+/* Device-emulation dropdown — styled like the Model/Figma dropdowns. Export shares the look. */
+#btn-device, #btn-export {
   flex-shrink: 0;
   display: flex; align-items: center; gap: 5px;
   width: auto; height: 34px; max-width: 210px;
@@ -4421,7 +4405,13 @@ html, body {
 #btn-device:hover { color: var(--spec-text); background: var(--spec-structural); }   /* shade 0 / shade 3 */
 #btn-device.emulating { color: var(--spec-accent); }
 #btn-device-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-icon, .device-caret { flex-shrink: 0; }
+.device-icon, .device-caret, .export-icon { flex-shrink: 0; }
+/* Export: the dropdown's shape, filled like the other Accent 2 buttons (.mc-btn-switch,
+   .usage-budget-chip): Accent 2 at rest, Accent 1 on hover, white text. */
+#btn-export { gap: 7px; background: var(--spec-accent-dark); color: #fff; }
+#btn-export:hover:not(:disabled) { background: var(--spec-accent); color: #fff; }
+#btn-export.busy { background: var(--spec-accent); cursor: progress; }
+#btn-export:disabled { opacity: 0.4; cursor: default; }
 .device-caret { opacity: 0.7; }
 
 /* ── Device-emulation resize handles + drag ghost ── */
@@ -5907,9 +5897,21 @@ select.tabs-add-select-field { display: none; }
 }
 
 /* ── Theme modal ─────────────────────────────────────────────── */
-#theme-modal-box { width: 970px; max-width: 95vw; }
+/* A floating window rather than a modal: no scrim, so the colours being tuned are seen as
+   they are, and the rest of the app stays clickable (the backdrop lets clicks through; only
+   the box takes them). positionThemeWindow() centres it over the browser area, which the
+   native page view vacates while it's open (MODAL_OVERLAY). */
+#theme-modal { background: transparent; backdrop-filter: none; pointer-events: none; }
+#theme-modal-box {
+  position: fixed; width: 970px; max-width: 95vw; box-sizing: border-box;
+  display: flex; flex-direction: column;
+  pointer-events: auto;
+  box-shadow: 0 24px 64px var(--shadow-modal), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+#theme-modal .modal-title { cursor: grab; user-select: none; }   /* drag the window by its title */
+#theme-modal.dragging .modal-title { cursor: grabbing; }
 #theme-modal .modal-title { text-align: center; font-size: 16px; }
-#theme-modal-body { display: flex; gap: 0; max-height: 72vh; margin-top: 14px; }
+#theme-modal-body { display: flex; gap: 0; flex: 1; min-height: 0; max-height: 72vh; margin-top: 14px; }
 /* Left: theme selector */
 #theme-sidebar { flex: 0 0 176px; padding-right: 22px; border-right: 1px solid var(--spec-structural); }
 /* Group header — a button now, so it has to undo the bare-button icon defaults
@@ -5992,3 +5994,78 @@ select.tabs-add-select-field { display: none; }
   outline: none; transition: border-color 0.15s;
 }
 .theme-name-input:focus { border-color: var(--spec-text-dim); }   /* shade 1 */
+
+/* ── Export dialog (docs/export-tool.md) ─────────────────────────── */
+#export-modal-box { width: 760px; max-width: 94vw; max-height: 90vh; display: flex; flex-direction: column; background: var(--spec-dropdown-bg); }   /* shade 4 */
+#export-body { display: flex; gap: 22px; flex: 1 1 auto; min-height: 0; margin-top: 12px; }   /* the dialog grows to fit the options (up to 90vh) */
+/* Left: the preview — the whole page as a scrollable strip, or the visible screen */
+#export-preview-col { flex: 0 0 260px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+#export-preview {
+  flex: 1 1 0; min-height: 140px; overflow-y: auto;   /* as tall as the options column, less the Exported at box */
+  background: var(--spec-black); border: 1px solid var(--spec-structural); border-radius: var(--radius-md);
+  display: flex; justify-content: center; align-items: flex-start; padding: 10px;
+}
+/* Preview scrollbar: the app's 6px thumb in shade 3, inset 2px from the preview's right edge
+   (a transparent 2px border the background doesn't paint under). */
+#export-preview::-webkit-scrollbar { width: 8px; }
+#export-preview::-webkit-scrollbar-thumb { background: var(--spec-structural); background-clip: padding-box; border-right: 2px solid transparent; border-radius: 4px; }
+#export-preview::-webkit-scrollbar-thumb:hover { background: var(--spec-text-faint); background-clip: padding-box; }
+#export-preview img { display: block; width: 100%; height: auto; border-radius: 2px; box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+#export-preview.checker img { background: repeating-conic-gradient(#8884 0 25%, #0000 0 50%) 0 0 / 12px 12px; }   /* transparent PNG */
+/* Right: the options */
+#export-options { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; padding-right: 4px; }   /* scrolls only if 90vh isn't enough */
+/* One parameter per row, divided by a line one shade lighter than the dialog (shade 4 → 3). */
+.xp-row { display: flex; align-items: center; gap: 12px; height: 48px; flex-shrink: 0; border-bottom: 1px solid var(--spec-structural); }   /* every row the Area row's height */
+.xp-row.xp-last { border-bottom: none; }
+/* File name: the only row that grows — the resolved name sits right under the input, and
+   the row's top padding keeps the input where it would be in a 48px row. */
+.xp-row.xp-row-name { height: auto; align-items: flex-start; padding: 10px 0 12px; }
+.xp-row-name .xp-label { line-height: 18px; }   /* level with the checkboxes, the first line of the row */
+.xp-checks { display: flex; gap: 20px; margin-bottom: 4px; }
+.xp-checks .ct-checkbox { font: 11px var(--font-mono); color: var(--spec-text); }
+.xp-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.xp-hint { padding-left: 2px; font: 10.5px/1.4 var(--font-mono); color: var(--spec-text-dim); overflow-wrap: anywhere; }
+.xp-row[hidden] { display: none; }
+.xp-label {
+  flex: 0 0 104px; font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text);   /* titles: shade 0 */
+}
+.xp-seg { display: inline-flex; background: var(--spec-black); border-radius: 5px; padding: 2px; gap: 2px; flex-wrap: wrap; }
+.xp-seg button {
+  width: auto; height: 24px; padding: 0 10px; border: none; border-radius: 3px; background: transparent;
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 9.5px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text-dim); cursor: pointer;   /* unselected: shade 1 */
+  transition: color 0.15s, background 0.15s;
+}
+.xp-seg button:hover { background: transparent; color: var(--spec-text); }
+.xp-seg button.active { background: var(--spec-input-bg); color: var(--spec-text); }
+.xp-seg button:disabled { opacity: 0.35; cursor: default; }
+/* Switch labels read shade 1 when off (the app default, shade 2, is too dim here), shade 0 when on. */
+#export-options .vt-label { color: var(--spec-text-dim); }
+#export-options .view-toggle:has(.vt-switch.on) .vt-label { color: var(--spec-text); }
+.xp-row .rz-slider { flex: 1; }   /* the Box select slider */
+.xp-num { font: 11px var(--font-mono); color: var(--spec-text-dim); min-width: 28px; text-align: right; }
+#export-options .modal-input { margin: 0; padding: 5px 8px; font-size: 11px; }
+.xp-row .modal-input.xp-short { width: 110px; flex: 0 0 auto; }
+.xp-row .modal-input.xp-grow { flex: 1; min-width: 0; }
+.xp-row .ct-select { width: 150px; flex: 0 0 auto; }
+#export-note {
+  margin-top: 14px; padding: 8px 12px; border-radius: var(--radius-md);
+  background: var(--warning-dim); color: var(--warning); font: 11px/1.45 var(--font-mono);
+}
+#export-modal .modal-actions { margin-top: 16px; align-items: center; justify-content: flex-end; }
+/* Output size — a box two shades lighter than the dialog (shade 4 → 2), centred */
+#export-size { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--spec-text-faint); text-align: center; }
+.xp-size-title {
+  font-family: var(--font-title); font-stretch: 112.5%; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--spec-text);
+}
+#export-size-val { font: 700 11px/1.4 var(--font-mono); color: #fff; }
+/* Result toast: a button inside needs clicks (the stack itself is click-through) */
+.toast .toast-action {
+  pointer-events: auto; width: auto; height: auto; padding: 2px 8px; margin-left: 4px;
+  background: transparent; border: 1px solid var(--accent-border); border-radius: var(--radius-pill);
+  color: inherit; font: inherit; cursor: pointer;
+}
+.toast .toast-action:hover { background: var(--accent-border); }
+@media (max-width: 720px) { #export-body { flex-direction: column; } #export-preview-col { flex-basis: auto; } }

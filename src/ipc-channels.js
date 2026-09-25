@@ -253,6 +253,11 @@ const IPC = Object.freeze({
   UPDATE_PROGRESS: 'update-progress',
   DRAG_HOVER_PROBE: 'drag-hover-probe',   // renderer → main: start/stop reporting the cursor over a drag region
   DRAG_HOVER_POINT: 'drag-hover-point',   // main → renderer: cursor position in page px, or null once it leaves the window
+  EXPORT_PREPARE: 'export-prepare',         // renderer → main: previews + page metrics, before the dialog opens
+  EXPORT_SAVE_DIALOG: 'export-save-dialog', // renderer → main: native Save dialog for the chosen format
+  EXPORT_RUN: 'export-run',                 // renderer → main: capture (and, for PDF, write) after the dialog closes
+  EXPORT_PROGRESS: 'export-progress',       // main → renderer: { phase, pct | left }
+  EXPORT_CANCEL: 'export-cancel',           // renderer → main: Esc during a run
   WINDOW_CLOSE: 'window-close',
   WINDOW_MAXIMIZE_TOGGLE: 'window-maximize-toggle',
   WINDOW_MAXIMIZED_STATE: 'window-maximized-state',

@@ -15,6 +15,11 @@ try { window.iro = require('@jaames/iro'); } catch (_) {}
 // does — blank terminals) and the DOM renderer is plenty fast for these
 // sessions.
 const { trashIcon, eyeIcon } = require('./icons');
+const ChipEditor = require('./chip-editor');
+// The composer and every tool's instruction box are chip editors (contenteditables with a
+// textarea-shaped API), so attached files sit in the sentence. Installed before anything
+// looks them up.
+document.querySelectorAll('.chip-editor').forEach(el => ChipEditor.install(el));
 
 // macOS uses native traffic lights instead of the custom window controls — flag for CSS.
 if (process.platform === 'darwin') document.documentElement.classList.add('is-mac');
@@ -61,6 +66,8 @@ const LS = {
   projects:       'cathode-projects',               // project registry [{id,name,rootDir,lastActiveAt}]
   activeProject:  'cathode-active-project',          // id of the active project
   pickShowAll:    'cathode-pick-show-all',           // Box/Lasso: show the elements the scan ranked out
+  exportPrefs:     'cathode-export-prefs',           // Export dialog: last-used format/area/options
+  exportDirs:      'cathode-export-dirs',            // Export: last folder, per project id
   pickIncludeShot: 'cathode-pick-include-shot',      // Box/Lasso: attach a screenshot of the selection (default on)
   lastSeenVersion: 'cathode-last-seen-version',      // What's New: the app version this user last launched
   sbAgentLinkOff:  'cathode-sb-agent-link-off',      // Storybook: don't write the CLAUDE.md/AGENTS.md "check it" block
@@ -115,7 +122,8 @@ const THEME_TOKENS = [
   ['--danger',           'Danger'],
   ['--success',          'Success'],
   ['--warning',          'Warning'],
-  ['--spec-graph-2',     'Graph'],
+  ['--spec-graph-1',     'Graph 1'],
+  ['--spec-graph-2',     'Graph 2'],
   ['--mc-green',         'Running'],
   ['--mc-green-dark',    'Running Field'],
 ];
@@ -124,52 +132,51 @@ const THEME_PRESETS = {
   default: {
     '--spec-text':'#BCBCBC','--spec-text-dim':'#817E89','--spec-text-faint':'#46434D','--spec-structural':'#28262F',
     '--spec-dropdown-bg':'#212026','--spec-toolbar-bg':'#19191C','--spec-header-bg':'#111113','--spec-input-bg':'#08090C','--spec-black':'#000000',
-    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#30201C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-2':'#FFE16B','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
+    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#4C2112','--spec-accent-3':'#30201C','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#FF5720','--spec-graph-2':'#FFE16B','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
   },
   tan: {   // light, warm cream — dark text on light tan backgrounds
     '--spec-text':'#5C4A38','--spec-text-dim':'#7A6450','--spec-text-faint':'#9A8369','--spec-structural':'#C7B49E',
     '--spec-dropdown-bg':'#DDCDB8','--spec-toolbar-bg':'#E8DAC8','--spec-header-bg':'#F2E7D8','--spec-input-bg':'#FBF5EC','--spec-black':'#2A211A',
-    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#B83C10','--spec-accent-3':'#4A3826','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#B3681C','--mc-green':'#D8F5DE','--mc-green-dark':'#3C6B4A',
+    '--spec-accent':'#FF5720','--spec-selection':'#FF5720','--spec-accent-dark':'#B83C10','--spec-accent-3':'#4A3826','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-1':'#FF5720','--spec-graph-2':'#B3681C','--mc-green':'#D8F5DE','--mc-green-dark':'#3C6B4A',
   },
   sky: {   // light, cool blue — dark slate text on light blue backgrounds
     '--spec-text':'#2C3E50','--spec-text-dim':'#4A6076','--spec-text-faint':'#6E869C','--spec-structural':'#A9BFD4',
     '--spec-dropdown-bg':'#C7D8E8','--spec-toolbar-bg':'#D6E4F0','--spec-header-bg':'#E6EFF7','--spec-input-bg':'#F5F9FD','--spec-black':'#16202B',
-    '--spec-accent':'#2E7DD6','--spec-selection':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-2':'#2E7DD6','--mc-green':'#D6F2E2','--mc-green-dark':'#2F6B52',
+    '--spec-accent':'#2E7DD6','--spec-selection':'#2E7DD6','--spec-accent-dark':'#1A4F8C','--spec-accent-3':'#243A52','--danger':'#D33A30','--success':'#2E8B6E','--warning':'#B07A00','--spec-graph-1':'#2E7DD6','--spec-graph-2':'#2E7DD6','--mc-green':'#D6F2E2','--mc-green-dark':'#2F6B52',
   },
   amber: {   // P3 phosphor — amber CRT
     '--spec-text':'#FFB454','--spec-text-dim':'#C98A3A','--spec-text-faint':'#7A5526','--spec-structural':'#4A3419',
     '--spec-dropdown-bg':'#3B2914','--spec-toolbar-bg':'#2E200F','--spec-header-bg':'#1F150A','--spec-input-bg':'#120C05','--spec-black':'#000000',
-    '--spec-accent':'#FFA31A','--spec-selection':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-2':'#FFE16B','--mc-green':'#C8F5A8','--mc-green-dark':'#2E4A18',
+    '--spec-accent':'#FFA31A','--spec-selection':'#FFA31A','--spec-accent-dark':'#4C2E0A','--spec-accent-3':'#FFD27A','--danger':'#FF6B6B','--success':'#7DD957','--warning':'#FFD000','--spec-graph-1':'#FFA31A','--spec-graph-2':'#FFE16B','--mc-green':'#C8F5A8','--mc-green-dark':'#2E4A18',
   },
   dracula: {
     '--spec-text':'#F8F8F2','--spec-text-dim':'#BDBECC','--spec-text-faint':'#6272A4','--spec-structural':'#44475A',
     '--spec-dropdown-bg':'#3C3F51','--spec-toolbar-bg':'#343746','--spec-header-bg':'#282A36','--spec-input-bg':'#21222C','--spec-black':'#191A21',
-    '--spec-accent':'#BD93F9','--spec-selection':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
+    '--spec-accent':'#BD93F9','--spec-selection':'#BD93F9','--spec-accent-dark':'#3D2F5C','--spec-accent-3':'#FF79C6','--danger':'#FF5555','--success':'#50FA7B','--warning':'#F1FA8C','--spec-graph-1':'#BD93F9','--spec-graph-2':'#8BE9FD','--mc-green':'#50FA7B','--mc-green-dark':'#2C4433',
   },
-  glacier: {   // glacier navy — Henry's blue ramp seated one step darker than the
-               // swatches, so it carries the same weight as the other dark themes.
-               // Accent 1 is a lightened tint of #570FBB because --spec-accent is a
-               // text colour in most of its uses; the raw #570FBB is Accent 2, the
-               // fill it reads beautifully as behind white. The tint is pitched to
-               // match the default theme's white-on-accent contrast (3.03 vs 3.16),
-               // since --text-on-accent is fixed white on solid accent buttons.
-    '--spec-text':'#DCE9F2','--spec-text-dim':'#A3BED2','--spec-text-faint':'#557C93','--spec-structural':'#3B5D77',
-    '--spec-dropdown-bg':'#2F4E69','--spec-toolbar-bg':'#223F5A','--spec-header-bg':'#152F4C','--spec-input-bg':'#0D2643','--spec-black':'#08203E',
-    '--spec-accent':'#A77BFF','--spec-selection':'#A77BFF','--spec-accent-dark':'#570FBB','--spec-accent-3':'#2A1D4A','--danger':'#FF6B6B','--success':'#4ECFB0','--warning':'#E0B341','--spec-graph-2':'#DCC2FF','--mc-green':'#7FE3B0','--mc-green-dark':'#17423C',
+  glacier: {   // glacier navy — deep blue-black shades, indigo accent, cyan Messages/graph tip (Henry's 2026-09-25 revision)
+    '--spec-text':'#A7B8C8','--spec-text-dim':'#4B77A0','--spec-text-faint':'#20415F','--spec-structural':'#0C2339',
+    '--spec-dropdown-bg':'#0A1D30','--spec-toolbar-bg':'#081827','--spec-header-bg':'#051320','--spec-input-bg':'#030F1A','--spec-black':'#020B14',
+    '--spec-accent':'#4856D4','--spec-selection':'#1F8A98','--spec-accent-dark':'#1F8A98','--spec-accent-3':'#33BCC5','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#2576D5','--spec-graph-2':'#5BFFFF','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
+  },
+  briefcase: {   // briefcase — dark olive-leather shades, muted teal accent, orange→gold graph
+    '--spec-text':'#BDBBB2','--spec-text-dim':'#847D66','--spec-text-faint':'#4B4535','--spec-structural':'#1E1C13',
+    '--spec-dropdown-bg':'#1A1710','--spec-toolbar-bg':'#15130D','--spec-header-bg':'#110F0A','--spec-input-bg':'#0E0C08','--spec-black':'#0A0905',
+    '--spec-accent':'#4A7275','--spec-selection':'#847D6C','--spec-accent-dark':'#574A35','--spec-accent-3':'#4D6365','--danger':'#F44747','--success':'#4EC9B0','--warning':'#D4AA00','--spec-graph-1':'#F84A00','--spec-graph-2':'#B38C00','--mc-green':'#8EFFAE','--mc-green-dark':'#22432C',
   },
   deepocean: {   // deep-ocean slate — teal-tinted darks with a #1DBFA1 accent
     '--spec-text':'#C9D9D7','--spec-text-dim':'#8AA5A3','--spec-text-faint':'#4F6A6D','--spec-structural':'#2A3E42',
     '--spec-dropdown-bg':'#243235','--spec-toolbar-bg':'#202B2E','--spec-header-bg':'#1C2427','--spec-input-bg':'#191E1F','--spec-black':'#12181A',
-    '--spec-accent':'#1DBFA1','--spec-selection':'#1DBFA1','--spec-accent-dark':'#0F4C40','--spec-accent-3':'#17332F','--danger':'#F0645F','--success':'#4EC9B0','--warning':'#D9A93C','--spec-graph-2':'#7FE3FF','--mc-green':'#6FE8C4','--mc-green-dark':'#12403A',
+    '--spec-accent':'#1DBFA1','--spec-selection':'#1DBFA1','--spec-accent-dark':'#0F4C40','--spec-accent-3':'#17332F','--danger':'#F0645F','--success':'#4EC9B0','--warning':'#D9A93C','--spec-graph-1':'#1DBFA1','--spec-graph-2':'#7FE3FF','--mc-green':'#6FE8C4','--mc-green-dark':'#12403A',
   },
 };
 const BUILTIN_THEMES = [
   ['default','Default'], ['tan','Tan'], ['sky','Sky'],
   ['amber','Amber CRT'], ['dracula','Dracula'],
-  ['deepocean','Deep Ocean'], ['glacier','Glacier'],
+  ['deepocean','Deep Ocean'], ['glacier','Glacier'], ['briefcase','Briefcase'],
 ];
 
-// Modal display layout — three columns. (--spec-accent appears twice: as Accent 1 and Graph 1.)
+// Modal display layout — three columns.
 const THEME_GROUPS = [
   { title: 'Shades', col: 'shades', rows: [
     ['--spec-text','Shade 0'],['--spec-text-dim','Shade 1'],['--spec-text-faint','Shade 2'],
@@ -180,7 +187,7 @@ const THEME_GROUPS = [
     ['--spec-accent','Accent 1'],['--spec-accent-dark','Accent 2'],['--spec-accent-3','Messages'],
   ]},
   { title: 'Graph', col: 'mid', rows: [
-    ['--spec-accent','Graph 1'],['--spec-graph-2','Graph 2'],
+    ['--spec-graph-1','Graph 1'],['--spec-graph-2','Graph 2'],   // own tokens — Graph 1 used to be Accent 1 itself
   ]},
   { title: 'Page Tools', col: 'mid', rows: [
     ['--spec-selection','Selection'],   // selection outlines, hover, arrows and handles drawn on the page
@@ -272,11 +279,11 @@ function syncNativeMenuTheme(bgHex) {
   ipcRenderer.send(IPC.NATIVE_THEME, source);
 }
 
-// Graph (usage / sysperf) LED ramp — themeable: dark accent → accent. Both
-// ends are orange tones, so it stays visible on dark and light backgrounds.
+// Graph (usage / sysperf) LED ramp — themeable: Graph 1 (the low, left end) → Graph 2.
+// Graph 1 is its own token; themes saved before it existed fall back to the accent.
 function computeGraphStops() {
   const c = themeColors(activeThemeName);
-  return [[0, c['--spec-accent'] || '#FF5720'], [1, c['--spec-graph-2'] || '#FFE16B']];
+  return [[0, c['--spec-graph-1'] || c['--spec-accent'] || '#FF5720'], [1, c['--spec-graph-2'] || '#FFE16B']];
 }
 let GRAPH_STOPS = computeGraphStops();
 let _graphRaf = null;   // rAF handle for the redrawGraphs() throttle — declared here because redrawGraphs runs during the initial applyTheme() above the function's own definition
@@ -298,6 +305,8 @@ function applyTheme(name) {
     draftColors = { ...savedThemes[i].colors }; draftName = savedThemes[i].name;
     // Saved before the Selection token existed → start it from the theme's accent.
     if (!draftColors['--spec-selection']) draftColors['--spec-selection'] = draftColors['--spec-accent'] || '#FF5720';
+    // Saved before Graph 1 split from Accent 1 → start it where it was, on the accent.
+    if (!draftColors['--spec-graph-1']) draftColors['--spec-graph-1'] = draftColors['--spec-accent'] || '#FF5720';
   } else {
     draftColors = null; draftName = '';
   }
@@ -308,8 +317,6 @@ function applyTheme(name) {
   redrawGraphs();
   if (typeof renderThemeModal === 'function') renderThemeModal();
 }
-
-applyTheme(activeThemeName);   // initial
 
 // ── Theme modal ───────────────────────────────────────────────────
 const themeModalEl = document.getElementById('theme-modal');
@@ -441,6 +448,7 @@ function generateThemeFromPair(baseHex, accentHex) {
   out['--spec-accent'] = tuneAccentForText(accentHex, card);
   out['--spec-accent-dark'] = tuneAccentForFill(accentHex);
   out['--spec-selection'] = out['--spec-accent'];   // own token; starts as the accent
+  out['--spec-graph-1'] = out['--spec-accent'];     // likewise
   const acc = hexToHsl(out['--spec-accent']);
   // Messages: the accent sunk into the background, a tinted fill rather than a colour.
   out['--spec-accent-3'] = hslToHex(acc.h, clampNum(acc.s * 0.45, 0, 60),
@@ -453,6 +461,11 @@ function generateThemeFromPair(baseHex, accentHex) {
   GEN_STATUS.forEach(v => { out[v] = statusSrc[v]; });
   return out;
 }
+
+// Initial theme. Down here, not beside applyTheme: a generated ('gen') theme needs the
+// GEN_* tables above, and calling it earlier hit them before initialization — which
+// threw during boot and left the whole app unwired whenever 'gen' was the saved theme.
+applyTheme(activeThemeName);
 
 function renderThemeSidebar() {
   const el = document.getElementById('theme-presets');
@@ -695,9 +708,71 @@ function deleteSavedTheme(i) {
   applyTheme('default');
 }
 
-function openThemeModal() { renderThemeModal(); themeModalEl?.classList.add('open'); }
-function closeThemeModal() { themeModalEl?.classList.remove('open'); }
-_modalClosers.add(closeThemeModal);   // shared Escape handler — this modal predates wireModal
+// The theme editor is a floating window, not a modal: no scrim, the rest of the app stays
+// usable, and it sits centred over the browser area (which the native page view vacates
+// while it's open) so it covers none of the app's own UI. Drag it by its title.
+const themeBoxEl = document.getElementById('theme-modal-box');
+let themeWinMoved = null;   // { left, top } once dragged; cleared on close so it reopens centred
+function positionThemeWindow() {
+  if (!themeBoxEl || !themeModalEl?.classList.contains('open')) return;
+  const M = 12;   // breathing room inside the region
+  const ph = document.getElementById('browser-placeholder')?.getBoundingClientRect();
+  // Browser area hidden (single-pane chat) or too cramped for the editor → centre in the window.
+  const r = ph && ph.width >= 480 && ph.height >= 320
+    ? ph : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+  themeBoxEl.style.maxWidth  = Math.max(0, r.width  - M * 2) + 'px';
+  themeBoxEl.style.maxHeight = Math.max(0, r.height - M * 2) + 'px';
+  const b = themeBoxEl.getBoundingClientRect();
+  let left, top;
+  if (themeWinMoved) ({ left, top } = themeWinMoved);
+  else { left = r.left + (r.width - b.width) / 2; top = r.top + (r.height - b.height) / 2; }
+  // Keep the title bar reachable whatever the window size does.
+  left = Math.min(Math.max(left, 0), window.innerWidth - Math.min(b.width, 120));
+  top  = Math.min(Math.max(top, 0), window.innerHeight - 40);
+  themeBoxEl.style.left = Math.round(left) + 'px';
+  themeBoxEl.style.top  = Math.round(top) + 'px';
+}
+window.addEventListener('resize', positionThemeWindow);
+{
+  const ph = document.getElementById('browser-placeholder');
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(positionThemeWindow);
+    if (ph) ro.observe(ph);                    // split drag, panel collapse
+    if (themeBoxEl) ro.observe(themeBoxEl);    // content re-rendered to a new height
+  }
+}
+(function wireThemeWindowDrag() {
+  const title = themeBoxEl?.querySelector('.modal-title');
+  if (!title) return;
+  title.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const b = themeBoxEl.getBoundingClientRect();
+    const dx = e.clientX - b.left, dy = e.clientY - b.top;
+    themeModalEl.classList.add('dragging');
+    const onMove = (ev) => { themeWinMoved = { left: ev.clientX - dx, top: ev.clientY - dy }; positionThemeWindow(); };
+    const onUp = () => {
+      themeModalEl.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+})();
+function openThemeModal() {
+  renderThemeModal();
+  themeModalEl?.classList.add('open');
+  positionThemeWindow();
+}
+function closeThemeModal() { themeModalEl?.classList.remove('open'); themeWinMoved = null; }
+// Shared Escape handler (this window predates wireModal). With the app usable around it,
+// Escape only closes it when you're not in the middle of something else — e.g. Escape in
+// the composer still stops the agent without also closing the theme window.
+_modalClosers.add(() => {
+  const a = document.activeElement;
+  if (!a || a === document.body || themeBoxEl?.contains(a)) closeThemeModal();
+});
 document.getElementById('theme-modal-close')?.addEventListener('click', closeThemeModal);
 
 // Generic modal close: any .mcp-modal-close button closes its parent modal.
@@ -707,7 +782,6 @@ document.addEventListener('click', (e) => {
   const modal = btn.closest('.modal-backdrop');
   if (modal) modal.classList.remove('open');
 });
-themeModalEl?.addEventListener('click', (e) => { if (e.target === themeModalEl) closeThemeModal(); });
 
 // ── Pin icons ─────────────────────────────────────────────────────
 
@@ -1702,7 +1776,6 @@ const btnFigma    = document.getElementById('btn-figma');
 const figmaMenu   = document.getElementById('figma-menu');
 const composerChips = document.getElementById('composer-chips');
 let figmaChips = [];   // [{key,title,instruction}]
-let attachChips = [];  // [{kind:'file'|'folder', path}]
 
 // Chip glyphs for attached files / folders (mirror the toolbar button icons).
 const FILE_GLYPH = `<svg class="chip-glyph" viewBox="0 0 18 18" width="11" height="11" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.25" xmlns="http://www.w3.org/2000/svg"><path d="M10.985,5.422l-4.773,4.773c-.586,.586-.586,1.536,0,2.121h0c.586,.586,1.536,.586,2.121,0l4.95-4.95c1.172-1.172,1.172-3.071,0-4.243h0c-1.172-1.172-3.071-1.172-4.243,0l-4.95,4.95c-1.757,1.757-1.757,4.607,0,6.364h0c1.757,1.757,4.607,1.757,6.364,0l4.773-4.773"/></svg>`;
@@ -1887,12 +1960,12 @@ function wireFileDrop(zone, onPaths) {
     e.preventDefault(); e.stopPropagation();
     depth = 0; zone.classList.remove('drag-over');
     const paths = Array.from(e.dataTransfer.files || []).map(pathOf).filter(Boolean);
-    if (paths.length) onPaths(paths);
+    if (paths.length) onPaths(paths, { x: e.clientX, y: e.clientY });
   });
 }
 
 function makeToolComposerBar(foot) {
-  const ta = foot.querySelector('textarea, .pp-editor');   // the Box/Lasso input is an editor, not a textarea
+  const ta = foot.querySelector('.chip-editor');
   if (!ta || foot._composerBar) return foot._composerBar || null;
 
   const bar = document.createElement('div');
@@ -1905,9 +1978,6 @@ function makeToolComposerBar(foot) {
   attachBtn.innerHTML = TOOL_ATTACH_SVG;
 
   const persona = makeToolPersonaControl();
-
-  const chips = document.createElement('div');
-  chips.className = 'tp-attach-chips';
 
   bar.append(attachBtn, persona.wrap);
   // Box/Lasso: Add Selection now lives in the panel header, beside New Selection
@@ -1947,7 +2017,6 @@ function makeToolComposerBar(foot) {
     shotWrap.append(shotLabel, shotSwitch);
     bar.append(shotWrap);
   }
-  bar.append(chips);
   foot.insertBefore(bar, foot.firstChild);
   registerPersonaControl(persona);
 
@@ -1958,48 +2027,24 @@ function makeToolComposerBar(foot) {
   // moment it is made and at the moment it is used.
   if (INTENT_DIRECTIVE_BY_FOOT[foot.id]) makeSendSplit(foot);
 
-  const baseOf = (p) => String(p || '').split(/[\\/]/).pop();
-  let attach = [];   // [{ kind:'file', path }]
-  function renderChips() {
-    chips.innerHTML = '';
-    attach.forEach((a, i) => {
-      const chip = document.createElement('span');
-      chip.className = 'tp-attach-chip';
-      chip.title = a.path;
-      const g = document.createElement('span'); g.className = 'tp-chip-glyph'; g.innerHTML = FILE_GLYPH;
-      const t = document.createElement('span'); t.className = 'tp-chip-name'; t.textContent = baseOf(a.path);
-      const x = document.createElement('button'); x.type = 'button'; x.className = 'tp-chip-x'; x.textContent = '✕';
-      x.addEventListener('click', () => { attach.splice(i, 1); renderChips(); });
-      chip.append(g, t, x);
-      chips.appendChild(chip);
-    });
-    bar.classList.toggle('has-chips', attach.length > 0);
-  }
+  // Attached files go into the instruction as chips, where the cursor is — the same chips
+  // as the main composer, so you can say what each one is for.
   attachBtn.addEventListener('click', async () => {
     const paths = await ipcRenderer.invoke(IPC.SHOW_FILE_DIALOG);
-    if (!paths || !paths.length) return;
-    paths.forEach(p => { if (p && !attach.some(a => a.path === p)) attach.push({ kind: 'file', path: p }); });
-    renderChips();
+    (paths || []).forEach(p => { if (p) ChipEditor.insertChip(ta, makeFileChip(p, 'file')); });
   });
+  // Drop files anywhere on the footer — onto the text they land where they're dropped.
+  wireFileDrop(foot, (paths, point) => paths.forEach(p => ChipEditor.insertChip(ta, makeFileChip(p, 'file'), point)));
 
-  // Drop files anywhere on the footer — the textarea, the toolbar or the chip strip —
-  // and they attach exactly as the paperclip would.
-  wireFileDrop(foot, (paths) => {
-    paths.forEach(p => { if (p && !attach.some(a => a.path === p)) attach.push({ kind: 'file', path: p }); });
-    renderChips();
-  });
-
-  const api = { attachPaths: () => attach.map(a => a.path), clear: () => { attach = []; renderChips(); } };
+  const api = {};
   foot._composerBar = api;
   return api;
 }
 
-// Prepend the active persona lens and append any attached paths to a tool's
-// instruction, so tool messages carry the same context as the main composer.
+// Prepend the active persona lens to a tool's instruction, so tool messages carry the
+// same context as the main composer. Attached files are already in the text, as chips.
 function decorateToolInstruction(instruction, foot) {
   let text = (instruction || '').trim();
-  const paths = foot && foot._composerBar ? foot._composerBar.attachPaths() : [];
-  if (paths.length) text = (text ? text + '\n\n' : '') + paths.join('\n');
   // Framing goes first: the agent should know the numbers are a sketch before it reads
   // them. Read off the foot's send mode rather than off the click, so the keyboard send
   // (Enter in the instruction box) honours the same choice the button is advertising.
@@ -2207,25 +2252,38 @@ function renderFigmaChips() {
     composerChips.appendChild(chip);
   });
 
-  attachChips.forEach((c, i) => {
-    const chip = document.createElement('span');
-    chip.className = 'composer-chip attach-chip';
-    chip.title = c.path;
-
-    fillChip(chip, c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(c.path));
-
-    const x = document.createElement('button');
-    x.className = 'chip-x';
-    x.title = 'Remove';
-    x.textContent = '✕';
-    x.addEventListener('click', () => { attachChips.splice(i, 1); renderFigmaChips(); });
-    chip.appendChild(x);
-
-    composerChips.appendChild(chip);
-  });
-
-  composerChips.classList.toggle('has-chips', figmaChips.length > 0 || attachChips.length > 0);
+  composerChips.classList.toggle('has-chips', figmaChips.length > 0);
 }
+
+// An attached file or folder, as a chip that sits in the text of a chip editor (the
+// composer or a tool's instruction box) — the same chip as a Box/Lasso selection, with the
+// resting border. It reads into the sent text as its backticked path, so the agent sees
+// exactly where in your sentence each file was mentioned.
+const REMOVE_CHIP_SVG = '<svg viewBox="0 0 18 18" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5l8 8M13 5l-8 8"/></svg>';
+const fileChipText = (p) => '`' + p + '`';
+function makeChipRemove(title, onRemove) {
+  const x = document.createElement('span');
+  x.className = 'chip-rm'; x.setAttribute('role', 'button'); x.title = title;
+  x.innerHTML = REMOVE_CHIP_SVG;
+  x.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onRemove(); });
+  return x;
+}
+function makeFileChip(path, kind) {
+  const chip = document.createElement('span');
+  chip.className = 'composer-chip attach-chip inline-chip';
+  chip.contentEditable = 'false';
+  chip.dataset.text = fileChipText(path);
+  chip.dataset.path = path;
+  chip.dataset.kind = kind;
+  chip.title = path;
+  fillChip(chip, kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(path));
+  chip.appendChild(makeChipRemove('Remove', () => ChipEditor.removeChip(chip)));
+  chip.addEventListener('mousedown', (e) => e.preventDefault());   // keep the cursor where it was
+  return chip;
+}
+// The files attached in an editor, in the order they appear in the text.
+const attachedIn = (editor) => ChipEditor.chips(editor).filter(c => c.dataset.path)
+  .map(c => ({ kind: c.dataset.kind || 'file', path: c.dataset.path }));
 
 // Last path segment (handles both \ and / separators), for the chip label.
 function baseName(p) {
@@ -2265,43 +2323,52 @@ function addPanelEscClose(panel, cancel, isTyping) {
   });
 }
 
-// Read-only copies of the composer chips (Figma + attach), shown inside the sent
-// user message in the chat — same look, minus the remove button.
-function buildChatChips(figma, attach) {
-  if ((!figma || !figma.length) && (!attach || !attach.length)) return null;
+// Read-only copies of the composer's Figma chips, shown inside the sent user message in
+// the chat — same look, minus the remove button.
+function buildChatChips(figma) {
+  if (!figma || !figma.length) return null;
   const wrap = document.createElement('div');
   wrap.className = 'acp-msg-chips';
-  (figma || []).forEach(c => {
+  figma.forEach(c => {
     const chip = document.createElement('span');
     chip.className = 'composer-chip';
     fillChip(chip, FIGMA_GLYPH, c.title);
     wrap.appendChild(chip);
   });
-  (attach || []).forEach(c => {
-    const chip = document.createElement('span');
-    chip.className = 'composer-chip attach-chip';
-    chip.title = c.path;
-    fillChip(chip, c.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(c.path));
-    wrap.appendChild(chip);
-  });
   return wrap;
 }
+// A sent message's text with its attached files back as chips, where they were in the
+// sentence. Files that aren't found in the text (there shouldn't be any) are left out.
+function fillTextWithChips(el, text, attach) {
+  const known = new Map((attach || []).map(a => [fileChipText(a.path), a]));
+  if (!known.size) { el.textContent = text; return; }
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp([...known.keys()].sort((a, b) => b.length - a.length).map(esc).join('|'), 'g');
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) el.append(text.slice(last, m.index));
+    const a = known.get(m[0]);
+    const chip = document.createElement('span');
+    chip.className = 'composer-chip attach-chip inline-chip';
+    chip.title = a.path;
+    fillChip(chip, a.kind === 'folder' ? FOLDER_GLYPH : FILE_GLYPH, baseName(a.path));
+    el.appendChild(chip);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) el.append(text.slice(last));
+}
 
-function addAttachChips(paths, kind) {
-  let added = false;
+// Attached files land in the composer's text as chips — at the drop point or the cursor.
+function addAttachChips(paths, kind, point) {
   paths.forEach(p => {
-    if (!p || attachChips.some(c => c.path === p)) return;   // skip blanks + dupes
+    if (!p) return;
     // Drop-in downscale: the chip (and the agent, which reads this path itself) gets
     // the resized copy — the original file on disk is never touched.
     const finalPath = (kind === 'file' && isChatImage(p)) ? maybeDownscaleForChat(p) : p;
-    if (attachChips.some(c => c.path === finalPath)) return;   // the resized copy may already be attached
-    attachChips.push({ kind, path: finalPath });
-    added = true;
+    ChipEditor.insertChip(uiTextarea, makeFileChip(finalPath, kind), point);
   });
-  if (added) renderFigmaChips();
   uiTextarea.focus();
 }
-function clearAttachChips() { attachChips = []; renderFigmaChips(); }
 
 function editChipUrl(c, chip) {
   const urlEl = chip.querySelector('.chip-url');
@@ -3177,7 +3244,7 @@ document.querySelectorAll('select.modal-input').forEach(enhanceSelect);
 // Shared tool-panel footer: drag any .tp-resize handle to size its .tp-foot
 // textarea (up → taller). One wiring for every menu that uses the shared footer.
 document.querySelectorAll('.tp-resize').forEach(handle => {
-  const ta = handle.closest('.tp-foot')?.querySelector('textarea, .pp-editor');
+  const ta = handle.closest('.tp-foot')?.querySelector('.chip-editor');
   if (!ta) return;
   let startY = 0, startH = 0;
   const onMove = (e) => {
@@ -4034,7 +4101,7 @@ function acpAddUserMsg(s, text, images = [], chips = null) {
   const label  = isObj ? (text.label  || 'Details') : '';
   const el = document.createElement('div');
   el.className = 'acp-msg user';
-  if (chips) { const w = buildChatChips(chips.figma, chips.attach); if (w) el.appendChild(w); }
+  if (chips) { const w = buildChatChips(chips.figma); if (w) el.appendChild(w); }
   const badges = isObj && Array.isArray(text.badges) ? text.badges : [];
   if (badges.length) {
     const row = document.createElement('div');
@@ -4045,7 +4112,7 @@ function acpAddUserMsg(s, text, images = [], chips = null) {
   if (body && body.trim()) {
     const t = document.createElement('div');
     t.className = 'acp-msg-text';
-    t.textContent = body;
+    fillTextWithChips(t, body, chips && chips.attach);
     el.appendChild(t);
   }
   if (detail && detail.trim()) {
@@ -8418,6 +8485,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
       if (n.nodeType === 3) out += n.data;
       else if (n.nodeType === 1) {
         if (n.classList.contains('pp-sel-chip')) { const k = nums && nums.get(+n.dataset.sel); if (k) out += `[Selection ${k}]`; }
+        else if (n.dataset.text != null) out += n.dataset.text;   // an attached file
         else if (n.tagName === 'BR') out += '\n';
         else { if (/^(DIV|P)$/.test(n.tagName) && out && !out.endsWith('\n')) out += '\n'; walk(n); }
       }
@@ -8445,16 +8513,11 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function syncChipActive() { chipEls().forEach(c => c.classList.toggle('active', +c.dataset.sel === activeSel)); }
   function makeChip(id) {
     const chip = document.createElement('span');
-    chip.className = 'composer-chip pp-sel-chip';
+    chip.className = 'composer-chip inline-chip pp-sel-chip';
     chip.contentEditable = 'false';
     chip.dataset.sel = String(id);
     fillChip(chip, SEL_GLYPH, 'Selection');   // numbered by syncChipLabels
-    // Remove icon on the right of the label.
-    const x = document.createElement('span');
-    x.className = 'pp-chip-x'; x.setAttribute('role', 'button'); x.title = 'Remove selection';
-    x.innerHTML = '<svg viewBox="0 0 18 18" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 5l8 8M13 5l-8 8"/></svg>';
-    x.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); chip.remove(); syncEmpty(); removeSelection(id); });
-    chip.appendChild(x);
+    chip.appendChild(makeChipRemove('Remove selection', () => { chip.remove(); syncEmpty(); removeSelection(id); }));
     chip.addEventListener('mousedown', (e) => e.preventDefault());   // keep the cursor where it was
     chip.addEventListener('click', () => activateSelection(id));
     return chip;
@@ -8625,7 +8688,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const instruction = editorText(selNumbers()).trim();
     const includeShot = localStorage.getItem(LS.pickIncludeShot) !== '0';
     ipcRenderer.send(IPC.PICK_PANEL_SEND, { instruction: decorateToolInstruction(instruction, _foot), items: resolvedItems(), includeShot });
-    _foot?._composerBar?.clear();
     close();
   }
   function cancel() {
@@ -8785,7 +8847,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function send() {
     const f = textarea.closest('.tp-foot');
     ipcRenderer.send(IPC.MOVE_PANEL_SEND, { instruction: decorateToolInstruction(textarea.value.trim(), f), notes: { ...notes }, screenshot: shotBtn.classList.contains('on') });
-    f?._composerBar?.clear();
     close();
   }
 
@@ -9037,7 +9098,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     schedulePreview();   // re-preview against the now-larger target set
   }
   function close()  { panel.hidden = true; textarea.value = ''; targets = []; clearTimeout(previewTimer); }
-  function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: decorateToolInstruction(textarea.value.trim(), f), framework: selectedFw }); f?._composerBar?.clear(); close(); }
+  function send()   { const f = textarea.closest('.tp-foot'); ipcRenderer.send(IPC.ANIM_PANEL_SEND, { spec: currentSpec(), instruction: decorateToolInstruction(textarea.value.trim(), f), framework: selectedFw }); close(); }
   function cancel() { ipcRenderer.send(IPC.ANIM_PANEL_CANCEL); close(); }
 
   sendBtn?.addEventListener('click', send);
@@ -9183,7 +9244,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     }));
     const _foot = instr.closest('.tp-foot');
     ipcRenderer.send(IPC.EXTRACT_PANEL_SEND, { perElement, instruction: decorateToolInstruction(instr.value.trim(), _foot) });
-    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.EXTRACT_PANEL_CANCEL); close(); }
@@ -9263,7 +9323,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     ensureIro(() => { if (!window.iro) return; if (!picker) buildPicker(picked); else setPicker(picked); setNew(picked); hexInput.value = picked; });
   }
   function close() { ipcRenderer.send(IPC.CP_CLEAR_TARGET_HIGHLIGHT); panel.hidden = true; instr.value = ''; }
-  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.EYEDROPPER_SEND, { instruction: decorateToolInstruction(instr.value.trim(), f) }); f?._composerBar?.clear(); close(); }
+  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.EYEDROPPER_SEND, { instruction: decorateToolInstruction(instr.value.trim(), f) }); close(); }
   function cancel() { ipcRenderer.send(IPC.EYEDROPPER_CANCEL); close(); }
 
   propSel.addEventListener('change', async () => {
@@ -9386,7 +9446,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     }));
     const _foot = instrEl ? instrEl.closest('.tp-foot') : null;
     ipcRenderer.send(IPC.A11Y_SEND, { issues: out, instruction: decorateToolInstruction(instrEl ? instrEl.value.trim() : '', _foot) });
-    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.A11Y_CANCEL); close(); }
@@ -9400,7 +9459,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instrEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  addPanelEscClose(panel, cancel, el => /^(TEXTAREA|INPUT)$/.test(el.tagName));
+  addPanelEscClose(panel, cancel, el => /^(TEXTAREA|INPUT)$/.test(el.tagName) || el.isContentEditable);
 
   ipcRenderer.on(IPC.A11Y_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -9496,7 +9555,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
     const out = issues.filter(i => state[i.idx].checked).map(i => ({ selector: i.selector, cat: i.cat, prop: i.prop, from: i.from, token: i.token, toVal: i.toVal, source: i.source, hex: i.hex, tokenHex: i.tokenHex, url }));
     const _foot = instrEl ? instrEl.closest('.tp-foot') : null;
     ipcRenderer.send(IPC.DRIFT_SEND, { issues: out, instruction: decorateToolInstruction(instrEl ? instrEl.value.trim() : '', _foot) });
-    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.DRIFT_CANCEL); close(); }
@@ -9509,7 +9567,7 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   sendBtn.addEventListener('click', send);
   cancelBtn.addEventListener('click', cancel);
   instrEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-  addPanelEscClose(panel, cancel, el2 => /^(TEXTAREA|INPUT)$/.test(el2.tagName));
+  addPanelEscClose(panel, cancel, el2 => /^(TEXTAREA|INPUT)$/.test(el2.tagName) || el2.isContentEditable);
 
   ipcRenderer.on(IPC.DRIFT_PANEL_OPEN, (_, data) => open(data || {}));
 })();
@@ -9606,7 +9664,6 @@ ipcRenderer.on(IPC.BROWSER_DID_NAVIGATE, () => {
   function send() {
     const _foot = instr.closest('.tp-foot');
     ipcRenderer.send(IPC.SCREENSHOT_PANEL_SEND, { instruction: decorateToolInstruction(instr.value.trim(), _foot), compositeDataUrl: hasDrawing ? composite() : null });
-    _foot?._composerBar?.clear();
     close();
   }
   function cancel() { ipcRenderer.send(IPC.SCREENSHOT_PANEL_CANCEL); close(); }
@@ -10340,7 +10397,7 @@ let openDrawPanel = null;
     if (drawIro) { try { drawIro.color.set('#ff3b30'); } catch (_) {} }
   }
   function close() { panel.hidden = true; instr.value = ''; }
-  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.MARKER_SEND, { instructions: decorateToolInstruction(instr.value.trim(), f) }); f?._composerBar?.clear(); close(); }   // main grabs the marker + composites
+  function send() { const f = instr.closest('.tp-foot'); ipcRenderer.send(IPC.MARKER_SEND, { instructions: decorateToolInstruction(instr.value.trim(), f) }); close(); }   // main grabs the marker + composites
   function cancel() { ipcRenderer.send(IPC.MARKER_CANCEL); close(); }
   sizeIn?.addEventListener('input', () => { setSwatchSize(+sizeIn.value); ipcRenderer.send(IPC.MARKER_SET_SIZE, +sizeIn.value); });
   clearBtn?.addEventListener('click', () => ipcRenderer.send(IPC.MARKER_CLEAR));
@@ -10412,13 +10469,394 @@ ipcRenderer.on(IPC.SHORTCUT_ACTION, (_, action) => {
     document.getElementById(TOOL_BTN[action.key])?.click();
   } else if (action.type === 'panel-toggle') {
     btnPanelToggle.click();
+  } else if (action.type === 'export') {
+    runExportShortcut();
   } else if (action.type === 'escape') {
+    if (exportCancelActive()) return;   // Esc from inside the page cancels a running export
     if (pickMode) { ipcRenderer.send(IPC.PICK_CANCEL); clearPickMode(); }
     // Esc anywhere else stops the agent — but let the composer's own keydown
     // own that case (and the slash menu) when it's focused.
     else if (document.activeElement !== uiTextarea) interruptActiveSession();
   }
 });
+
+// ── Export (docs/export-tool.md) ──────────────────────────────────
+// A button beside the address bar saves the page as PNG, JPG or PDF. Clicking it grabs
+// previews first (while the page is still on screen — the dialog is a modal, and every
+// modal parks the native view offscreen), then the dialog picks format, area and options.
+// Export → Save dialog → the dialog closes → main captures → PNG/JPG tiles are stitched
+// here on a canvas and written; PDFs are written by main.
+let exportCancelActive = () => false;   // replaced by initExport; the escape shortcut asks it
+let runExportShortcut = () => {};
+(function initExport() {
+  const btn    = document.getElementById('btn-export');
+  const modal  = document.getElementById('export-modal');
+  const optsEl = document.getElementById('export-options');
+  const imgEl  = document.getElementById('export-preview-img');
+  const prevEl = document.getElementById('export-preview');
+  const noteEl = document.getElementById('export-note');
+  const estEl  = document.getElementById('export-size-val');
+  const goBtn  = document.getElementById('export-go');
+  if (!btn || !modal) return;
+  const fs = require('fs'), nodePath = require('path'), os = require('os');
+  const { shell } = require('electron');
+  const ctl = wireModal(modal);
+  document.getElementById('export-cancel').addEventListener('click', ctl.close);
+
+  const DEFAULTS = {
+    format: 'png', area: 'full', scale: (window.devicePixelRatio || 1) >= 1.5 ? 2 : 1, quality: 90,
+    transparent: false, pdfKind: 'screen', paper: 'Letter', orientation: 'portrait', margins: 'default',
+    background: true, headerFooter: false, lazyLoad: true, method: 'scroll', maxHeight: 20000,
+    hideOverlays: true, hideScrollbars: true, pauseAnimations: false, delay: 0,
+    pattern: '{title}_{date}_{time}',
+  };
+  const prefs = { ...DEFAULTS, ...(safeParse(localStorage.getItem(LS.exportPrefs), {}) || {}) };
+  const savePrefs = () => { try { localStorage.setItem(LS.exportPrefs, JSON.stringify(prefs)); } catch (_) {} };
+  let prep = null;       // EXPORT_PREPARE result for the open dialog
+  let running = false;
+
+  // ── filenames + folders ──
+  const EXT = { png: 'png', jpg: 'jpg', pdf: 'pdf' };
+  const clean = (t) => String(t || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const pad = (n) => String(n).padStart(2, '0');
+  function outSize(o, m) {
+    const pdfPrint = o.format === 'pdf' && o.pdfKind === 'printable';
+    const scale = pdfPrint ? 1 : o.scale;
+    const h = o.area === 'visible' ? m.vh : Math.min(m.ch, o.maxHeight || 20000);
+    return { w: Math.round(m.vw * scale), h: Math.round(h * scale) };
+  }
+  function fileName(o, m, device) {
+    const d = new Date();
+    let url = null; try { url = new URL(m.url); } catch (_) {}
+    const host = url && url.host ? url.host.replace(/:/g, '-') : 'page';
+    const { w, h } = outSize(o, m);
+    const tokens = {
+      title: clean(m.title).slice(0, 60) || host, host,
+      path: url ? clean(url.pathname.replace(/\//g, '-')).replace(/^-+|-+$/g, '') || 'home' : '',
+      device: clean(device) || 'responsive', w, h, area: o.area === 'visible' ? 'visible' : 'full',
+      scale: (o.format === 'pdf' && o.pdfKind === 'printable') ? '' : o.scale + 'x',
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}${pad(d.getMinutes())}`,
+    };
+    const base = clean((o.pattern || DEFAULTS.pattern).replace(/\{(\w+)\}/g, (all, k) => (k in tokens ? String(tokens[k]) : all))) || 'export';
+    return base + '.' + EXT[o.format];
+  }
+  function exportDir() {
+    const dirs = safeParse(localStorage.getItem(LS.exportDirs), {}) || {};
+    const d = dirs[currentProjectId() || '_'];
+    if (d && fs.existsSync(d)) return d;
+    const pics = nodePath.join(os.homedir(), 'Pictures');
+    return nodePath.join(fs.existsSync(pics) ? pics : os.homedir(), 'Gamut');
+  }
+  function rememberDir(filePath) {
+    const dirs = safeParse(localStorage.getItem(LS.exportDirs), {}) || {};
+    dirs[currentProjectId() || '_'] = nodePath.dirname(filePath);
+    try { localStorage.setItem(LS.exportDirs, JSON.stringify(dirs)); } catch (_) {}
+  }
+  function uniquePath(p) {
+    if (!fs.existsSync(p)) return p;
+    const ext = nodePath.extname(p), stem = p.slice(0, -ext.length);
+    for (let i = 2; ; i++) if (!fs.existsSync(`${stem}-${i}${ext}`)) return `${stem}-${i}${ext}`;
+  }
+
+  // ── option controls ──
+  const rows = {};   // key → row element, for show/hide
+  function row(key, label, ...controls) {
+    const r = document.createElement('div');
+    r.className = 'xp-row';
+    const l = document.createElement('span'); l.className = 'xp-label'; l.textContent = label;
+    r.append(l, ...controls);
+    rows[key] = r;
+    optsEl.appendChild(r);
+    return r;
+  }
+  function seg(key, choices) {
+    const w = document.createElement('div'); w.className = 'xp-seg';
+    choices.forEach(([val, text, title]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.dataset.val = String(val);
+      if (title) b.title = title;
+      b.addEventListener('click', () => { prefs[key] = val; savePrefs(); sync(); });
+      w.appendChild(b);
+    });
+    w._sync = () => w.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === String(prefs[key])));
+    return w;
+  }
+  function toggle(key, label, title) {
+    const w = document.createElement('div'); w.className = 'view-toggle';
+    const l = document.createElement('span'); l.className = 'vt-label'; l.textContent = label;
+    const sw = document.createElement('button'); sw.type = 'button'; sw.className = 'vt-switch'; sw.setAttribute('role', 'switch');
+    if (title) w.title = title;
+    sw.innerHTML = '<span class="vt-knob"><span class="vt-well"><span class="vt-led"></span></span></span>';
+    sw.addEventListener('click', () => { if (sw.disabled) return; prefs[key] = !prefs[key]; savePrefs(); sync(); });
+    w.append(l, sw);
+    w._sync = () => { sw.classList.toggle('on', !!prefs[key]); sw.setAttribute('aria-checked', String(!!prefs[key])); };
+    w._switch = sw;
+    return w;
+  }
+
+  const ctlFormat = seg('format', [['png', 'PNG'], ['jpg', 'JPG'], ['pdf', 'PDF']]);
+  const ctlArea   = seg('area', [['full', 'Full page', 'The whole scrollable page'], ['visible', 'Visible', 'Just what is on screen']]);
+  const ctlScale  = seg('scale', [[1, '1×'], [2, '2×'], [3, '3×']]);
+  const ctlKind   = seg('pdfKind', [['screen', 'As on screen', 'Looks exactly like the screen; text is not selectable'], ['printable', 'Printable', "The page's print layout: selectable text and links, paginated"]]);
+  const quality = document.createElement('input'); quality.type = 'range'; quality.className = 'rz-slider'; quality.min = 40; quality.max = 100; quality.step = 5;
+  const qualityNum = document.createElement('span'); qualityNum.className = 'xp-num';
+  quality.addEventListener('input', () => { prefs.quality = +quality.value; savePrefs(); sync(); });
+  const tTransparent = toggle('transparent', 'Transparent background', 'Pages without their own background export with transparency');
+  const paper = document.createElement('select'); paper.className = 'modal-input xp-short';
+  ['Letter', 'Legal', 'Tabloid', 'A3', 'A4', 'A5'].forEach(v => paper.add(new Option(v, v)));
+  paper.addEventListener('change', () => { prefs.paper = paper.value; savePrefs(); sync(); });
+  const ctlOrient  = seg('orientation', [['portrait', 'Portrait'], ['landscape', 'Landscape']]);
+  const ctlMargins = seg('margins', [['none', 'None'], ['default', 'Default'], ['wide', 'Wide']]);
+  const tBackground   = toggle('background', 'Print background graphics');
+  const tHeaderFooter = toggle('headerFooter', 'Title, URL & page numbers', 'Title, URL, date and page numbers on every page');
+  // How a full page is captured. 'As you scroll' is the default because a one-pass capture
+  // comes out blank wherever a page reveals content as it scrolls into view.
+  const ctlMethod = seg('method', [
+    ['scroll', 'As you scroll', 'Scroll a screen at a time and capture each once it settles, so scroll animations, lazy images and parallax all play. Slower; fixed headers appear once, at the top'],
+    ['pass', 'One pass', 'Capture the whole page at once: fast, but content that only appears when scrolled into view may be blank'],
+  ]);
+  const maxH = document.createElement('input'); maxH.type = 'number'; maxH.min = 1000; maxH.step = 1000; maxH.className = 'modal-input xp-short';
+  maxH.addEventListener('change', () => { prefs.maxHeight = Math.max(1000, Math.min(200000, +maxH.value || DEFAULTS.maxHeight)); savePrefs(); sync(); });
+  const maxHUnit = document.createElement('span'); maxHUnit.className = 'xp-num'; maxHUnit.textContent = 'px';
+  const tOverlays   = toggle('hideOverlays', 'Hide Gamut overlays', 'Selection outlines, Move arrows, marker ink…');
+  const tScrollbars = toggle('hideScrollbars', 'Hide scrollbars');
+  const tAnimations = toggle('pauseAnimations', 'Pause animations', 'Freeze CSS animations, transitions and video');
+  const ctlDelay = seg('delay', [[0, 'None'], [3, '3 s'], [5, '5 s']]);
+  const pattern = document.createElement('input'); pattern.type = 'text'; pattern.className = 'modal-input xp-grow'; pattern.spellcheck = false;
+  pattern.title = 'Tokens: {title} {host} {path} {device} {w} {h} {area} {scale} {date} {time}';
+  pattern.addEventListener('input', () => { prefs.pattern = pattern.value; savePrefs(); syncName(); nameCheckEls.forEach(([k, l]) => l.classList.toggle('on', hasPart(k))); });
+
+  row('format', 'Format', ctlFormat);
+  row('quality', 'Quality', quality, qualityNum);
+  row('transparent', 'Background', tTransparent);
+  row('pdfKind', 'PDF style', ctlKind);
+  row('paper', 'Paper', paper);
+  row('orientation', 'Orientation', ctlOrient);
+  row('margins', 'Margins', ctlMargins);
+  row('background', 'Backgrounds', tBackground);
+  row('headerFooter', 'Headers', tHeaderFooter);
+  row('area', 'Area', ctlArea);
+  row('scale', 'Scale', ctlScale);
+  row('method', 'Full page', ctlMethod);
+  row('maxHeight', 'Max height', maxH, maxHUnit);
+  row('delay', 'Delay', ctlDelay);
+  // Clean-up: one switch per row so every row keeps the same height.
+  row('overlays', 'Overlays', tOverlays);
+  row('scrollbars', 'Scrollbars', tScrollbars);
+  row('animations', 'Animations', tAnimations);
+  // Title / Date / Time checkboxes in the File name row, above the input: each adds or removes its token in
+  // the pattern, so the pattern stays the one source of truth (and the boxes read it back).
+  const NAME_PARTS = ['title', 'date', 'time'];
+  const CHECK_SVG = '<svg class="ct-checkbox-check" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6.5 5,9 10,3" /></svg>';
+  const hasPart = (k) => (prefs.pattern || '').includes('{' + k + '}');
+  function setPart(k, on) {
+    let p = prefs.pattern || '';
+    const tok = '{' + k + '}';
+    if (!on) {
+      // Drop the token and one separator beside it (the one before it, else after).
+      const esc = tok.replace(/[{}]/g, '\\$&');
+      const withSepBefore = new RegExp('[_\\- ]' + esc);
+      p = withSepBefore.test(p) ? p.replace(withSepBefore, '') : p.replace(new RegExp(esc + '[_\\- ]?'), '');
+    } else if (!p.includes(tok)) {
+      // Back in title → date → time order: after the nearest earlier part that's present.
+      const before = NAME_PARTS.slice(0, NAME_PARTS.indexOf(k)).reverse().find(hasPart);
+      if (before) { const i = p.indexOf('{' + before + '}') + before.length + 2; p = p.slice(0, i) + '_' + tok + p.slice(i); }
+      else p = tok + (p ? '_' + p : '');
+    }
+    prefs.pattern = p; savePrefs(); sync();
+  }
+  const nameChecks = document.createElement('div'); nameChecks.className = 'xp-checks';
+  const nameCheckEls = NAME_PARTS.map((k) => {
+    const l = document.createElement('label'); l.className = 'ct-checkbox';
+    l.innerHTML = '<span class="ct-checkbox-box">' + CHECK_SVG + '</span>';
+    l.append(k[0].toUpperCase() + k.slice(1));
+    l.addEventListener('click', (e) => { e.preventDefault(); setPart(k, !hasPart(k)); });
+    nameChecks.appendChild(l);
+    return [k, l];
+  });
+
+  // File name last, with the name it resolves to right under the input.
+  const nameHint = document.createElement('div'); nameHint.className = 'xp-hint';
+  const nameCol = document.createElement('div'); nameCol.className = 'xp-col'; nameCol.append(nameChecks, pattern, nameHint);   // checkboxes above the input
+  row('pattern', 'File name', nameCol).classList.add('xp-row-name');
+  // These use .modal-input for its look, but aren't text fields to clear: keep the
+  // clear-button pass (wireClearableInputs, which runs later) from wrapping them — for the
+  // select that would pull it back out of its custom dropdown.
+  [paper, maxH, pattern].forEach(el => { el.dataset.clearWired = '1'; });
+  enhanceSelect(paper);
+
+  function syncName() { nameHint.textContent = prep ? fileName(prefs, prep.metrics, prep.device) : ''; }
+  function sync() {
+    const pdf = prefs.format === 'pdf', printable = pdf && prefs.pdfKind === 'printable';
+    [ctlFormat, ctlArea, ctlScale, ctlKind, ctlOrient, ctlMargins, ctlDelay, tBackground, tHeaderFooter, tOverlays, tScrollbars, tAnimations, tTransparent, ctlMethod].forEach(c => c._sync());
+    quality.value = prefs.quality; qualityNum.textContent = prefs.quality;
+    paper.value = prefs.paper;
+    maxH.value = prefs.maxHeight;
+    if (pattern.value !== prefs.pattern) pattern.value = prefs.pattern;
+    nameCheckEls.forEach(([k, l]) => l.classList.toggle('on', hasPart(k)));
+    const show = (k, on) => { rows[k].hidden = !on; };
+    show('quality', prefs.format === 'jpg');
+    show('transparent', prefs.format === 'png');
+    show('pdfKind', pdf);
+    ['paper', 'orientation', 'margins', 'background', 'headerFooter'].forEach(k => show(k, printable));
+    ['area', 'scale', 'overlays', 'scrollbars', 'animations'].forEach(k => show(k, !printable));
+    show('method', !printable && prefs.area === 'full');
+    show('maxHeight', !printable && prefs.area === 'full');
+    // Compatibility capture (DevTools open): screen density only, no transparency.
+    const cdp = !prep || prep.cdp;
+    tTransparent._switch.disabled = !cdp;
+    goBtn.textContent = 'Export ' + (printable ? 'PDF' : prefs.format.toUpperCase());
+    // Dividers go between parameters: the last one showing has none.
+    const shown = Object.values(rows).filter(r => !r.hidden);
+    shown.forEach((r, i) => r.classList.toggle('xp-last', i === shown.length - 1));
+    syncPreview(); syncEstimate(); syncName();
+  }
+  function syncPreview() {
+    if (!prep) return;
+    const full = prefs.area === 'full' || (prefs.format === 'pdf' && prefs.pdfKind === 'printable');
+    const src = full ? prep.full : prep.visible;
+    imgEl.src = 'data:image/png;base64,' + src.data;
+    prevEl.classList.toggle('checker', prefs.format === 'png' && prefs.transparent);
+  }
+  function syncEstimate() {
+    if (!prep) return;
+    const m = prep.metrics;
+    const notes = [];
+    if (!prep.cdp) notes.push('DevTools is open on this page, so a slower compatibility capture is used: screen density only, no transparency, and fixed headers are hidden after the first screen.');
+    if (prefs.format === 'pdf' && prefs.pdfKind === 'printable') {
+      estEl.textContent = `${prefs.paper} · ${prefs.orientation}`;
+    } else {
+      const { w, h } = outSize(prefs, m);
+      const px = w * h;
+      const bytes = prefs.format === 'jpg' ? px * 0.16 * Math.pow(prefs.quality / 90, 2) : px * 0.3;
+      const mb = bytes / 1048576;
+      estEl.textContent = `${w.toLocaleString()} × ${h.toLocaleString()} px · ~${mb < 1 ? Math.max(0.1, mb).toFixed(1) : Math.round(mb)} MB`;
+      if (prefs.area === 'full' && m.ch > prefs.maxHeight) notes.push(`The page is ${m.ch.toLocaleString()} px tall — it will be cut at the max height (${prefs.maxHeight.toLocaleString()} px).`);
+      if (prefs.format !== 'pdf') {
+        const capH = canvasMaxHeight(w);
+        if (h > capH) notes.push(`That's too large for one image — it will be cut at ${capH.toLocaleString()} px. Lower the scale, or export as PDF to keep the whole page.`);
+      }
+      if (mb > 50) notes.push('This is a large file and may take a while.');
+    }
+    noteEl.hidden = !notes.length;
+    noteEl.textContent = notes.join(' ');
+  }
+  // Chromium's canvas limits: 32,767 px a side, ~268M px in all.
+  const canvasMaxHeight = (w) => Math.min(32767, Math.floor(268435456 / Math.max(1, w)));
+
+  // ── running an export ──
+  async function stitchAndWrite(cap, o, filePath) {
+    const W = Math.round(cap.width * o.scale);
+    let H = Math.round(cap.height * o.scale);
+    const cut = H > canvasMaxHeight(W);
+    if (cut) H = canvasMaxHeight(W);
+    const canvas = new OffscreenCanvas(W, H);
+    const g = canvas.getContext('2d');
+    if (o.format === 'jpg') { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); }   // no alpha in JPEG
+    for (const t of cap.tiles) {
+      const bm = await createImageBitmap(new Blob([Buffer.from(t.data, 'base64')], { type: 'image/png' }));
+      const k = W / bm.width;   // CDP tiles are already at scale; compatibility tiles get resampled
+      g.drawImage(bm, 0, Math.round(t.y * o.scale), W, Math.round(bm.height * k));
+      bm.close();
+    }
+    const blob = await canvas.convertToBlob(o.format === 'jpg' ? { type: 'image/jpeg', quality: o.quality / 100 } : { type: 'image/png' });
+    fs.mkdirSync(nodePath.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(await blob.arrayBuffer()));
+    return { cut };
+  }
+  function resultToast(text, filePath) {
+    const t = showToast(text, { duration: 9000 });
+    if (filePath) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'toast-action'; b.textContent = 'Show in folder';
+      b.addEventListener('click', () => { shell.showItemInFolder(filePath); t.dismiss(); });
+      const o = document.createElement('button'); o.type = 'button'; o.className = 'toast-action'; o.textContent = 'Open';
+      o.addEventListener('click', () => { shell.openPath(filePath); t.dismiss(); });
+      t.el.append(b, o);
+    }
+  }
+  const PHASE = { lazyload: 'Loading page content', capture: 'Capturing', write: 'Writing file' };
+  async function run(o, filePath) {
+    running = true;
+    btn.classList.add('busy');
+    const t = showToast('Exporting…', { spinner: true });
+    const label = t.el.querySelector('span');
+    const onProgress = (_, { phase, pct, left }) => {
+      label.textContent = phase === 'delay' ? `Capturing in ${left}…  · Esc to cancel`
+        : `${PHASE[phase] || 'Exporting'}${pct != null && phase !== 'write' ? ' ' + Math.round(pct * 100) + '%' : '…'}  · Esc to cancel`;
+    };
+    ipcRenderer.on(IPC.EXPORT_PROGRESS, onProgress);
+    const onKey = (e) => { if (e.key === 'Escape') ipcRenderer.send(IPC.EXPORT_CANCEL); };
+    document.addEventListener('keydown', onKey, true);
+    try {
+      const res = await ipcRenderer.invoke(IPC.EXPORT_RUN, { opts: o, filePath });
+      if (res && res.capture) {
+        label.textContent = 'Writing file…';
+        const { cut } = await stitchAndWrite(res.capture, o, filePath);
+        res.truncated = res.capture.truncated || cut;
+      }
+      t.dismiss();
+      if (!res || res.cancelled) { showToast('Export cancelled', { duration: 2500 }); return; }
+      if (!res.ok) { showToast('Export failed — ' + (res.error || 'unknown error'), { duration: 7000 }); return; }
+      resultToast(`Saved ${nodePath.basename(filePath)}${res.truncated ? ' (cut at the height limit)' : ''}`, filePath);
+    } catch (e) {
+      t.dismiss();
+      showToast('Export failed — ' + e.message, { duration: 7000 });
+    } finally {
+      ipcRenderer.removeListener(IPC.EXPORT_PROGRESS, onProgress);
+      document.removeEventListener('keydown', onKey, true);
+      btn.classList.remove('busy');
+      running = false;
+    }
+  }
+  exportCancelActive = () => { if (!running) return false; ipcRenderer.send(IPC.EXPORT_CANCEL); return true; };
+
+  const runOpts = () => ({ ...prefs, pdf: { paper: prefs.paper, orientation: prefs.orientation, margins: prefs.margins, background: prefs.background, headerFooter: prefs.headerFooter } });
+  goBtn.addEventListener('click', async () => {
+    if (!prep || running) return;
+    const o = runOpts();
+    const dir = exportDir();
+    const defaultPath = nodePath.join(fs.existsSync(dir) ? dir : nodePath.dirname(dir), fileName(o, prep.metrics, prep.device));
+    const filePath = await ipcRenderer.invoke(IPC.EXPORT_SAVE_DIALOG, { defaultPath, format: o.format });
+    if (!filePath) return;   // Save cancelled: stay in the dialog
+    rememberDir(filePath);
+    ctl.close();
+    run(o, filePath);
+  });
+
+  async function open(quick) {
+    if (running || btn.classList.contains('busy')) return;
+    btn.classList.add('busy');
+    const label = document.getElementById('btn-export-label');
+    label.textContent = 'Preparing…';
+    let res;
+    try { res = await ipcRenderer.invoke(IPC.EXPORT_PREPARE, { metaOnly: quick, reveal: prefs.method === 'scroll' }); }
+    catch (e) { res = { ok: false, error: e.message }; }
+    finally { btn.classList.remove('busy'); label.textContent = 'Export'; }
+    if (!res || !res.ok) { showToast('Nothing to export — ' + ((res && res.error) || 'no page'), { duration: 4000 }); return; }
+    if (quick) {
+      // Shift+click / second Ctrl+Shift+E: the last export again, straight to the last folder.
+      const o = runOpts();
+      const filePath = uniquePath(nodePath.join(exportDir(), fileName(o, res.metrics, res.device)));
+      rememberDir(filePath);
+      run(o, filePath);
+      return;
+    }
+    prep = res;
+    sync();
+    ctl.open();
+    setTimeout(() => goBtn.focus(), 0);
+  }
+  btn.addEventListener('click', (e) => open(e.shiftKey));
+  // Ctrl+Shift+E opens the dialog; pressed again while it's open, it exports straight away.
+  runExportShortcut = () => { if (modal.classList.contains('open')) goBtn.click(); else open(false); };
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === 'KeyE') { e.preventDefault(); runExportShortcut(); }
+  });
+  // Nothing to export on a blank tab (the same signal that greys out the page tools).
+  const syncBtn = () => { btn.disabled = !!document.getElementById('toolbar')?.classList.contains('tools-inactive'); };
+  const tb = document.getElementById('toolbar');
+  if (tb) new MutationObserver(syncBtn).observe(tb, { attributes: true, attributeFilter: ['class'] });
+  syncBtn();
+})();
 
 // ── Clearable inputs: an X to clear the chat composer and longer text inputs ──
 // The X shows only when the field has content; clicking it clears and re-focuses
@@ -11435,9 +11873,9 @@ uiTextarea.addEventListener('keydown', e => {
 uiTextarea.addEventListener('blur', () => { if (!spEditActive) setTimeout(hideSlashMenu, 120); });
 
 function sendUiMessage() {
-  const raw = uiTextarea.value;
+  const raw = uiTextarea.value;   // attached files are in it, as backticked paths where their chips sat
   const figma = figmaChips.slice();
-  const attach = attachChips.slice();
+  const attach = attachedIn(uiTextarea);
   if (!raw.trim() && !figma.length && !attach.length) return;
 
   // A Framelink action can't run without its Figma URL — prompt for it instead of sending.
@@ -11451,8 +11889,7 @@ function sendUiMessage() {
     historyDraft = '';
   }
 
-  // Compose: Figma action instructions (with their URL) first, then the user's
-  // free text, then any attached file/folder paths.
+  // Compose: Figma action instructions (with their URL) first, then the user's free text.
   let body = raw;
   if (figma.length) {
     const instr = figma
@@ -11460,20 +11897,14 @@ function sendUiMessage() {
       .join('\n\n');
     body = instr + (raw.trim() ? '\n\n' + raw : '');
   }
-  // The agent gets every attached path in the sent text…
-  const attachText = attach.map(a => a.path).join('\n');
-  if (attach.length) body = (body.trim() ? body + '\n\n' : '') + attachText;
+  // Image attachments also show as thumbnails under the message.
+  const images = attach.filter(a => a.kind === 'file' && isChatImage(a.path)).map(a => a.path);
 
-  // …but in the chat, image attachments show as thumbnails (not their path).
-  const images       = attach.filter(a => a.kind === 'file' && isChatImage(a.path)).map(a => a.path);
-  const shownAttach  = attach.filter(a => !(a.kind === 'file' && isChatImage(a.path)));
-  const shownAttachText = shownAttach.map(a => a.path).join('\n');
-
-  // What the user sees in the chat (chip titles / non-image paths + their text)
-  let display = figma.length
+  // What the user sees in the chat: chip titles + their text (whose file paths render back
+  // as chips — see fillTextWithChips).
+  const display = figma.length
     ? figma.map(f => `[Figma: ${f.title}]`).join(' ') + (raw.trim() ? '\n' + raw : '')
     : raw;
-  if (shownAttachText) display = (display.trim() ? display + '\n' : '') + shownAttachText;
 
   let text = (sbConfig && sbConfig.autoInject && !sbAgentLinkOff())
     ? sbContextText(sbConfig) + '\n\n' + body
@@ -11483,7 +11914,6 @@ function sendUiMessage() {
   text = applyLenses(text);
   routeToActiveSession(text, display, images, { figma, attach });
   clearFigmaChips();
-  clearAttachChips();
   uiTextarea.value = '';
   uiTextarea.style.height = '';
   uiCharCount.textContent = '';
@@ -11506,7 +11936,7 @@ document.getElementById('btn-ui-attach-folder')?.addEventListener('click', async
 });
 
 // ── Drag & drop files onto the composer → attach (same pipeline as the paperclip) ──
-wireFileDrop(document.getElementById('ui-input-area'), (paths) => addAttachChips(paths, 'file'));
+wireFileDrop(document.getElementById('ui-input-area'), (paths, point) => addAttachChips(paths, 'file', point));
 // A file dropped anywhere else would navigate the whole window to file://… (Chromium's
 // default, which our will-navigate guard permits for file://) — swallow those drops.
 window.addEventListener('dragover', (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); });
@@ -13277,7 +13707,6 @@ let openComponentPanel = null;
     const _foot = instr.closest('.tp-foot');
     text = decorateToolInstruction(text, _foot);   // persona lens + any attached paths
     routeToActiveSession(text, { body: (instructions || '').trim(), badges: [componentName] });
-    _foot?._composerBar?.clear();
     close();
   }
   function close() {

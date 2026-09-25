@@ -216,7 +216,7 @@
           <button id="update-band-x" type="button" title="Dismiss" aria-label="Dismiss update notice">✕</button>
         </div>
         <div id="ui-editor-wrap">
-          <textarea id="ui-textarea" placeholder="Message Claude Code..." spellcheck="true"></textarea>
+          <div id="ui-textarea" class="chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="Message Claude Code..."></div>
         </div>
         <div id="composer-chips"></div>
         <div id="ui-footer">
@@ -271,7 +271,7 @@
         <div id="pick-panel-list"></div>
         <div id="pick-panel-foot" class="tp-foot">
           <!-- An editor rather than a textarea so selections can sit in the sentence as chips. -->
-          <div id="pick-panel-textarea" class="pp-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
+          <div id="pick-panel-textarea" class="pp-editor chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button id="pick-panel-resize" class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div id="pick-panel-btns">
             <button id="pick-panel-cancel-btn" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -312,7 +312,7 @@
           </div>
         </div>
         <div id="move-panel-foot" class="tp-foot">
-          <textarea id="move-textarea" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <div id="move-textarea" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="move-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -382,7 +382,7 @@
           </div>
         </div>
         <div id="animation-panel-foot" class="tp-foot">
-          <textarea id="animation-textarea" class="tp-textarea" placeholder="Describe the animation — e.g. fade in over 400ms on scroll…" spellcheck="true"></textarea>
+          <div id="animation-textarea" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="Describe the animation — e.g. fade in over 400ms on scroll…"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="animation-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -421,7 +421,7 @@
         </div>
         <div id="comp-list" class="comp-row"></div>
         <div id="comp-panel-foot" class="tp-foot">
-          <textarea id="comp-instructions" class="tp-textarea" placeholder="Instructions — how to use this component at the target (optional)…" spellcheck="true"></textarea>
+          <div id="comp-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="Instructions — how to use this component at the target (optional)…"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="comp-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -449,7 +449,7 @@
           <div id="extract-els"></div>
         </div>
         <div id="extract-panel-foot" class="tp-foot">
-          <textarea id="extract-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <div id="extract-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="extract-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -500,7 +500,7 @@
           </div>
         </div>
         <div id="ed-panel-foot" class="tp-foot">
-          <textarea id="ed-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <div id="ed-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="ed-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -526,7 +526,7 @@
         </div>
         <div id="drift-list" class="a11y-list"></div>
         <div class="tp-foot">
-          <textarea id="drift-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <div id="drift-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="drift-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -551,7 +551,7 @@
         </div>
         <div id="a11y-list"></div>
         <div id="a11y-foot" class="tp-foot">
-          <textarea id="a11y-instructions" class="tp-textarea" placeholder="type instructions here" spellcheck="true"></textarea>
+          <div id="a11y-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="type instructions here"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="a11y-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -595,7 +595,7 @@
           </div>
         </div>
         <div id="ss-panel-foot" class="tp-foot">
-          <textarea id="ss-instructions" class="tp-textarea" placeholder="What should the agent do with this screenshot? (optional)" spellcheck="true"></textarea>
+          <div id="ss-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="What should the agent do with this screenshot? (optional)"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="ss-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -631,7 +631,7 @@
           </div>
         </div>
         <div id="draw-panel-foot" class="tp-foot">
-          <textarea id="draw-instructions" class="tp-textarea" placeholder="Describe the change…" spellcheck="true"></textarea>
+          <div id="draw-instructions" class="tp-textarea chip-editor is-empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" spellcheck="true" data-placeholder="Describe the change…"></div>
           <button class="tp-resize" title="Drag to resize input"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14"><g stroke-linecap="round" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.25"><polyline points="8.25 14.25 3.75 14.25 3.75 9.75"></polyline><polyline points="9.75 3.75 14.25 3.75 14.25 8.25"></polyline></g></svg></button>
           <div class="pp-btns">
             <button id="draw-cancel" class="pp-btn pp-btn-ghost">Cancel</button>
@@ -699,6 +699,10 @@
           <svg class="device-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><rect x="2.25" y="3.25" width="9.5" height="11.5" rx="1.5"/><rect x="12.75" y="6.75" width="3" height="8" rx="1"/><line x1="5.5" y1="13" x2="8.5" y2="13"/></svg>
           <span id="btn-device-label">Responsive</span>
           <span class="ui-chev device-caret"></span>
+        </button>
+        <button id="btn-export" title="Export the page as PNG, JPG or PDF (Ctrl+Shift+E) — Shift+click repeats your last export">
+          <svg class="export-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(0.5 0.5)"><path d="M7 21L15.5 10.5L21 16"/><path d="M9 11C10.1046 11 11 10.1046 11 9C11 7.89543 10.1046 7 9 7C7.89543 7 7 7.89543 7 9C7 10.1046 7.89543 11 9 11Z"/><path d="M21 19L21 5C21 3.89543 20.1046 3 19 3L5 3C3.89543 3 3 3.89543 3 5L3 19C3 20.1046 3.89543 21 5 21L19 21C20.1046 21 21 20.1046 21 19Z"/></g></svg>
+          <span id="btn-export-label">Export</span>
         </button>
         <button id="btn-devtools" title="Toggle DevTools"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18"><g stroke-linecap="round" stroke-width="1.25" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M5.25 13.25L1.75 9L5.25 4.75"></path><path d="M12.75 13.25L16.25 9L12.75 4.75"></path><path d="M7.75 13.25L10.25 4.75"></path></g></svg></button>
       </div>
@@ -1060,6 +1064,26 @@
       <div class="modal-actions">
         <button class="modal-btn-cancel" id="chat-font-reset">Reset</button>
         <button class="modal-btn-confirm" id="chat-font-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export modal (docs/export-tool.md) — options are built by initExport() in renderer.js -->
+  <div id="export-modal" class="modal-backdrop">
+    <div class="modal-box" id="export-modal-box">
+      <button class="mcp-modal-close" title="Close" aria-label="Close">✕</button>
+      <div class="modal-title">Export Page</div>
+      <div id="export-body">
+        <div id="export-preview-col">
+          <div id="export-preview"><img id="export-preview-img" alt="Preview of the export"></div>
+          <div id="export-size"><span class="xp-size-title">Exported at:</span><span id="export-size-val"></span></div>
+        </div>
+        <div id="export-options"></div>
+      </div>
+      <div id="export-note" hidden></div>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="export-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="export-go">Export</button>
       </div>
     </div>
   </div>

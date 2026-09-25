@@ -266,6 +266,13 @@ function attachShortcutHandler(wc, { tabOnly = false } = {}) {
       }
     }
 
+    // Ctrl/Cmd+Shift+E — Export the page (all views; Shift+click the button re-runs the last one)
+    if (ctrl && input.shift && !input.alt && input.code === 'KeyE') {
+      event.preventDefault();
+      mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'export' });
+      return;
+    }
+
     // Escape — cancel active tool (all views)
     if (!ctrl && !input.shift && !input.alt && input.key === 'Escape') {
       mainWindow.webContents.send(IPC.SHORTCUT_ACTION, { type: 'escape' });
@@ -4685,6 +4692,76 @@ function getActivePickView() {
   }
   return null;
 }
+// ── Export (docs/export-tool.md) ──────────────────────────────────
+// The renderer drives it: PREPARE grabs previews while the page is still on screen (the
+// dialog is a modal, and every open modal parks the view offscreen at 1×1), RUN captures
+// once the dialog has closed and the view is back. PNG/JPG tiles go back to the renderer to
+// be stitched on a canvas; PDFs are written here.
+const exporter = require('./src/export');
+let exportCancelled = false;
+const exportDelay = (ms) => new Promise(r => setTimeout(r, ms));
+ipcMain.handle(IPC.EXPORT_PREPARE, async (_, { metaOnly = false, reveal = false } = {}) => {
+  const view = getActivePickView();
+  if (!view || view.webContents.isDestroyed()) return { ok: false, error: 'No page to export' };
+  const b = view.getBounds();
+  if (!b || b.width < 50 || b.height < 50) return { ok: false, error: 'The page is hidden' };
+  const device = deviceEmulation && deviceEmulation.name ? deviceEmulation.name : '';
+  if (metaOnly) {   // quick re-export: just enough to name the file
+    try { return { ok: true, metrics: await view.webContents.executeJavaScript('({ vw: innerWidth, vh: innerHeight, ch: Math.max(document.documentElement.scrollHeight, innerHeight), title: document.title || "", url: location.href })', true), device }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }
+  const t = exporter.targetFor(view.webContents);
+  try {
+    const full = await exporter.preview(t, 360, 20000, { reveal });   // reveal: play scroll-triggered content first
+    const vis  = await view.webContents.capturePage();
+    return {
+      ok: true, cdp: t.usesCdp, metrics: full.metrics, full,
+      visible: { data: vis.resize({ width: 360 }).toPNG().toString('base64') },
+      device,
+    };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally { t.release(); }
+});
+ipcMain.handle(IPC.EXPORT_SAVE_DIALOG, async (_, { defaultPath, format } = {}) => {
+  const filters = { png: [{ name: 'PNG image', extensions: ['png'] }], jpg: [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }], pdf: [{ name: 'PDF document', extensions: ['pdf'] }] }[format] || [];
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, { title: 'Export page', defaultPath, filters });
+  return canceled ? null : filePath;
+});
+ipcMain.on(IPC.EXPORT_CANCEL, () => { exportCancelled = true; });
+ipcMain.handle(IPC.EXPORT_RUN, async (_, { opts = {}, filePath } = {}) => {
+  exportCancelled = false;
+  const isCancelled = () => exportCancelled;
+  const progress = (phase, pct) => uiSend(IPC.EXPORT_PROGRESS, { phase, pct });
+  const view = getActivePickView();
+  if (!view || view.webContents.isDestroyed()) return { ok: false, error: 'No page to export' };
+  // The dialog has just closed: wait for the view to come back from its offscreen park and
+  // present a frame, or the capture races the restore.
+  for (let i = 0; i < 40 && (modalOpen || view.getBounds().width < 50); i++) await exportDelay(50);
+  try { await view.webContents.executeJavaScript('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))', true); } catch (_) {}
+  for (let left = opts.delay || 0; left > 0; left--) {
+    if (exportCancelled) return { ok: false, cancelled: true };
+    uiSend(IPC.EXPORT_PROGRESS, { phase: 'delay', left });
+    await exportDelay(1000);
+  }
+  if (opts.format === 'pdf' && opts.pdfKind === 'printable') {
+    try { progress('write', 0); await exporter.printablePdf(view.webContents, opts.pdf || {}, filePath); return { ok: true, filePath }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }
+  const t = exporter.targetFor(view.webContents);
+  try {
+    const cap = await exporter.capture(t, opts, { isCancelled, onProgress: progress });
+    if (opts.format === 'pdf') {
+      progress('write', 0);
+      await exporter.imagePdf(BrowserWindow, cap, filePath);
+      return { ok: true, filePath, truncated: cap.truncated };
+    }
+    return { ok: true, capture: cap };
+  } catch (e) {
+    return e && e.cancelled ? { ok: false, cancelled: true } : { ok: false, error: e.message };
+  } finally { t.release(); }
+});
+
 // URL of the page currently shown in the right panel (the tab the user is looking at).
 function activePageUrl() {
   try { return getActivePickView()?.webContents.getURL() || ''; } catch (_) { return ''; }
