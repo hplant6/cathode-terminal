@@ -6,12 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-25
+
 ### Added
 - **A Sliders tool (Alt+T): a live tuning panel for animations, effects and three.js scenes.** Instead of asking an agent to hand-build a throwaway slider modal in your project, the agent writes a small panel file to `.cathode/sliders/<id>.json`. Gamut opens it next to the page as soon as it appears. Controls can drive a CSS custom property with no code change, a `window` path (calling `.set()` on three.js vectors and colours), or a `gamut:slider` event. Types: range, int, colour, toggle, select, vec2/vec3 and button. Changed rows turn accent; double-click a label to reset it; Shift-drag fine-tunes. Ranges can snap to design tokens, and the bake message then names the token. Presets are saved into the panel file. Hold Compare (or `\`) to see the code's values; Copy/Paste move values as JSON. The sliders float over the page in the browser; pick the corner (top/bottom, left/right) and the panel's transparency in the tool column. With no panel yet, a sample panel with random values shows how it will look. **Send** hands the agent only the changed values, with their `file:line` hints, to write into the code. **From Page Vars** builds a starter panel from the page's `:root` CSS variables. Values survive reloads and HMR. Agents learn the file format from the project block in CLAUDE.md/AGENTS.md.
+- **Export the page as PNG, JPG or PDF** from the new Export button beside the address bar (Ctrl+Shift+E). Choose the full page or the visible screen, 1×/2×/3×, transparency, JPG quality, a max height, a delay, clean-up switches and a filename pattern. Shift+click repeats your last export straight to the last folder. Full-page captures go one screen at a time and let each settle first, so scroll-reveal content isn't blank; "One pass" stays available as the fast option.
+- **Attached files sit inline as chips** in the composer and every tool's instruction box, like Box/Lasso selection chips, and are sent as paths right where you placed them. Chat bubbles show them as chips too.
+- **Retro**, a mid-gray theme with a cyan accent.
+- **The Usage header shows the model Hermes is running** (e.g. `gpt-oss:20b`), the way it already did for Claude Code, and updates when you switch models. The chat banner names it too.
 
 ### Changed
 - **Gamut Terminal is now Gamut Toolbox.** The display name, npm package name, window title, dialogs, onboarding and Storybook copy, and the update-check User-Agent all changed, and the GitHub repo moved to `hplant6/gamut-toolbox`. Old repo URLs redirect, so installed builds still find updates. Profiles created under the "Gamut Terminal" name are picked up in place, the same way "Cathode Terminal" ones already were. The appId and the `.cathode` file format are unchanged.
 - **New empty-state background: "golden rings."** The Storybook-offline and Browser "Boot up a server" screens now show rotating golden-ratio rings with RGB-split trails instead of the iridescent cellophane sheets. A dark oval stays behind the title and buttons so they read cleanly. It renders at full display resolution, still only while the empty state is on screen.
+- **The theme editor is a floating window** over the browser area: no dimmed background, draggable, and the rest of the app stays usable while it's open.
+- **Graph 1 is its own theme colour**; it no longer follows Accent 1.
+- **Briefcase** has deeper Accent 1 and Accent 2 colours.
+- **Tool-panel header icons are one shade lighter**, so they stand out from the header.
+
+### Fixed
+- **The app no longer fails to start when a generated theme is active.** In 1.15.0 the theme was applied before its colour tables existed, which left the window unwired.
 
 ## [1.15.0] - 2026-09-25
 
